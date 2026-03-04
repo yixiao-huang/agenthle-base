@@ -1,0 +1,24 @@
+{
+  "item": {
+    "id": "cu_0e42aa60ac5c544d006992152c70b481959b3f381711ce04a2",
+    "action": {
+      "type": "screenshot"
+    },
+    "call_id": "call_WiAFNI92zh81dU9zs7TJH92U",
+    "pending_safety_checks": [],
+    "status": "completed",
+    "type": "computer_call"
+  },
+  "result": [
+    {
+      "type": "computer_call_output",
+      "call_id": "call_WiAFNI92zh81dU9zs7TJH92U",
+      "acknowledged_safety_checks": [],
+      "output": {
+        "type": "input_image",
+        "image_url": "[omitted]"
+      }
+    }
+  ],
+  "created_at": "139904741587839440"
+}

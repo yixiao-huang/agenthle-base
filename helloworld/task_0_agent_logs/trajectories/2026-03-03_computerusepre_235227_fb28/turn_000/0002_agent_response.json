@@ -1,0 +1,138 @@
+{
+  "timestamp": "139918747484064920",
+  "model": "openai/computer-use-preview",
+  "kwargs": {
+    "messages": [
+      {
+        "role": "user",
+        "content": "Use the provided computer to complete the task as described. When the task is complete, indicate so clearly by outputting 'DONE'."
+      },
+      {
+        "role": "user",
+        "content": "\nGoal: Save a milestone screenshot.\n1. Save milestone: save_milestone_screenshot(path=\"C:\\Users\\User\\Desktop\\step1_opened.png\", description=\"Test\")\n\nVerification: The task is successful if the milestone screenshot file exists.\n"
+      }
+    ],
+    "model": "openai/computer-use-preview",
+    "tools": [
+      {
+        "type": "computer",
+        "computer": "<computer:Computer>"
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "save_milestone_screenshot",
+          "description": "Save the current screen as a milestone screenshot on the remote computer. Use this when you have completed a significant step or goal and want to save evidence of your progress.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "Full path on the remote computer where the screenshot should be saved. Example: 'C:/Users/User/Desktop/milestones/step1.png'"
+              },
+              "description": {
+                "type": "string",
+                "description": "A brief description of the milestone achieved."
+              }
+            },
+            "required": [
+              "path"
+            ]
+          }
+        }
+      }
+    ],
+    "stream": false,
+    "computer_handler": "<computer:cuaComputerHandler>",
+    "max_retries": 3,
+    "use_prompt_caching": false
+  },
+  "response": {
+    "id": "resp_bGl0ZWxsbTpjdXN0b21fbGxtX3Byb3ZpZGVyOm9wZW5haTttb2RlbF9pZDpOb25lO3Jlc3BvbnNlX2lkOnJlc3BfMGE5MzlhOWVhMGI2NzdlZTAwNjlhNzc0M2IyNTZjODE5NzhjOTgzYzJhMGIxNTFmNmI=",
+    "created_at": 1772581947,
+    "metadata": {},
+    "model": "computer-use-preview-2025-03-11",
+    "object": "response",
+    "output": [
+      {
+        "arguments": "{\"path\":\"C:\\\\Users\\\\User\\\\Desktop\\\\step1_opened.png\",\"description\":\"Test\"}",
+        "call_id": "call_qvC8tqX69M8D9rTAS2NNNQ1N",
+        "name": "save_milestone_screenshot",
+        "type": "function_call",
+        "id": "fc_0a939a9ea0b677ee0069a7743c139081979eead05e00f40e24",
+        "status": "completed"
+      }
+    ],
+    "parallel_tool_calls": true,
+    "temperature": 1.0,
+    "tool_choice": "auto",
+    "tools": [
+      {
+        "name": "save_milestone_screenshot",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "Full path on the remote computer where the screenshot should be saved. Example: 'C:/Users/User/Desktop/milestones/step1.png'"
+            },
+            "description": {
+              "type": "string",
+              "description": "A brief description of the milestone achieved."
+            }
+          },
+          "required": [
+            "path",
+            "description"
+          ],
+          "additionalProperties": false
+        },
+        "strict": true,
+        "type": "function",
+        "description": "Save the current screen as a milestone screenshot on the remote computer. Use this when you have completed a significant step or goal and want to save evidence of your progress."
+      },
+      {
+        "display_height": 768,
+        "display_width": 1024,
+        "environment": "windows",
+        "type": "computer_use_preview"
+      }
+    ],
+    "top_p": 1.0,
+    "reasoning": {
+      "effort": "medium",
+      "generate_summary": "concise",
+      "summary": "concise"
+    },
+    "status": "completed",
+    "text": {
+      "format": {
+        "type": "text"
+      },
+      "verbosity": "medium"
+    },
+    "truncation": "auto",
+    "usage": {
+      "input_tokens": 674,
+      "input_tokens_details": {
+        "cached_tokens": 0
+      },
+      "output_tokens": 35,
+      "output_tokens_details": {
+        "reasoning_tokens": 0
+      },
+      "total_tokens": 709
+    },
+    "store": true,
+    "background": false,
+    "billing": {
+      "payer": "developer"
+    },
+    "completed_at": 1772581948,
+    "frequency_penalty": 0.0,
+    "presence_penalty": 0.0,
+    "service_tier": "default",
+    "top_logprobs": 0
+  },
+  "created_at": "139918747484065300"
+}

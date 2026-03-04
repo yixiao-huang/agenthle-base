@@ -1,0 +1,53 @@
+{
+  "trajectory_id": "2026-03-03_computerusepre_235227_fb28",
+  "created_at": "139918747470675850",
+  "status": "completed",
+  "kwargs": {
+    "messages": "\nGoal: Save a milestone screenshot.\n1. Save milestone: save_milestone_screenshot(path=\"C:\\Users\\User\\Desktop\\step1_opened.png\", description=\"Test\")\n\nVerification: The task is successful if the milestone screenshot file exists.\n",
+    "stream": false,
+    "model": "openai/computer-use-preview",
+    "agent_loop": "OpenAIComputerUseConfig"
+  },
+  "completed_at": "139918747520843320",
+  "total_usage": {
+    "input_tokens": 1431,
+    "input_tokens_details": {
+      "cached_tokens": 0
+    },
+    "output_tokens": 38,
+    "output_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "total_tokens": 1469
+  },
+  "new_items": [
+    {
+      "arguments": "{\"path\":\"C:\\\\Users\\\\User\\\\Desktop\\\\step1_opened.png\",\"description\":\"Test\"}",
+      "call_id": "call_qvC8tqX69M8D9rTAS2NNNQ1N",
+      "name": "save_milestone_screenshot",
+      "type": "function_call",
+      "id": "fc_0a939a9ea0b677ee0069a7743c139081979eead05e00f40e24",
+      "status": "completed"
+    },
+    {
+      "type": "function_call_output",
+      "call_id": "call_qvC8tqX69M8D9rTAS2NNNQ1N",
+      "output": "{'success': True, 'message': '\u2705 Milestone screenshot saved to: C:\\\\Users\\\\User\\\\Desktop\\\\step1_opened.png (Milestone: Test)'}"
+    },
+    {
+      "id": "msg_0a939a9ea0b677ee0069a7743f8cbc81979fd22b78fc10de23",
+      "content": [
+        {
+          "annotations": [],
+          "text": "DONE",
+          "type": "output_text",
+          "logprobs": []
+        }
+      ],
+      "role": "assistant",
+      "status": "completed",
+      "type": "message"
+    }
+  ],
+  "total_turns": 0
+}

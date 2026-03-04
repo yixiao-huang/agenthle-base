@@ -9,8 +9,8 @@ export REMOTE_OUTPUT_DIR="output_test"  # change to the output directory you wan
 # **UNCOMMENT THIS IF YOU ARE ASSIGNED WITH A LITELLM KEY**
 # export OPENAI_API_BASE="https://litellm-991596698159.us-west1.run.app"
 
-export OPENAI_API_KEY="YOUR_OPENAI_API_KEY"
-export CUA_ENV_API_URL="http://YOUR_REMOTE_MACHINE_IP:5000"
+export OPENAI_API_KEY="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"
+export CUA_ENV_API_URL="http://${VM_IP}:5000"
 
 ###### ONLY CHANGE THE FOLLOWING CODE WHEN NECESSARY ######
 

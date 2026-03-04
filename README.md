@@ -46,3 +46,11 @@ This will:
 - Create a virtual environment in `.venv`
 - Install all dependencies from both `agenthle` and `cua` packages
 - Install all packages in editable mode
+
+
+# Check status
+gcloud compute instances describe $VM_NAME --zone=$VM_ZONE
+
+# Power On/Off
+gcloud compute instances start $VM_NAME --zone=$VM_ZONE
+gcloud compute instances stop $VM_NAME --zone=$VM_ZONE

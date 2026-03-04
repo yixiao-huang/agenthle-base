@@ -1,0 +1,11 @@
+{
+  "trajectory_id": "2026-02-15_computerusepre_184911_fcb0",
+  "created_at": "139904741517681020",
+  "status": "running",
+  "kwargs": {
+    "messages": "\nGoal: Save a milestone screenshot.\n1. Save milestone: save_milestone_screenshot(path=\"C:\\Users\\User\\Desktop\\step1_opened.png\", description=\"Test\")\n\nVerification: The task is successful if the milestone screenshot file exists.\n",
+    "stream": false,
+    "model": "openai/computer-use-preview",
+    "agent_loop": "OpenAIComputerUseConfig"
+  }
+}
