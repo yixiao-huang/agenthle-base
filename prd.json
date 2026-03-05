@@ -35,6 +35,26 @@
       "notes": "Completed. Both SKILL.md files rewritten for AgentHLE context with agent harness examples, CUA-relevant scenarios, and Claude-verifiable acceptance criteria."
     },
     {
+      "id": "US-003",
+      "title": "Understanding Magic Tower - Deep analysis of the task pipeline",
+      "description": "As a developer, I want a comprehensive understanding of the Magic Tower task so I can use it as a reference for building new features (e.g., memory infrastructure) and evaluating agent capabilities.",
+      "acceptanceCriteria": [
+        "tasks/game/mota_24_easy/understanding_magic_tower.txt exists",
+        "File documents the full task lifecycle: task config, setup, agent execution, evaluation",
+        "File documents the data flow: how task_description reaches the agent, how screenshots are saved and evaluated",
+        "File documents the agent loop: ComputerAgent.run() → step results → usage tracking → DONE detection",
+        "File documents the evaluation pipeline: milestone mode, VLM judge, compare_screenshots_game",
+        "File documents the shell script invocation: cua_bench.batch.solver CLI args and what they do",
+        "File documents environment variables required: VM_IP, OPENAI_API_KEY, CUA_ENV_API_URL, etc.",
+        "File documents integration points: where new tools/callbacks can be injected in agenthle_agent.py",
+        "File documents the remote VM interaction: session.run_file, session.screenshot, session.interface",
+        "grep -c 'ComputerAgent\\|perform_task\\|evaluate_milestone\\|MilestoneTool' tasks/game/mota_24_easy/understanding_magic_tower.txt returns at least 4"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": "Completed. Static pipeline analysis in understanding_magic_tower.txt, live run observations and debug notes in debug_progress.txt."
+    },
+    {
       "id": "US-MEM-001",
       "title": "MemoryStore - Markdown file storage layer",
       "description": "As a developer, I want a MemoryStore class that manages MEMORY.md (curated long-term) and memory_logs/YYYY-MM-DD.md (daily append-only logs) so that memory tools have a clean abstraction for reading and writing.",

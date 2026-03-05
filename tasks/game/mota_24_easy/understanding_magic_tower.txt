@@ -1,0 +1,266 @@
+Understanding Magic Tower Task - Full Pipeline Analysis
+=======================================================
+
+1. OVERVIEW
+-----------
+Magic Tower (mota_24_easy) is an end-to-end verifiable benchmark task where an
+AI agent plays a Flash game (Magic Tower) on a remote Windows VM via the CUA
+framework. The agent must navigate to the 3rd floor, saving milestone screenshots
+along the way. Evaluation compares those screenshots against reference images
+using a VLM judge.
+
+Files involved:
+  - tasks/game/mota_24_easy/main.py       — Task definition (config, setup, evaluation)
+  - tasks/common_config.py                 — Base config class (GeneralTaskConfig)
+  - run_magic_tower.sh                     — Top-level shell script to invoke the task
+  - utils/evaluation.py                    — Evaluation utilities (VLM judge, milestone mode)
+  - submodules/cua/.../agenthle_agent.py   — AgentHLEAgent (perform_task entry point)
+  - submodules/cua/.../batch/solver.py     — CLI orchestrator (cua_bench.batch.solver)
+
+
+2. TASK CONFIGURATION (TaskConfig)
+----------------------------------
+TaskConfig extends GeneralTaskConfig, which provides standard Windows path
+conventions:
+
+  GeneralTaskConfig fields:
+    REMOTE_ROOT_DIR = "C:\Users\User\Desktop"
+    TASK_CATEGORY   = "game"         (overridden by TaskConfig)
+    REMOTE_OUTPUT_DIR = "output"
+    OS_TYPE         = "windows"
+
+  TaskConfig adds:
+    TASK_TAG  = "GAME_MOTA_24_EZ"
+    GAME_TAG  = "mota-24"
+
+  Derived paths:
+    task_dir         = C:\Users\User\Desktop\game\GAME_MOTA_24_EZ
+    game_url         = {task_dir}\input\mota-24.swf
+    remote_output_dir = {task_dir}\output
+    reference_dir    = {task_dir}\reference
+
+  task_description tells the agent:
+    1. Open the game at {game_url} on Ruffle (auto-opened)
+    2. Wait for load, enter the game
+    3. Navigate to the 3rd floor
+    4. Save milestone screenshots via save_milestone_screenshot(path="{output}\$FLOOR$.png")
+
+  to_metadata() produces a dict consumed by setup and evaluation:
+    { task_tag, software_dir, remote_output_dir, reference_dir, game_tag, game_url }
+
+
+3. SHELL SCRIPT INVOCATION
+---------------------------
+run_magic_tower.sh sets env vars and invokes the solver:
+
+  export CUA_ENV_API_URL="http://${VM_IP}:5000"
+  export CUA_ENV_TYPE="windows"
+  export CUA_TELEMETRY_DISABLED="true"
+  export XDG_DATA_HOME="./trycua"
+  export EVALUATION_OUTPUT_DIR="./trycua/cua-bench/mota_24_easy"
+
+  uv run python -m cua_bench.batch.solver ./tasks/game/mota_24_easy \
+      --eval \
+      --agent agenthle-agent \
+      --model openai/computer-use-preview \
+      --max-steps 500 \
+      --output-dir $EVALUATION_OUTPUT_DIR
+
+CLI args:
+  --eval           → Use agent mode (not oracle solver)
+  --agent          → Agent name from registry ("agenthle-agent")
+  --model          → Model for the agent
+  --max-steps      → Step limit
+  --output-dir     → Where logs, traces, and evaluation JSON go
+
+Note: VM_IP must be set (via .envrc in parent AgentHLE/ directory).
+Note: OPENAI_API_KEY is needed for both the agent and VLM evaluation judge.
+
+
+4. BATCH SOLVER ORCHESTRATION (solver.py)
+-----------------------------------------
+cua_bench.batch.solver.main() orchestrates the full lifecycle:
+
+  1. Parse CLI args
+  2. Setup logging (console + file in output_dir/logs/solver.log)
+  3. Load task definition: env = make(str(env_path))
+     - Imports tasks/game/mota_24_easy/main.py
+     - Discovers @cb.tasks_config, @cb.setup_task, @cb.evaluate_task functions
+  4. Initialize remote environment:
+     - Create RemoteDesktopSession(api_url, vnc_url, os_type)
+     - Wait for VM ready (timeout=300s for Windows)
+     - Load tasks via env.tasks_config_fn() → list of cb.Task
+     - Start tracing
+     - Run setup: env.setup_task_fn(task_cfg, session)
+  5. Execute by mode:
+     - --eval mode → run_agent() → agent.perform_task(task_description, session, ...)
+     - Default mode → run_oracle_solution() + evaluate
+     - --dump mode → skip agent, just setup + evaluate
+     - --setup-only, --evaluate-only, --task-only modes also supported
+  6. Evaluate: env.evaluate_task_fn(task_cfg, session)
+  7. Save trace to output_dir/task_0_trace/
+  8. Close session
+
+
+5. TASK SETUP (start function)
+------------------------------
+@cb.setup_task(split="train") async def start(task_cfg, session):
+
+  1. session.run_file(game_url)  → Opens the .swf in Ruffle on the remote VM
+  2. session.remove_file(remote_output_path) → Cleans previous output
+  3. session.makedirs(remote_output_path)    → Creates fresh output dir
+  4. asyncio.sleep(3) → Wait for game to load
+
+
+6. AGENT EXECUTION (AgentHLEAgent.perform_task)
+-----------------------------------------------
+Located in: submodules/cua/.../agents/agenthle_agent.py
+
+  @register_agent("agenthle-agent")
+  class AgentHLEAgent(BaseAgent):
+
+  perform_task(task_description, session, logging_dir, tracer):
+    1. Import ComputerAgent from agent package
+    2. Render instruction from task_description
+    3. Create trajectory_dir = logging_dir / "trajectories"
+    4. Create MilestoneTool(session.interface)
+    5. Create ComputerAgent:
+         model = "openai/computer-use-preview" (or configured model)
+         tools = [session._computer, milestone_tool]
+         only_n_most_recent_images = 3
+         trajectory_dir = trajectory_dir
+         instructions = "Use the provided computer to complete the task..."
+    6. Run agent loop:
+         async for result in agent.run(instruction):
+           - Track step count
+           - Accumulate token usage (prompt_tokens, completion_tokens, total_tokens)
+           - Record step to tracer (screenshot + metadata)
+           - Check max_steps limit (default 500 for magic tower)
+           - Check for "DONE" in message output → task_completed = True
+    7. Return AgentResult(total_input_tokens, total_output_tokens, failure_mode)
+
+  Integration points for new features:
+    - tools= list (line 71): Add MemorySearchTool, MemoryGetTool here
+    - instructions= (line 74): Mention available memory tools
+    - Callbacks: ComputerAgent constructor may accept callbacks= parameter
+    - The agent loop (lines 90-129) yields step results that could trigger memory flush
+
+
+7. MILESTONE TOOL
+-----------------
+MilestoneTool (agent.tools.milestone) extends BaseTool:
+  - name: "save_milestone_screenshot"
+  - params: path (required, string), description (optional, string)
+  - call(): Takes screenshot via session.interface, creates remote directory,
+    saves screenshot bytes to the specified path on the remote VM
+  - Detects Windows paths (C:\...) vs Unix paths for platform-agnostic operation
+
+The agent uses this tool to save evidence of progress:
+  save_milestone_screenshot(path="C:\Users\User\Desktop\game\GAME_MOTA_24_EZ\output\3.png")
+
+
+8. EVALUATION PIPELINE
+----------------------
+@cb.evaluate_task(split="train") async def evaluate(task_cfg, session):
+
+  Calls evaluate_milestone_mode() from utils/evaluation.py with:
+    - session: Remote desktop session for file I/O
+    - target_path: remote_output_dir (agent's screenshots)
+    - reference_path: reference_dir (ground truth screenshots)
+    - task_tag: "GAME_MOTA_24_EZ"
+    - comparison_fn: query_milestone (custom comparator)
+    - output_dir: EVALUATION_OUTPUT_DIR
+
+  evaluate_milestone_mode() flow:
+    1. Check target directory exists on remote VM
+    2. Collect files from both target and reference directories
+    3. Create EvaluationContext (auto-saves results as JSON)
+    4. For each file in target that also exists in reference:
+       a. Download both images from remote VM (session.read_bytes)
+       b. Call comparison_fn(target_bytes, reference_bytes, identifier)
+       c. Log evaluation result, add weighted score (score / num_reference_files)
+    5. Finalize and return (final_score, evaluation_details)
+
+  query_milestone() comparison function:
+    - Calls compare_screenshots_game() which builds a VLM prompt:
+      "Compare these two images... Does the first show the player reached {floor}?"
+    - Comparison criteria: "Is the player on the same floor number?"
+    - Calls llm_vision_judge() with both images
+    - Returns dict with: score (1.0 YES / 0.0 NO), vlm_response, prompt, model, etc.
+
+  llm_vision_judge():
+    - Uses AsyncOpenAI client (gpt-5.2 by default)
+    - Supports single image and comparison (dual image) modes
+    - Encodes images as base64, sends to chat.completions API
+    - Parses YES/NO from response → 1.0/0.0 binary score
+    - Respects OPENAI_API_BASE for LiteLLM proxy
+
+
+9. DATA FLOW SUMMARY
+---------------------
+  Shell script
+    → solver.py (orchestrator)
+      → make(env_path) loads main.py
+      → RemoteDesktopSession connects to VM
+      → setup_task: opens game, cleans output dir
+      → AgentHLEAgent.perform_task:
+          → ComputerAgent.run(instruction)
+            → Agent sees screenshots, sends mouse/keyboard actions
+            → Agent calls save_milestone_screenshot → saves PNGs on VM
+            → Agent outputs "DONE" when finished
+      → evaluate_task:
+          → evaluate_milestone_mode
+            → Downloads agent PNGs + reference PNGs from VM
+            → query_milestone → compare_screenshots_game → llm_vision_judge
+            → VLM (gpt-5.2) compares screenshots, returns YES/NO
+            → Final score = sum(score_i / N) for matching files
+      → Save trace, close session
+
+
+10. ENVIRONMENT VARIABLES REQUIRED
+-----------------------------------
+  VM_IP              — IP address of the remote Windows VM
+  OPENAI_API_KEY     — For agent (computer-use-preview) AND VLM judge (gpt-5.2)
+  CUA_ENV_API_URL    — Derived: http://${VM_IP}:5000
+  CUA_ENV_TYPE       — "windows"
+  CUA_TELEMETRY_DISABLED — "true" (avoids permission issues)
+  XDG_DATA_HOME      — "./trycua" (HuggingFace cache location)
+  EVALUATION_OUTPUT_DIR — Where evaluation JSON results are saved
+  OPENAI_API_BASE    — Optional, for LiteLLM proxy
+
+
+11. INTEGRATION POINTS FOR MEMORY SYSTEM
+-----------------------------------------
+  In agenthle_agent.py:perform_task():
+
+  1. TOOLS (line 71):
+     Currently: tools=[session._computer, milestone_tool]
+     Add:       tools=[session._computer, milestone_tool, memory_search_tool, memory_get_tool]
+
+  2. INSTRUCTIONS (line 74):
+     Currently: "Use the provided computer to complete the task..."
+     Add:       Mention memory tools and when to use them
+
+  3. CALLBACKS:
+     ComputerAgent may accept callbacks= parameter
+     Add MemoryFlushCallback for pre-compaction memory save
+
+  4. AGENT LOOP (lines 90-129):
+     The step-by-step loop is where memory flush checks could trigger
+     based on step count or token usage thresholds
+
+  5. MEMORY STORE base_dir:
+     Should point to agenthle-base/ project root (where MEMORY.md lives)
+     Not the remote VM — memory is local to the agent harness
+
+
+12. KEY OBSERVATIONS FOR TESTING
+---------------------------------
+  - The task requires a running Windows VM with computer-server on port 5000
+  - The game (.swf) must be pre-deployed to the VM at the expected path
+  - Reference screenshots must exist at {reference_dir} on the VM
+  - A full run takes many steps (max 500) and significant API costs
+  - For quick testing, use --setup-only or --evaluate-only modes
+  - The evaluation is binary per milestone: YES (1.0) or NO (0.0)
+  - Score is averaged across reference files (if 2 refs, each worth 0.5)
+  - Trajectory logs are saved to {output_dir}/task_0_agent_logs/trajectories/
