@@ -1,0 +1,28 @@
+## Codebase Patterns
+- Git remotes: `upstream` (cua-verse official), `origin` (personal fork), `private` (private experiments)
+- Work on `paper-experiments` branch, push to `private/paper-experiments`
+- Use `eval "$(direnv export bash)"` before commands needing `.envrc` vars in non-interactive shells
+- Use `uv sync --reinstall` if editable CUA packages fail to import
+
+## 2026-03-05 - US-001: Configure git remotes and branches
+- Renamed origin to upstream (cua-verse/agenthle-base)
+- Added origin remote (yixiao-huang/agenthle-base)
+- Added private remote (yixiao-huang/agenthle-private)
+- Created paper-experiments branch tracking private/paper-experiments
+- Stashed local changes to run_helloworld.sh and tasks/game/mota_24_easy/run_magic_tower.sh
+- Removed untracked helloworld/task_0_trace/ files (not needed)
+- Files changed: prd.json (created), progress.txt (created), CLAUDE.md (updated)
+- **Learnings for future iterations:**
+  - The repo was cloned from cua-verse; remotes needed restructuring for private development
+  - git stash was needed before switching branches due to local modifications
+---
+
+## 2026-03-05 - US-002: Rewrite skills SKILL.md files for AgentHLE
+- Rewrote skills/agenthle/SKILL.md: replaced Ralph references with AgentHLE, updated examples to use agent harness scenarios (evaluation modes, task configs, CUA framework)
+- Rewrote skills/prd/SKILL.md: updated for AgentHLE context, examples use milestone evaluation and CUA-relevant features
+- Updated acceptance criteria language in both files to emphasize "something Claude can check" (commands, grep, file reads)
+- Files changed: skills/agenthle/SKILL.md, skills/prd/SKILL.md, prd.json, progress.txt
+- **Learnings for future iterations:**
+  - Acceptance criteria in prd.json should be grep/command-verifiable so Claude can programmatically confirm completion
+  - Skills in skills/ directory are Claude Code user-invocable skills triggered by keywords
+---

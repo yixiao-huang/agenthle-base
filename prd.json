@@ -1,0 +1,38 @@
+{
+  "project": "AgentHLE",
+  "branchName": "paper-experiments",
+  "description": "AgentHLE Agent Harness - Build the agent harness for evaluating AI agents on computer-use tasks",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Configure git remotes and branches",
+      "description": "As a developer, I need the repo configured with three remotes (origin, private, upstream) and a paper-experiments branch tracking private/paper-experiments.",
+      "acceptanceCriteria": [
+        "Remote 'origin' points to git@github.com:yixiao-huang/agenthle-base.git",
+        "Remote 'private' points to git@github.com:yixiao-huang/agenthle-private.git",
+        "Remote 'upstream' points to git@github.com:cua-verse/agenthle-base.git",
+        "Branch 'paper-experiments' exists and tracks 'private/paper-experiments'",
+        "git remote -v shows all three remotes with correct URLs"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": "Completed. Renamed origin->upstream, added origin (fork) and private remotes, created paper-experiments branch tracking private/paper-experiments."
+    },
+    {
+      "id": "US-002",
+      "title": "Rewrite skills SKILL.md files for AgentHLE",
+      "description": "As a developer, I need the SKILL.md files in skills/ rewritten to reflect AgentHLE's context instead of the Ralph project they were copied from.",
+      "acceptanceCriteria": [
+        "grep -ri 'ralph' skills/ returns no matches",
+        "grep -ri 'dev-browser' skills/ returns no matches",
+        "grep -i 'AgentHLE' skills/agenthle/SKILL.md returns at least 3 matches",
+        "grep -i 'AgentHLE' skills/prd/SKILL.md returns at least 3 matches",
+        "grep -i 'evaluation\\|cua\\|agent' skills/agenthle/SKILL.md returns matches in example sections",
+        "grep -i 'evaluation\\|cua\\|agent' skills/prd/SKILL.md returns matches in example sections"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": "Completed. Both SKILL.md files rewritten for AgentHLE context with agent harness examples, CUA-relevant scenarios, and Claude-verifiable acceptance criteria."
+    }
+  ]
+}
