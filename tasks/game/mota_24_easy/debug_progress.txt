@@ -1,0 +1,149 @@
+Debug Progress Log - Magic Tower (mota_24_easy)
+=================================================
+
+## 2026-03-05 11:30 - Mid-run snapshot (observed up to turn ~140)
+
+Run config: --agent agenthle-agent --model openai/computer-use-preview --max-steps 500
+Agent appeared stuck in a ~14-turn deterministic cycle repeating identical
+reasoning and actions. No floor progress beyond floor 1 at this point.
+
+---
+
+## 2026-03-05 11:34 - Run completed, final results
+
+Run finished: 373 steps / 186 turns, ~20 minutes (11:12 → 11:33), 611,553 total tokens.
+
+### Evaluation Results
+  - Score: 0.333 (1 out of 3 reference milestones matched)
+  - Agent saved 1.png (floor 1) — VLM judge: YES
+  - Agent did NOT save 2.png or 3.png (never reached floors 2 or 3)
+  - 3 reference files exist, so each is worth 0.333
+  - FailureMode.NONE — agent didn't crash, just ran out of useful actions
+
+### Turn/Step Mismatch
+  The solver reported 373 steps but only 186 turn directories exist.
+  Each "turn" contains MULTIPLE API calls (~2 steps per turn on average)
+  because the model returns an action, receives a screenshot result, then
+  produces the next reasoning + action within the same logical turn.
+
+---
+
+## 2026-03-05 11:45 - Post-run deep analysis
+
+### Phase Analysis (full 186 turns)
+
+  Turns 0-5: Startup — screenshot, wait, click to start, wait
+  Turns 6-39: KEYPRESS SPAM — 34 consecutive keypress actions with NO reasoning
+    text. Agent in pure "autopilot" mode, pressing keys reflexively.
+  Turns 40-58: Mixed actions — brief recovery with waits, clicks, keypresses
+  Turns 59-77: First reasoning cycle — agent starts producing text, tries
+    arrow keys → click → WASD → click elements → R key → dialogue starts
+  Turns 78-91: TYPE actions (14 turns) — agent tried typing text input,
+    followed by SPACE keypresses through dialogue
+  Turns 92-128: Extended keypress run (27 turns of SPACE, then mixed click/keypress)
+  Turns 129-177: MASSIVE keypress run — 49 consecutive identical keypresses,
+    the longest single-action streak in the run.
+  Turns 178-185: Brief movement attempts — click, keypress, click, keypress.
+    Run ended here (hit 373 steps).
+
+### Action Distribution (186 turns)
+  keypress: ~140 turns (75%)
+  click:    ~15 turns (8%)
+  type:     ~14 turns (8%)
+  wait:     ~10 turns (5%)
+  screenshot/other: ~7 turns (4%)
+
+### Repeating Cycle (turns 59-185)
+  The agent fell into a ~14-turn deterministic cycle:
+    1. "Arrow keys aren't working" → tries clicking
+    2. "Clicking didn't work" → tries WASD
+    3-5. More WASD attempts
+    6. "Clicking didn't help" → presses R key
+    7. R key resets to portal entrance → dialogue starts
+    8-12. SPACE spam through dialogue (~5 turns)
+    13-14. "Dialogue concluded, got a key" → tries to move → FAIL → loop
+
+  This cycle repeated ~9 times with IDENTICAL reasoning text each iteration.
+  Most repeated pattern: "The dialogue sequence has concluded..." — 54 times
+  (29% of all turns with reasoning).
+
+### Reasoning-Free Autopilot
+  Turns 0-58 (59 turns, 32% of run) had ZERO reasoning text. The agent
+  operated in pure autopilot, sending computer_call actions without
+  explanatory output. The message structure shows opaque [reasoning_summary,
+  action, computer_call_output] triplets where reasoning is internal to the
+  model and not exposed.
+
+### Critical Finding: Hallucinated Floor Progress
+  At turn 172, agent reasoning says: "The character has successfully moved
+  to the next floor." Turn 173: "The screenshot confirms reaching the
+  second floor."
+
+  Actual screenshots at turns 172-173 show the game is STILL ON FLOOR 1
+  with identical state. The agent hallucinated progress:
+    1. Confidently described a state change that didn't occur
+    2. Built subsequent strategy on this false premise ("continue to floor 3")
+    3. The evaluation confirmed only 1.png existed — floor 2 never reached
+
+### Key Failure Patterns
+
+  a) NO CROSS-TURN MEMORY:
+     only_n_most_recent_images=3 means the agent only sees 3 screenshots.
+     No textual memory of failed strategies. Each 14-turn cycle it
+     "discovers" the same things fresh.
+
+  b) REASONING DEGRADATION → AUTOPILOT:
+     32% of turns had no reasoning at all. When reasoning was present, it
+     was copy-paste of previous turns. The model pattern-matches its own
+     prior outputs rather than analyzing the current screenshot.
+
+  c) R-KEY TRAP:
+     R resets to the portal, triggering dialogue that gives the illusion
+     of progress. Agent spends 5+ turns on dialogue each cycle before
+     realizing it's back where it started.
+
+  d) FLASH INPUT FOCUS:
+     Arrow keys and WASD may genuinely not work without clicking the game
+     area first to give it focus. Agent never systematically tested this.
+
+  e) HALLUCINATION WITHOUT GROUNDING:
+     Agent confidently claimed floor progress that screenshots disprove.
+     No mechanism to verify stated beliefs against visual evidence.
+
+### Improvement Ideas for Agent Harness
+
+  a) MEMORY & CONTEXT MANAGEMENT (highest impact):
+     A memory tool persisting across context would let the agent record
+     failed strategies, breaking the repeating cycle. Directly motivates
+     the tinyclaw memory system. Also, only_n_most_recent_images=3 is very
+     aggressive — supplement with text-based state summaries that persist
+     even as images are dropped.
+
+  b) STUCK DETECTION & INTERVENTION:
+     Multi-signal approach: compare last N screenshots (perceptual hash or
+     pixel diff), track action diversity (entropy), and flag reasoning-free
+     autopilot turns. When stuck is detected (identical screenshots, repeated
+     actions, or no reasoning for N turns), escalate interventions:
+       - Immediate: "Your last action had no visible effect."
+       - After 5 turns: "WARNING: No progress for 5 turns. Try something different."
+       - After 15 turns: Inject specific hints ("click the game area first for focus").
+     (Would have caught the 49-turn keypress streak and the 59-turn autopilot phase.)
+
+  c) HALLUCINATION DETECTION:
+     Visual grounding check — compare agent's stated belief ("I'm on
+     floor 2") against screenshot content via lightweight VLM or OCR.
+     Agent confidently hallucinated floor progress that screenshots disprove.
+
+  d) TURN BUDGET AWARENESS:
+     Periodic reminders: "You have used 100/500 steps. You have not yet
+     reached floor 2." Creates urgency for fundamentally different approaches.
+
+  e) GAME-SPECIFIC KNOWLEDGE:
+     For Flash/Ruffle: (1) click game area for keyboard focus first,
+     (2) Ruffle may need specific interaction for keyboard capture,
+     (3) some Flash games use non-standard controls.
+
+### Cost Analysis
+  611K tokens for score 0.333 is extremely inefficient.
+  Stuck detection terminating after 50 turns of no progress would have
+  saved ~300 steps of API calls while achieving the same score.

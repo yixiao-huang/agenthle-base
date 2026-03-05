@@ -26,3 +26,17 @@
   - Acceptance criteria in prd.json should be grep/command-verifiable so Claude can programmatically confirm completion
   - Skills in skills/ directory are Claude Code user-invocable skills triggered by keywords
 ---
+
+## 2026-03-05 - US-003: Understanding Magic Tower - Deep analysis of the task pipeline
+- Created tasks/game/mota_24_easy/understanding_magic_tower.txt — static pipeline analysis covering task config, setup, agent execution, evaluation, shell invocation, env vars, integration points, trajectory file structure
+- Created tasks/game/mota_24_easy/debug_progress.log — live run observations and debug notes (separate from static analysis)
+- Ran full magic tower task: 373 steps / 186 turns, score 0.333 (floor 1 only out of 3)
+- Files changed: tasks/game/mota_24_easy/understanding_magic_tower.txt (created), tasks/game/mota_24_easy/debug_progress.log (created), prd.json (updated), progress.txt (updated), run_magic_tower.sh (removed hardcoded keys), run_helloworld.sh (removed hardcoded keys)
+- **Learnings for future iterations:**
+  - Turn count ≠ step count: each turn can contain multiple API calls (~2 steps/turn for openai/computer-use-preview)
+  - Trajectory files live in turn_XXX/ dirs with sequential NNNN-prefixed files (api_start, api_result, agent_response, screenshot_after, computer_call_result)
+  - Agent reasoning is in agent_response.json → kwargs.messages → last assistant message → content[type="output_text"].text
+  - Source `.envrc` directly (`source "/path/.envrc"`) instead of `direnv export bash` for reliable env var loading in Bash tool
+  - The agent enters deterministic repeating cycles when it lacks cross-turn memory — strongest motivation for the tinyclaw memory system
+  - The agent can hallucinate progress (claimed floor 2, screenshots show floor 1) — visual grounding checks are needed
+---

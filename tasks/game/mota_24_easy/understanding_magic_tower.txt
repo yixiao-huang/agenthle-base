@@ -264,3 +264,33 @@ The agent uses this tool to save evidence of progress:
   - The evaluation is binary per milestone: YES (1.0) or NO (0.0)
   - Score is averaged across reference files (if 2 refs, each worth 0.5)
   - Trajectory logs are saved to {output_dir}/task_0_agent_logs/trajectories/
+
+
+13. TRAJECTORY FILE STRUCTURE & DEBUGGING
+------------------------------------------
+  Each turn is saved as a directory: turn_XXX/ with sequentially numbered files:
+    - NNNN_api_start.json        — The API request sent to the model
+    - NNNN_api_result.json       — Raw API response
+    - NNNN_agent_response.json   — Parsed agent response with full message history
+    - NNNN_screenshot_after.png  — Screenshot taken AFTER the action executed
+    - NNNN_computer_call_result.json — Result of the computer action
+    - NNNN_screenshot_action.png — (optional) Screenshot showing the action overlay
+
+  agent_response.json structure:
+    { timestamp, model, kwargs: { messages: [...] }, response, created_at }
+    - kwargs.messages contains the FULL conversation history up to that turn
+    - Messages include: user instructions, assistant output_text, computer_call actions
+    - The last assistant message contains the agent's reasoning for that turn
+
+  Debugging recipes:
+    - To see the behavioral arc, sample agent reasoning every N turns:
+        for each turn_XXX: parse agent_response.json → kwargs.messages →
+        last assistant message → content[type="output_text"].text
+    - To detect stuck loops: compare reasoning text across consecutive turns;
+        identical or near-identical text for 5+ turns = stuck
+    - To see what actions the agent tried: look for content[type="computer_call"]
+        in assistant messages → action.type (key, click, etc.) + action.key/coordinate
+    - Screenshots (screenshot_after.png) are the ground truth for game state;
+        compare screenshots across turns to detect zero-progress loops
+    - File numbering (NNNN) is global and monotonically increasing across turns,
+        so turn_060 might start at 0303 while turn_061 starts at 0308

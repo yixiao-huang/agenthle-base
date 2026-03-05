@@ -8,7 +8,7 @@ You are a helpful coding agent working building the agent harness for AgentHLE (
 2. Read the SKILL.md in /skills to understand the skills that the agent can use.
 3. Read the progress log at `progress.txt` (check Codebase Patterns section first)
 4. Check you're on the correct branch from PRD `branchName`. If not, check it out or create from main.
-5. Update CLAUDE.md files if you discover reusable patterns (see below)
+5. Update progress.txt if you discover reusable patterns (see below)
 6. If checks pass, commit ALL changes with message: feat: [Story ID] - [Story Title]
 7. Since the project is still in early development, feel free to propose new checks for the story you are working on.
 8. Update the PRD to set passes: true for the completed story
@@ -45,32 +45,17 @@ If you discover a **reusable pattern** that future iterations should know, add i
 - Example: Export types from actions.ts for UI components
 ```
 
-Only add patterns that are **general and reusable**, not story-specific details.
-## Update CLAUDE.md Files
+Only add patterns that are **general and reusable**, not story-specific details. For story-specific details, add them to the `**Learnings for future iterations:**` section in each story entry.
 
-Before committing, check if any edited files have learnings worth preserving in nearby CLAUDE.md files:
+Before committing, review your changes for learnings worth preserving:
+- API patterns or conventions specific to a module
+- Gotchas or non-obvious requirements
+- Dependencies between files
+- Testing approaches, configuration or environment requirements
 
-1. **Identify directories with edited files** - Look at which directories you modified
-2. **Check for existing CLAUDE.md** - Look for CLAUDE.md in those directories or parent directories
-3. **Add valuable learnings** - If you discovered something future developers/agents should know:
-   - API patterns or conventions specific to that module
-   - Gotchas or non-obvious requirements
-   - Dependencies between files
-   - Testing approaches for that area
-   - Configuration or environment requirements
+Add these to progress.txt: **general and reusable** ones go to Codebase Patterns, **story-specific** ones go to the story's `**Learnings for future iterations:**` section.
 
-**Examples of good CLAUDE.md additions:**
-- "When modifying X, also update Y to keep them in sync"
-- "This module uses pattern Z for all API calls"
-- "Tests require the dev server running on PORT 3000"
-- "Field names must match the template exactly"
-
-**Do NOT add:**
-- Story-specific implementation details
-- Temporary debugging notes
-- Information already in progress.txt
-
-Only update CLAUDE.md if you have **genuinely reusable knowledge** that would help future work in that directory.
+**Do NOT duplicate patterns** across progress.txt and CLAUDE.md. CLAUDE.md is for static project structure and architecture only — progress.txt is the living knowledge base.
 
 ## Quality Requirements
 
@@ -112,11 +97,6 @@ Tasks inherit from `GeneralTaskConfig` (`tasks/common_config.py`) for standard W
 
 
 
-
-## Learnings
-
-- **`uv sync` doesn't rebuild editable CUA packages**: The editable CUA submodule packages (installed via `.pth` files) can become stale after submodule updates or venv changes. A plain `uv sync` sees them as already installed and skips rebuilding, causing `ModuleNotFoundError: No module named 'cua_bench'`. Fix with `uv sync --reinstall` to force a full rebuild of all packages.
-- **`direnv` doesn't auto-load in Bash tool sessions**: The Bash tool spawns non-interactive shells, so `direnv hook bash` from `.bashrc`/`.zshrc` doesn't run. Env vars from `.envrc` (like `VM_IP`) won't be set automatically. Use `eval "$(direnv export bash)"` before commands that depend on `.envrc` variables. The `.envrc` file lives in the parent `AgentHLE/` directory, not in `agenthle-base/`.
 
 
 ## Important

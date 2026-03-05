@@ -37,7 +37,7 @@
     {
       "id": "US-003",
       "title": "Understanding Magic Tower - Deep analysis of the task pipeline",
-      "description": "As a developer, I want a comprehensive understanding of the Magic Tower task so I can use it as a reference for building new features (e.g., memory infrastructure) and evaluating agent capabilities.",
+      "description": "As a developer, I want a comprehensive understanding of the Magic Tower task so I can use it as a reference for building new features (e.g., memory infrastructure) and evaluating agent capabilities. Static analysis goes in understanding_magic_tower.txt; live run observations and debug notes go in debug_progress.txt.",
       "acceptanceCriteria": [
         "tasks/game/mota_24_easy/understanding_magic_tower.txt exists",
         "File documents the full task lifecycle: task config, setup, agent execution, evaluation",
