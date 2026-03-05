@@ -73,8 +73,8 @@
         "Lint passes (uv run ruff check .)"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Completed. MemoryStore in memory/store.py, integrated into agenthle_agent.py, 25 unit tests passing, validated with run_magic_tower.sh (5-step run, no errors). base_dir defaults to memory_data/ via MEMORY_BASE_DIR env var."
     },
     {
       "id": "US-MEM-002",
@@ -120,22 +120,24 @@
     },
     {
       "id": "US-MEM-004",
-      "title": "MemoryFlushCallback - built, registered in agent, tested with run_magic_tower.sh",
-      "description": "As a system operator, I want a callback that periodically reminds the agent to save observations to memory and auto-appends a summary at end of run. The callback must be registered in ComputerAgent callbacks= list, unit-tested, and validated via run_magic_tower.sh (callback fires during a live run).",
+      "title": "MemoryFlushCallback - Agent-driven memory reflection",
+      "description": "As a system operator, I want a callback that periodically prompts the agent to reflect and save observations to memory, and auto-appends a run summary at end. The agent decides what to write (agent-driven); the callback decides when to prompt (system-driven).",
       "acceptanceCriteria": [
-        "memory/callback.py exists with MemoryFlushCallback extending AsyncCallbackHandler (from agent.callbacks.base)",
-        "Tracks step count; every flush_interval steps, appends a memory flush reminder to messages via on_llm_start",
-        "on_run_end appends a summary line to the daily log with task description and step count",
+        "memory/callback.py exists with MemoryFlushCallback extending AsyncCallbackHandler",
+        "Constructor accepts MemoryStore, flush_interval (default 20), and task_description",
+        "on_llm_start: every flush_interval steps, appends a memory reflection system message to messages list prompting the agent to save observations",
+        "Reflection prompt references memory tools (memory_search, memory_get) and instructs agent to save failed strategies, discoveries, state observations",
+        "on_run_end: auto-appends structured run summary (task, steps, tokens, outcome) to daily log via MemoryStore",
         "Does not crash if memory_logs/ directory does not exist (creates it)",
         "memory/__init__.py exports MemoryFlushCallback",
-        "agenthle_agent.py instantiates MemoryFlushCallback(store) and passes it in ComputerAgent callbacks= list",
-        "uv run pytest tests/test_memory_callback.py passes (unit: flush reminder at correct intervals, on_run_end writes daily log)",
-        "run_magic_tower.sh completes and memory_data/memory_logs/ contains a daily log file with a run summary entry from the callback",
+        "agenthle_agent.py instantiates MemoryFlushCallback and passes it in ComputerAgent callbacks= list",
+        "uv run pytest tests/test_memory_callback.py passes",
+        "run_magic_tower.sh completes and memory_data/memory_logs/ contains daily log with auto-summary entry from on_run_end",
         "Lint passes (uv run ruff check .)"
       ],
       "priority": 3,
       "passes": false,
-      "notes": ""
+      "notes": "Depends on US-MEM-002/003 for the agent to actually write via tools. Without tools, the reflection prompt is injected but agent can only acknowledge it."
     },
     {
       "id": "US-MEM-005",

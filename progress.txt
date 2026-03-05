@@ -3,6 +3,13 @@
 - Work on `paper-experiments` branch, push to `private/paper-experiments`
 - Use `eval "$(direnv export bash)"` before commands needing `.envrc` vars in non-interactive shells
 - Use `uv sync --reinstall` if editable CUA packages fail to import
+- **TinyClaw reference**: OpenClaw's memory system is the design reference for TinyClaw. Key docs live at `../openclaw/docs/` (sibling of agenthle-base under the AgentHLE folder):
+  - `docs/concepts/memory.md` — Architecture overview: memory file layout, memory_search/memory_get tools, automatic pre-compaction flush, vector search config
+  - `docs/experiments/research/memory.md` — Research notes: Letta/MemGPT + Hindsight-inspired retain/recall/reflect loop, proposed bank/ structure, opinion confidence
+  - `docs/cli/memory.md` — CLI reference for `openclaw memory` (status/index/search)
+  - `src/agents/tools/memory-tool.ts` — Source for memory_search and memory_get tool implementations
+  - `src/auto-reply/reply/memory-flush.ts` — Source for pre-compaction memory flush logic (threshold calculation, prompt templates)
+  - TinyClaw simplifies OpenClaw's design: plain keyword search (no embeddings), step-count-based flush (no token estimation), Python BaseTool (not TypeScript)
 
 ## 2026-03-05 - US-001: Configure git remotes and branches
 - Renamed origin to upstream (cua-verse/agenthle-base)
@@ -39,4 +46,20 @@
   - Source `.envrc` directly (`source "/path/.envrc"`) instead of `direnv export bash` for reliable env var loading in Bash tool
   - The agent enters deterministic repeating cycles when it lacks cross-turn memory — strongest motivation for the tinyclaw memory system
   - The agent can hallucinate progress (claimed floor 2, screenshots show floor 1) — visual grounding checks are needed
+---
+
+## 2026-03-05 - US-MEM-001: MemoryStore - built, integrated, tested with run_magic_tower.sh
+- Created memory/store.py with MemoryStore class (read_file, write_memory, append_to_daily_log, search, list_log_files)
+- Created memory/__init__.py exporting MemoryStore
+- Created tests/test_memory_store.py with 25 unit tests (all passing)
+- Integrated into agenthle_agent.py: imports MemoryStore, creates instance in perform_task with base_dir from MEMORY_BASE_DIR env var (default: memory_data/)
+- Validated with run_magic_tower.sh (5-step run): "TinyClaw MemoryStore initialized at: .../memory_data" printed, no errors
+- Also fixed pre-existing lint issues in agenthle_agent.py (unused imports, trailing whitespace)
+- Files changed: memory/__init__.py (created), memory/store.py (created), tests/__init__.py (created), tests/test_memory_store.py (created), agenthle_agent.py (modified), prd.json (updated), progress.txt (updated)
+- **Learnings for future iterations:**
+  - `uv sync --reinstall` is needed if cua_bench import fails (editable packages can get stale)
+  - The solver exits with code 1 on MAX_STEPS_EXCEEDED — this is expected behavior, not an error
+  - MemoryStore base_dir resolves via `Path(...).resolve()` so relative paths work from any cwd
+  - self.memory_store on the agent instance makes it available for later stories (tools, callback) without re-instantiation
+  - The `run_magic_tower.sh` validation with --max-steps 5 is a quick smoke test (~20s) for integration
 ---
