@@ -56,8 +56,8 @@
     },
     {
       "id": "US-MEM-001",
-      "title": "MemoryStore - Markdown file storage layer",
-      "description": "As a developer, I want a MemoryStore class that manages MEMORY.md (curated long-term) and memory_logs/YYYY-MM-DD.md (daily append-only logs) so that memory tools have a clean abstraction for reading and writing.",
+      "title": "MemoryStore - built, integrated into agent, tested with run_magic_tower.sh",
+      "description": "As a developer, I want a MemoryStore class that manages MEMORY.md and memory_logs/YYYY-MM-DD.md. It must be integrated into agenthle_agent.py, unit-tested, and validated via run_magic_tower.sh (agent starts and runs without MemoryStore errors).",
       "acceptanceCriteria": [
         "memory/store.py exists with MemoryStore class",
         "MemoryStore.__init__ accepts a base_dir path",
@@ -66,7 +66,10 @@
         "write_memory creates or overwrites MEMORY.md",
         "search does case-insensitive substring matching across all markdown files, returns file path, line number, content, score",
         "list_log_files returns sorted paths of existing daily log files",
-        "uv run pytest tests/test_memory_store.py passes",
+        "memory/__init__.py exports MemoryStore",
+        "agenthle_agent.py imports MemoryStore and creates an instance in perform_task (base_dir defaults to memory_data/ relative to project root)",
+        "uv run pytest tests/test_memory_store.py passes (covers all MemoryStore methods with tmp_path)",
+        "run_magic_tower.sh starts without import or instantiation errors from MemoryStore (agent initializes and begins execution)",
         "Lint passes (uv run ruff check .)"
       ],
       "priority": 2,
@@ -75,15 +78,19 @@
     },
     {
       "id": "US-MEM-002",
-      "title": "memory_search tool",
-      "description": "As an agent, I want a memory_search tool so that I can search my memory files using keywords and find relevant past observations.",
+      "title": "memory_search tool - built, wired into agent, tested with run_magic_tower.sh",
+      "description": "As an agent, I want a memory_search tool so I can search my memory files using keywords. The tool must be wired into ComputerAgent tools= list, unit-tested, and validated via run_magic_tower.sh (agent has memory_search available and can invoke it).",
       "acceptanceCriteria": [
-        "memory/tools.py exists with MemorySearchTool class extending BaseTool",
+        "memory/tools.py exists with MemorySearchTool class extending BaseTool (from agent.tools.base)",
         "MemorySearchTool registered with @register_tool('memory_search')",
         "Accepts keywords (list of strings) and optional max_results (int) parameters",
         "Delegates to MemoryStore.search() and returns results with file path, line number, matched content",
         "Returns helpful message when no results found",
-        "uv run pytest tests/test_memory_tools.py::test_search passes",
+        "memory/__init__.py exports MemorySearchTool",
+        "agenthle_agent.py instantiates MemorySearchTool(store) and adds it to ComputerAgent tools= list",
+        "Agent instructions in agenthle_agent.py describe memory_search and when to use it",
+        "uv run pytest tests/test_memory_tools.py::test_search passes (unit: seeded MemoryStore, correct results)",
+        "run_magic_tower.sh shows memory_search in the agent's available tools and agent runs without tool registration errors",
         "Lint passes (uv run ruff check .)"
       ],
       "priority": 2,
@@ -92,15 +99,19 @@
     },
     {
       "id": "US-MEM-003",
-      "title": "memory_get tool",
-      "description": "As an agent, I want a memory_get tool so that I can read a specific memory file or line range by path, with graceful degradation on missing files.",
+      "title": "memory_get tool - built, wired into agent, tested with run_magic_tower.sh",
+      "description": "As an agent, I want a memory_get tool so I can read a specific memory file or line range. The tool must be wired into ComputerAgent tools= list, unit-tested, and validated via run_magic_tower.sh (agent has memory_get available and can invoke it).",
       "acceptanceCriteria": [
-        "memory/tools.py contains MemoryGetTool class extending BaseTool",
+        "memory/tools.py contains MemoryGetTool class extending BaseTool (from agent.tools.base)",
         "MemoryGetTool registered with @register_tool('memory_get')",
         "Accepts file_path (string), optional start_line and end_line (int) parameters",
         "Restricts file_path to MEMORY.md and memory_logs/ (rejects path traversal with ..)",
         "Returns empty string with message for missing files (no exception)",
-        "uv run pytest tests/test_memory_tools.py::test_get passes",
+        "memory/__init__.py exports MemoryGetTool",
+        "agenthle_agent.py instantiates MemoryGetTool(store) and adds it to ComputerAgent tools= list",
+        "Agent instructions in agenthle_agent.py describe memory_get and when to use it",
+        "uv run pytest tests/test_memory_tools.py::test_get passes (unit: read MEMORY.md full + line range, read daily log, path traversal rejected)",
+        "run_magic_tower.sh shows memory_get in the agent's available tools and agent runs without tool registration errors",
         "Lint passes (uv run ruff check .)"
       ],
       "priority": 2,
@@ -109,14 +120,17 @@
     },
     {
       "id": "US-MEM-004",
-      "title": "MemoryFlushCallback - Pre-compaction memory save",
-      "description": "As a system operator, I want a callback that periodically reminds the agent to save important observations to persistent memory, and auto-appends a summary at end of run.",
+      "title": "MemoryFlushCallback - built, registered in agent, tested with run_magic_tower.sh",
+      "description": "As a system operator, I want a callback that periodically reminds the agent to save observations to memory and auto-appends a summary at end of run. The callback must be registered in ComputerAgent callbacks= list, unit-tested, and validated via run_magic_tower.sh (callback fires during a live run).",
       "acceptanceCriteria": [
-        "memory/callback.py exists with MemoryFlushCallback extending AsyncCallbackHandler",
+        "memory/callback.py exists with MemoryFlushCallback extending AsyncCallbackHandler (from agent.callbacks.base)",
         "Tracks step count; every flush_interval steps, appends a memory flush reminder to messages via on_llm_start",
         "on_run_end appends a summary line to the daily log with task description and step count",
         "Does not crash if memory_logs/ directory does not exist (creates it)",
-        "uv run pytest tests/test_memory_callback.py passes",
+        "memory/__init__.py exports MemoryFlushCallback",
+        "agenthle_agent.py instantiates MemoryFlushCallback(store) and passes it in ComputerAgent callbacks= list",
+        "uv run pytest tests/test_memory_callback.py passes (unit: flush reminder at correct intervals, on_run_end writes daily log)",
+        "run_magic_tower.sh completes and memory_data/memory_logs/ contains a daily log file with a run summary entry from the callback",
         "Lint passes (uv run ruff check .)"
       ],
       "priority": 3,
@@ -125,20 +139,19 @@
     },
     {
       "id": "US-MEM-005",
-      "title": "Wire memory tools and callback into AgentHLEAgent",
-      "description": "As a developer, I want the memory tools and callback wired into the AgentHLEAgent so that every agent run has access to memory_search, memory_get, and the flush callback.",
+      "title": "End-to-end memory system validation",
+      "description": "As a developer, I want a comprehensive end-to-end test that exercises all memory features together (MemoryStore, memory_search, memory_get, MemoryFlushCallback) both in pytest and via a full run_magic_tower.sh run, proving the entire memory system works as a cohesive whole.",
       "acceptanceCriteria": [
-        "agenthle_agent.py imports MemoryStore, MemorySearchTool, MemoryGetTool, MemoryFlushCallback from memory package",
-        "perform_task creates MemoryStore pointed at the project root",
-        "MemorySearchTool and MemoryGetTool added to ComputerAgent tools= list",
-        "MemoryFlushCallback registered as a callback",
-        "Agent instructions mention available memory tools",
-        "uv run python -c 'from memory import MemoryStore, MemorySearchTool, MemoryGetTool' succeeds",
+        "tests/test_memory_e2e.py exists: wires all memory components together (same as agenthle_agent.py), seeds data, exercises search/get/callback in sequence, verifies shared MemoryStore state across components",
+        "uv run pytest tests/test_memory_e2e.py -v passes",
+        "run_magic_tower.sh completes a full run: agent uses memory_search and memory_get tools (visible in trajectory logs), MemoryFlushCallback fires and creates daily log entries",
+        "After run_magic_tower.sh, memory_data/memory_logs/ contains at least one daily log with run summary, and memory_data/MEMORY.md exists if agent wrote to it",
+        "uv run python -c 'from memory import MemoryStore, MemorySearchTool, MemoryGetTool, MemoryFlushCallback' succeeds",
         "Lint passes (uv run ruff check .)"
       ],
       "priority": 2,
       "passes": false,
-      "notes": ""
+      "notes": "Final validation story. Each feature is already individually integrated and tested in US-MEM-001 through US-MEM-004. The run_magic_tower.sh test requires a running VM (VM_IP set)."
     }
   ]
 }
