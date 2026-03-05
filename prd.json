@@ -1,7 +1,7 @@
 {
   "project": "AgentHLE",
-  "branchName": "paper-experiments",
-  "description": "AgentHLE Agent Harness - Build the agent harness for evaluating AI agents on computer-use tasks",
+  "branchName": "tinyclaw",
+  "description": "TinyClaw - Tiny memory infrastructure for AgentHLE, inspired by OpenClaw's memory system. Plain markdown files as source of truth, keyword search, and pre-compaction memory flush.",
   "userStories": [
     {
       "id": "US-001",
@@ -33,6 +33,92 @@
       "priority": 2,
       "passes": true,
       "notes": "Completed. Both SKILL.md files rewritten for AgentHLE context with agent harness examples, CUA-relevant scenarios, and Claude-verifiable acceptance criteria."
+    },
+    {
+      "id": "US-MEM-001",
+      "title": "MemoryStore - Markdown file storage layer",
+      "description": "As a developer, I want a MemoryStore class that manages MEMORY.md (curated long-term) and memory_logs/YYYY-MM-DD.md (daily append-only logs) so that memory tools have a clean abstraction for reading and writing.",
+      "acceptanceCriteria": [
+        "memory/store.py exists with MemoryStore class",
+        "MemoryStore.__init__ accepts a base_dir path",
+        "read_file returns content with correct line ranges; returns empty string for missing files (no exception)",
+        "append_to_daily_log creates memory_logs/ dir and file if absent, appends with timestamp",
+        "write_memory creates or overwrites MEMORY.md",
+        "search does case-insensitive substring matching across all markdown files, returns file path, line number, content, score",
+        "list_log_files returns sorted paths of existing daily log files",
+        "uv run pytest tests/test_memory_store.py passes",
+        "Lint passes (uv run ruff check .)"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-MEM-002",
+      "title": "memory_search tool",
+      "description": "As an agent, I want a memory_search tool so that I can search my memory files using keywords and find relevant past observations.",
+      "acceptanceCriteria": [
+        "memory/tools.py exists with MemorySearchTool class extending BaseTool",
+        "MemorySearchTool registered with @register_tool('memory_search')",
+        "Accepts keywords (list of strings) and optional max_results (int) parameters",
+        "Delegates to MemoryStore.search() and returns results with file path, line number, matched content",
+        "Returns helpful message when no results found",
+        "uv run pytest tests/test_memory_tools.py::test_search passes",
+        "Lint passes (uv run ruff check .)"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-MEM-003",
+      "title": "memory_get tool",
+      "description": "As an agent, I want a memory_get tool so that I can read a specific memory file or line range by path, with graceful degradation on missing files.",
+      "acceptanceCriteria": [
+        "memory/tools.py contains MemoryGetTool class extending BaseTool",
+        "MemoryGetTool registered with @register_tool('memory_get')",
+        "Accepts file_path (string), optional start_line and end_line (int) parameters",
+        "Restricts file_path to MEMORY.md and memory_logs/ (rejects path traversal with ..)",
+        "Returns empty string with message for missing files (no exception)",
+        "uv run pytest tests/test_memory_tools.py::test_get passes",
+        "Lint passes (uv run ruff check .)"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-MEM-004",
+      "title": "MemoryFlushCallback - Pre-compaction memory save",
+      "description": "As a system operator, I want a callback that periodically reminds the agent to save important observations to persistent memory, and auto-appends a summary at end of run.",
+      "acceptanceCriteria": [
+        "memory/callback.py exists with MemoryFlushCallback extending AsyncCallbackHandler",
+        "Tracks step count; every flush_interval steps, appends a memory flush reminder to messages via on_llm_start",
+        "on_run_end appends a summary line to the daily log with task description and step count",
+        "Does not crash if memory_logs/ directory does not exist (creates it)",
+        "uv run pytest tests/test_memory_callback.py passes",
+        "Lint passes (uv run ruff check .)"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-MEM-005",
+      "title": "Wire memory tools and callback into AgentHLEAgent",
+      "description": "As a developer, I want the memory tools and callback wired into the AgentHLEAgent so that every agent run has access to memory_search, memory_get, and the flush callback.",
+      "acceptanceCriteria": [
+        "agenthle_agent.py imports MemoryStore, MemorySearchTool, MemoryGetTool, MemoryFlushCallback from memory package",
+        "perform_task creates MemoryStore pointed at the project root",
+        "MemorySearchTool and MemoryGetTool added to ComputerAgent tools= list",
+        "MemoryFlushCallback registered as a callback",
+        "Agent instructions mention available memory tools",
+        "uv run python -c 'from memory import MemoryStore, MemorySearchTool, MemoryGetTool' succeeds",
+        "Lint passes (uv run ruff check .)"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": ""
     }
   ]
 }
