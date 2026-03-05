@@ -41,10 +41,7 @@ trycua/cua-bench
 
 uv.lock
 .envrc
-run_magic_tower.sh
 test_eval.sh
-run_helloworld.sh
-opencua.py
 
 *.Identifier
 
