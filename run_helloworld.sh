@@ -4,7 +4,7 @@
 # export OPENAI_API_BASE="https://litellm-991596698159.us-west1.run.app"
 
 ## Replace with your own API keys and remote machine IP
-export OPENAI_API_KEY="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"
+
 export CUA_ENV_API_URL="http://${VM_IP}:5000"
 
 
