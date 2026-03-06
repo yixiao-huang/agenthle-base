@@ -63,3 +63,21 @@
   - self.memory_store on the agent instance makes it available for later stories (tools, callback) without re-instantiation
   - The `run_magic_tower.sh` validation with --max-steps 5 is a quick smoke test (~20s) for integration
 ---
+
+## 2026-03-06 - US-MEM-002: memory_search tool - built, wired into agent, tested
+- Created memory/tools.py with MemorySearchTool class extending BaseTool via @register_tool("memory_search")
+- Constructor takes MemoryStore instance (same pattern as MilestoneTool taking interface)
+- Accepts keywords (list of strings) and optional max_results (int), delegates to MemoryStore.search()
+- Returns formatted results with file path, line number, score, and content; helpful message when empty
+- Updated memory/__init__.py to export MemorySearchTool
+- Updated agenthle_agent.py: imports MemorySearchTool, instantiates with self.memory_store, adds to tools list, updated agent instructions
+- Created tests/test_memory_tools.py with 12 tests (schema, basic search, no results, multi-keyword scoring, max_results, JSON string params, missing/empty keywords, line numbers, log file search)
+- All 37 tests pass (12 new + 25 existing), lint clean
+- Files changed: memory/tools.py (created), memory/__init__.py (modified), agenthle_agent.py (modified), tests/test_memory_tools.py (created), prd.json (updated), progress.txt (updated)
+- **Learnings for future iterations:**
+  - `uv sync --reinstall` is required before tests if `agent` package import fails (editable CUA packages)
+  - MemorySearchTool follows MilestoneTool pattern: constructor takes domain object + optional cfg, calls super().__init__(cfg)
+  - BaseTool._verify_json_format_args handles both dict and JSON string params; validates required fields against schema
+  - Tool registration via @register_tool sets cls.name and adds to TOOL_REGISTRY; tools are passed to ComputerAgent(tools=[...])
+  - **US-MEM-004 design note**: MemoryFlushCallback will need memory_search and memory_get tools wired in before the reflection prompt is useful — the agent needs tools to actually write observations
+---

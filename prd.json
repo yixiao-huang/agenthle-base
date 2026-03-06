@@ -94,8 +94,8 @@
         "Lint passes (uv run ruff check .)"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Completed. MemorySearchTool in memory/tools.py, wired into agenthle_agent.py tools list, 12 unit tests passing, agent instructions updated to describe memory_search."
     },
     {
       "id": "US-MEM-003",
@@ -138,6 +138,26 @@
       "priority": 3,
       "passes": false,
       "notes": "Depends on US-MEM-002/003 for the agent to actually write via tools. Without tools, the reflection prompt is injected but agent can only acknowledge it."
+    },
+    {
+      "id": "US-MEM-006",
+      "title": "Upgrade memory_search to semantic/vector search",
+      "description": "As an agent, I want memory_search to use embedding-based semantic search so I can find conceptually related memories even when exact keywords don't match (e.g., searching 'stuck' finds 'blocked', searching 'floor 3' finds 'third level'). This upgrades the current keyword substring matching to vector similarity, following OpenClaw's approach but keeping TinyClaw's simplicity.",
+      "acceptanceCriteria": [
+        "MemoryStore.search() supports a backend parameter: 'keyword' (current default) or 'semantic'",
+        "Semantic backend embeds query and memory lines using a configurable embedding model (default: OpenAI text-embedding-3-small or a local model)",
+        "Embedding index is built lazily on first semantic search and refreshed when files change (mtime check)",
+        "memory_search tool gains optional 'mode' parameter: 'keyword', 'semantic', or 'auto' (default 'auto' which falls back to keyword if embeddings unavailable)",
+        "Optional 'min_score' parameter for semantic mode to filter low-relevance results",
+        "Graceful degradation: if embedding API is unavailable or OPENAI_API_KEY not set, falls back to keyword search with a warning in results",
+        "No new required dependencies — embedding support is optional (guard imports with try/except)",
+        "uv run pytest tests/test_memory_search_semantic.py passes (tests: semantic finds synonyms keyword misses, fallback to keyword on missing API key, min_score filtering, index refresh on file change)",
+        "run_magic_tower.sh works with both modes (keyword default still works, semantic opt-in via env var)",
+        "Lint passes (uv run ruff check .)"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": "Upgrade path from keyword to semantic search. Trigger conditions: memory corpus grows large, cross-task memory needed, or agent recall drops due to vocabulary mismatch. OpenClaw uses embedding providers with fallback; TinyClaw should keep it simpler with a single optional embedding backend. Consider local embeddings (e.g., sentence-transformers) to avoid API cost."
     },
     {
       "id": "US-MEM-005",

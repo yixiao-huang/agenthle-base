@@ -25,11 +25,13 @@ export EVALUATION_OUTPUT_DIR="./trycua/cua-bench/${task}"
 #     --provider-type computer \
 #     --wait
 
+MAX_STEPS="${1:-500}"
+
 uv run python -m cua_bench.batch.solver ./tasks/game/${task} \
     --eval \
     --agent agenthle-agent \
     --model openai/computer-use-preview \
-    --max-steps 500 \
+    --max-steps "$MAX_STEPS" \
     --output-dir $EVALUATION_OUTPUT_DIR
 
 
