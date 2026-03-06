@@ -1,8 +1,8 @@
 ## Codebase Patterns
 - Git remotes: `upstream` (cua-verse official), `origin` (personal fork), `private` (private experiments)
 - Work on `paper-experiments` branch, push to `private/paper-experiments`
-- Use `eval "$(direnv export bash)"` before commands needing `.envrc` vars in non-interactive shells
-- Use `uv sync --reinstall` if editable CUA packages fail to import
+- Source `.envrc` directly (`source "/path/.envrc"`) for reliable env var loading in Bash tool (NOT `direnv export bash`)
+- Use `uv sync --reinstall` if editable CUA packages fail to import (agent, cua_bench, etc.)
 - **TinyClaw reference**: OpenClaw's memory system is the design reference for TinyClaw. Key docs live at `../openclaw/docs/` (sibling of agenthle-base under the AgentHLE folder):
   - `docs/concepts/memory.md` — Architecture overview: memory file layout, memory_search/memory_get tools, automatic pre-compaction flush, vector search config
   - `docs/experiments/research/memory.md` — Research notes: Letta/MemGPT + Hindsight-inspired retain/recall/reflect loop, proposed bank/ structure, opinion confidence
@@ -43,7 +43,6 @@
   - Turn count ≠ step count: each turn can contain multiple API calls (~2 steps/turn for openai/computer-use-preview)
   - Trajectory files live in turn_XXX/ dirs with sequential NNNN-prefixed files (api_start, api_result, agent_response, screenshot_after, computer_call_result)
   - Agent reasoning is in agent_response.json → kwargs.messages → last assistant message → content[type="output_text"].text
-  - Source `.envrc` directly (`source "/path/.envrc"`) instead of `direnv export bash` for reliable env var loading in Bash tool
   - The agent enters deterministic repeating cycles when it lacks cross-turn memory — strongest motivation for the tinyclaw memory system
   - The agent can hallucinate progress (claimed floor 2, screenshots show floor 1) — visual grounding checks are needed
 ---
@@ -57,7 +56,6 @@
 - Also fixed pre-existing lint issues in agenthle_agent.py (unused imports, trailing whitespace)
 - Files changed: memory/__init__.py (created), memory/store.py (created), tests/__init__.py (created), tests/test_memory_store.py (created), agenthle_agent.py (modified), prd.json (updated), progress.txt (updated)
 - **Learnings for future iterations:**
-  - `uv sync --reinstall` is needed if cua_bench import fails (editable packages can get stale)
   - The solver exits with code 1 on MAX_STEPS_EXCEEDED — this is expected behavior, not an error
   - MemoryStore base_dir resolves via `Path(...).resolve()` so relative paths work from any cwd
   - self.memory_store on the agent instance makes it available for later stories (tools, callback) without re-instantiation
@@ -75,9 +73,7 @@
 - All 37 tests pass (12 new + 25 existing), lint clean
 - Files changed: memory/tools.py (created), memory/__init__.py (modified), agenthle_agent.py (modified), tests/test_memory_tools.py (created), prd.json (updated), progress.txt (updated)
 - **Learnings for future iterations:**
-  - `uv sync --reinstall` is required before tests if `agent` package import fails (editable CUA packages)
-  - MemorySearchTool follows MilestoneTool pattern: constructor takes domain object + optional cfg, calls super().__init__(cfg)
+  - BaseTool pattern: constructor takes domain object + optional cfg, calls super().__init__(cfg); @register_tool sets cls.name and adds to TOOL_REGISTRY
   - BaseTool._verify_json_format_args handles both dict and JSON string params; validates required fields against schema
-  - Tool registration via @register_tool sets cls.name and adds to TOOL_REGISTRY; tools are passed to ComputerAgent(tools=[...])
   - **US-MEM-004 design note**: MemoryFlushCallback will need memory_search and memory_get tools wired in before the reflection prompt is useful — the agent needs tools to actually write observations
 ---
