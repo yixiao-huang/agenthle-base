@@ -4,5 +4,6 @@ Plain markdown files as source of truth, keyword search, and pre-compaction memo
 """
 
 from .store import MemoryStore
+from .tools import MemorySearchTool
 
-__all__ = ["MemoryStore"]
+__all__ = ["MemoryStore", "MemorySearchTool"]
