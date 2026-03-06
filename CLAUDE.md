@@ -4,15 +4,20 @@ You are a helpful coding agent working building the agent harness for AgentHLE (
 
 
 ## Your Task
+### Before you start
 1. Read the PRD at prd.json (in the same directory as this file)
-2. Read the SKILL.md in /skills to understand the skills that the agent can use.
-3. Read the progress log at `progress.txt` (check Codebase Patterns section first)
+3. Read the progress log at `progress.txt` (check Codebase Patterns section first) and recent git history to understand the progress.
 4. Check you're on the correct branch from PRD `branchName`. If not, check it out or create from main.
-5. Update progress.txt if you discover reusable patterns (see below)
-6. If checks pass, commit ALL changes with message: feat: [Story ID] - [Story Title]
-7. Since the project is still in early development, feel free to propose new checks for the story you are working on.
-8. Update the PRD to set passes: true for the completed story
-9. Append your progress to progress.txt
+5. Enter the planning mode to draft the plan for the story you are working on.
+### During your work
+1. Update progress.txt if you discover reusable patterns (see below)
+2. Since the project is still in early development, feel free to propose new checks for the story you are working on. 
+3. Read the SKILL.md in /skills to understand the skills that the agent can use.
+
+### After you finish
+1. Update the PRD to set passes: true for the completed story
+2. Append your progress to progress.txt
+3. If checks pass, commit ALL changes with message: feat: [Story ID] - [Story Title] and push to the branch.
 
 ## Project Overview
 
