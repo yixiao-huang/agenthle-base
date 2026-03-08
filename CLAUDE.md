@@ -110,6 +110,22 @@ Update the `<!-- Last updated: YYYY-MM-DD -->` comment at the top of the file wh
 
 
 
+## Git: CUA Submodule
+
+The CUA framework lives at `submodules/cua/` as a git submodule tracking a **separate repo** with its own remotes:
+
+- **origin** (fetch): `git@github.com:cua-verse/cua.git` (upstream, read-only)
+- **origin** (push): `git@github.com:yixiao-huang/cua.git` (fork, push URL override)
+- **fork**: `git@github.com:yixiao-huang/cua.git` (same fork, explicit remote)
+- **Branch**: `tinyclaw-memory`
+
+Key rules:
+- The agent code (`agenthle_agent.py`) lives inside the submodule at `libs/cua-bench/cua_bench/agents/`
+- When you modify files in `submodules/cua/`, you must **commit inside the submodule first**, then commit the updated submodule pointer in the parent repo
+- **Push submodule commits** before pushing the parent repo — otherwise the parent will reference a commit that doesn't exist on the remote
+- Push goes to the fork (`yixiao-huang/cua.git`), not upstream (`cua-verse/cua.git`)
+- To init the submodule after a fresh clone: `git submodule update --init submodules/cua`
+
 ## Important
 
 - Commit frequently
