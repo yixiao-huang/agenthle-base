@@ -287,6 +287,44 @@ TinyClaw does NOT duplicate trajectory data. The nudge callback reads recent tra
 | TASK_MEMORY.md grows too large | Size-capped compaction with aggressive summarization when exceeding threshold |
 | Context window fills mid-session | Step nudges persist observations to session log before they're lost to context compaction |
 
+### Memory Recall: How the Agent Decides to Search
+
+A key design question: how does the agent know *when* to call `memory_search`? OpenClaw and TinyClaw take different approaches, and TinyClaw has clear room to improve.
+
+#### OpenClaw's Approach (Reference)
+
+OpenClaw uses three reinforcing layers:
+
+1. **Dedicated system prompt section** (`## Memory Recall`): Injected only when memory tools are available. States a categorical rule:
+   > "Before answering anything about prior work, decisions, dates, people, preferences, or todos: run memory_search"
+
+2. **Tool description**: Reinforces with "**Mandatory recall step**" framing and the same trigger category list.
+
+3. **Two-step workflow**: Search first (`memory_search`), then targeted read (`memory_get`) to "pull only the needed lines and keep context small."
+
+4. **Failure guidance**: "If low confidence after search, say you checked."
+
+#### TinyClaw's Current Approach
+
+A single vague sentence in the general instructions:
+> "You have a memory_search tool — use it to recall past observations, strategies, or mistakes before making decisions."
+
+No specific trigger categories, no "mandatory" framing, no failure guidance, no dedicated prompt section.
+
+#### Identified Improvements for TinyClaw
+
+1. **Task-agnostic trigger categories**: Replace "before making decisions" with concrete but general categories, following OpenClaw's pattern (prior work, decisions, dates, strategies, mistakes). The categories should apply to any CUA task, not just game tasks. Exact wording to be determined during implementation.
+
+2. **"Mandatory recall" framing**: Stronger framing ("mandatory recall step") increases actual tool invocation rates vs. a soft suggestion.
+
+3. **Dedicated `## Memory Recall` section**: A separate heading in the system prompt makes it more prominent to the model vs. being a clause in a run-on paragraph.
+
+4. **Failure/low-confidence guidance**: Tell the agent what to do when search returns nothing relevant ("proceed without it" or "say you checked").
+
+5. **Session-start nudge**: Programmatically call `memory_search` with task-relevant keywords before the first real step, so the agent begins with prior context loaded rather than hoping it decides to search.
+
+6. **Two-step search→get workflow**: Once `memory_get` is wired in (US-MEM-003), instruct the agent to use search for discovery and get for targeted reads, keeping context small.
+
 ### What TinyClaw Intentionally Omits
 
 | OpenClaw Feature | Why Omitted |

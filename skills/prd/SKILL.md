@@ -1,214 +1,206 @@
 ---
 name: prd
-description: "Generate a Product Requirements Document (PRD) for an AgentHLE feature. Use when planning a feature, starting a new task, or when asked to create a PRD. Triggers on: create a prd, write prd for, plan this feature, requirements for, spec out."
+description: "Create or update prd.json for the AgentHLE autonomous agent system. Use when planning a feature, adding stories, or converting a PRD to JSON. Triggers on: create a prd, write prd for, plan this feature, requirements for, spec out, convert this prd, agenthle json, add story."
 user-invocable: true
 ---
 
 # PRD Generator
 
-Create detailed Product Requirements Documents that are clear, actionable, and suitable for implementation in the AgentHLE agent harness.
+Create `prd.json` — the single file that drives AgentHLE's autonomous implementation pipeline.
 
 ---
 
 ## The Job
 
-1. Receive a feature description from the user
-2. Ask 3-5 essential clarifying questions (with lettered options)
-3. Generate a structured PRD based on answers
-4. Save to `tasks/prd-[feature-name].md`
+1. Receive a feature description (or existing markdown PRD) from the user
+2. If the request is ambiguous, ask 3-5 clarifying questions (with lettered options for quick "1A, 2C" replies)
+3. Read `docs/testing-feedback-loops.md` for verification guidelines
+4. Generate `prd.json` in the project root
 
 **Important:** Do NOT start implementing. Just create the PRD.
 
 ---
 
-## Step 1: Clarifying Questions
+## Clarifying Questions (When Needed)
 
-Ask only critical questions where the initial prompt is ambiguous. Focus on:
+Skip if the user's intent is already clear. Focus on:
 
-- **Problem/Goal:** What problem does this solve for the agent harness?
+- **Problem/Goal:** What problem does this solve?
 - **Core Functionality:** What are the key actions or capabilities?
 - **Scope/Boundaries:** What should it NOT do?
 - **Success Criteria:** How do we know it's done?
 
-### Format Questions Like This:
-
-```
-1. What is the primary goal of this feature?
-   A. Improve agent evaluation accuracy
-   B. Add new agent capabilities
-   C. Improve task setup/configuration
-   D. Other: [please specify]
-
-2. What component does this affect?
-   A. Agent harness (CUA framework integration)
-   B. Evaluation system (utils/evaluation.py)
-   C. Task definitions (tasks/)
-   D. Infrastructure (shell scripts, config)
-
-3. What is the scope?
-   A. Minimal viable version
-   B. Full-featured implementation
-   C. Just the core logic
-   D. Core logic + integration with existing tasks
-```
-
-This lets users respond with "1A, 2C, 3B" for quick iteration. Remember to indent the options.
+Format with lettered options so users can respond quickly ("1A, 2C, 3B").
 
 ---
 
-## Step 2: PRD Structure
+## Output Format
 
-Generate the PRD with these sections:
-
-### 1. Introduction/Overview
-Brief description of the feature and the problem it solves in the context of agent evaluation.
-
-### 2. Goals
-Specific, measurable objectives (bullet list).
-
-### 3. User Stories
-Each story needs:
-- **Title:** Short descriptive name
-- **Description:** "As a [user], I want [feature] so that [benefit]"
-- **Acceptance Criteria:** Verifiable checklist of what "done" means
-
-Each story should be small enough to implement in one focused session (one context window).
-
-**Format:**
-```markdown
-### US-001: [Title]
-**Description:** As a [user], I want [feature] so that [benefit].
-
-**Acceptance Criteria:**
-- [ ] Specific verifiable criterion
-- [ ] Another criterion
-- [ ] Lint passes (uv run ruff check .)
+```json
+{
+  "project": "AgentHLE",
+  "branchName": "[feature-name-kebab-case]",
+  "description": "[Feature description]",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "[Story title]",
+      "description": "As a [user], I want [feature] so that [benefit]",
+      "context": {
+        "existingFiles": ["relevant/file.py (what it contains)"],
+        "depends": "US-000 must be done first (reason)",
+        "designDoc": "docs/relevant-doc.md (section name)"
+      },
+      "acceptanceCriteria": [
+        "Level 1: Lint passes (uv run ruff check .)",
+        "Level 1: Unit tests pass (uv run pytest tests/test_*.py)",
+        "Level 2: After a real run, trajectory logs show agent invoked the tool",
+        "Level 2: Memory files contain task-relevant content (not boilerplate)"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}
 ```
 
-**Important:**
-- Acceptance criteria must be something Claude can check (e.g., run a command, grep a file, read output), not something vague. "Works correctly" is bad. "grep -c 'def evaluate' utils/evaluation.py returns at least 1" is good.
+---
 
-### 4. Functional Requirements
-Numbered list of specific functionalities:
-- "FR-1: The system must allow agents to..."
-- "FR-2: When evaluation runs, the system must..."
+## Story Size: The Number One Rule
 
-Be explicit and unambiguous.
+**Each story must be completable in ONE iteration (one context window).**
 
-### 5. Non-Goals (Out of Scope)
-What this feature will NOT include. Critical for managing scope.
+Each iteration spawns a fresh agent with no memory of previous work. If a story is too big, the agent runs out of context before finishing and produces broken code.
 
-### 6. Technical Considerations (Optional)
-- Known constraints or dependencies on CUA framework
-- Integration points with existing evaluation or task systems
-- Remote VM requirements
-- Environment variable dependencies
+**Rule of thumb:** If you cannot describe the change in 2-3 sentences, it is too big.
 
-### 7. Success Metrics
-How will success be measured?
-- "Agent successfully completes helloworld task end-to-end"
-- "Evaluation scores match expected reference within tolerance"
+### Right-sized:
+- Add a new tool class following an existing pattern
+- Extend a store class with new methods + tests
+- Wire tools into the agent and update instructions
+- Add a callback that hooks into an existing lifecycle
 
-### 8. Open Questions
-Remaining questions or areas needing clarification.
+### Too big (split these):
+- "Build the entire memory system" → Split into: store, tools, agent wiring, callback, compaction
+- "Add a new agent type" → Split into: config, action handling, session management
+
+---
+
+## Story Ordering: Dependencies First
+
+Stories execute in priority order. Earlier stories must not depend on later ones.
+
+**Correct:** config/data model → core logic → integration → scripts
+**Wrong:** integration story before the core logic it depends on
+
+---
+
+## Acceptance Criteria: Three-Level Verification
+
+**MANDATORY**: Read `docs/testing-feedback-loops.md` before writing acceptance criteria. Structure criteria using the three-level model:
+
+### Level 1 — Mechanical (required for ALL stories)
+Automated checks that verify the code runs without errors.
+
+```
+"Level 1: Lint passes (uv run ruff check .)"
+"Level 1: Unit tests pass (uv run pytest tests/test_*.py)"
+"Level 1: Smoke test run_magic_tower.sh --max-steps 5 doesn't crash"
+```
+
+### Level 2 — Behavioral (required for agent/tool stories)
+After a real run (step count at the implementing agent's discretion), verify the agent actually uses the feature.
+
+```
+"Level 2: Trajectory logs show agent invoked [tool] at least once"
+"Level 2: Memory files contain task-relevant content (not just step counters)"
+"Level 2: Agent reasoning references retrieved content after tool calls"
+```
+
+Include practical verification commands where possible:
+```
+"grep -r '\"memory_search\"' trajectories/"
+```
+
+### Level 3 — Outcome (only for cross-session stories)
+Multi-session runs show knowledge transfer. Only required when the story's value proposition is cross-session improvement.
+
+```
+"Level 3: Session 2's TASK_MEMORY.md contains compacted learnings from session 1"
+"Level 3: Agent in session 2 does not repeat session 1's identified dead ends"
+```
+
+### Anti-patterns to avoid in criteria:
+- "Works correctly" (vague)
+- "Agent performs well" (unmeasurable)
+- "Handles edge cases" (which ones?)
+- Treating "doesn't crash" as sufficient for tool/agent stories
+
+### Always include:
+- `"Level 1: Lint passes (uv run ruff check .)"` in every story
+- `"Level 1: Unit tests pass"` for stories with testable logic
+
+---
+
+## Context Field
+
+Each story should include a `context` object to help the implementing agent:
+
+- **existingFiles**: Files to read before starting, with brief description of what they contain
+- **depends**: Which stories must be done first and why
+- **designDoc**: Relevant design docs with section references
+- **pattern**: Existing code patterns to follow (e.g., "Follow MemorySearchTool pattern in same file")
+- **reference**: External references that informed the design
+
+Only include fields that are relevant. Omit the entire `context` object for simple stories.
+
+---
+
+## Conversion Rules
+
+1. **Each user story becomes one JSON entry**
+2. **IDs**: Use meaningful prefixes (US-MEM-001, US-EVL-001) for feature groups, or sequential US-001 for standalone features
+3. **Priority**: Based on dependency order, then document order
+4. **All new stories**: `passes: false` and empty `notes`
+5. **branchName**: Derive from feature name, kebab-case
 
 ---
 
 ## Writing for Implementation
 
-The PRD reader may be an AI agent working autonomously. Therefore:
+The PRD reader is an AI agent working autonomously. Therefore:
 
 - Be explicit and unambiguous
-- Reference specific files and functions when relevant (e.g., "extends `GeneralTaskConfig` in `tasks/common_config.py`")
-- Provide enough detail to understand purpose and core logic
-- Number requirements for easy reference
-- Use concrete examples from the AgentHLE codebase where helpful
+- Reference specific files and functions (e.g., "extends `BaseTool` in `agent/tools/base.py`")
+- Include enough detail to understand purpose and core logic
+- Use `notes` for critical design insights the implementing agent must know
+- Use concrete examples from the codebase where helpful
 
 ---
 
-## Output
+## Archiving Previous Runs
 
-- **Format:** Markdown (`.md`)
-- **Location:** `tasks/`
-- **Filename:** `prd-[feature-name].md` (kebab-case)
+**Before writing a new prd.json, check if there is an existing one from a different feature:**
 
----
-
-## Example PRD
-
-```markdown
-# PRD: Milestone Evaluation Enhancement
-
-## Introduction
-
-Enhance the milestone evaluation mode to support weighted scoring per milestone and configurable VLM prompts. Currently all milestones are weighted equally, but some tasks have milestones of varying difficulty that should contribute differently to the final score.
-
-## Goals
-
-- Allow per-milestone weight configuration in task metadata
-- Support custom VLM prompts per milestone instead of a single comparison prompt
-- Maintain backward compatibility with existing tasks that use uniform weights
-
-## User Stories
-
-### US-001: Add weight configuration to milestone evaluation
-**Description:** As a task author, I want to assign different weights to milestones so that harder milestones contribute more to the score.
-
-**Acceptance Criteria:**
-- [ ] `evaluate_milestone_mode` accepts optional `weights` dict mapping filename to weight
-- [ ] Weights default to uniform (1/N) when not provided
-- [ ] Existing tasks continue to work without changes
-- [ ] Lint passes (uv run ruff check .)
-
-### US-002: Support custom VLM prompts per milestone
-**Description:** As a task author, I want to use different comparison prompts for different milestones so that evaluation is more accurate.
-
-**Acceptance Criteria:**
-- [ ] `comparison_fn` can receive milestone-specific context from task metadata
-- [ ] TaskConfig can define per-milestone prompt overrides
-- [ ] Default prompt used when no override specified
-- [ ] Lint passes (uv run ruff check .)
-
-## Functional Requirements
-
-- FR-1: `evaluate_milestone_mode` must accept an optional `weights` parameter
-- FR-2: Weights must be normalized so they sum to 1.0
-- FR-3: Task metadata `to_metadata()` must support a `milestone_weights` field
-- FR-4: Custom prompts passed via `comparison_fn` kwargs
-
-## Non-Goals
-
-- No changes to the deliverable evaluation mode
-- No automatic weight inference from task difficulty
-- No UI for configuring weights
-
-## Technical Considerations
-
-- Changes primarily in `utils/evaluation.py` and `tasks/common_config.py`
-- Must maintain backward compatibility with `tasks/game/mota_24_easy/main.py` and `tasks/helloworld/main.py`
-- VLM judge calls go through `llm_vision_judge` which uses OPENAI_API_KEY
-
-## Success Metrics
-
-- Existing tasks pass evaluation with unchanged scores
-- New weighted tasks produce scores reflecting milestone importance
-
-## Open Questions
-
-- Should weights be specified as absolute values or relative ratios?
-- Should we validate that weight keys match actual reference filenames?
-```
+1. Read the current `prd.json` if it exists
+2. Check if `branchName` differs from the new feature's branch name
+3. If different AND `progress.txt` has content beyond the header:
+   - Create archive folder: `archive/YYYY-MM-DD-feature-name/`
+   - Copy current `prd.json` and `progress.txt` to archive
+   - Reset `progress.txt` with fresh header
 
 ---
 
-## Checklist
+## Checklist Before Saving
 
-Before saving the PRD:
+Before writing prd.json, verify:
 
-- [ ] Asked clarifying questions with lettered options
-- [ ] Incorporated user's answers
-- [ ] User stories are small and specific (completable in one context window)
-- [ ] Functional requirements are numbered and unambiguous
-- [ ] Non-goals section defines clear boundaries
-- [ ] References specific AgentHLE files/functions where relevant
-- [ ] Saved to `tasks/prd-[feature-name].md`
+- [ ] **Read `docs/testing-feedback-loops.md`** for verification guidelines
+- [ ] **Previous run archived** (if prd.json exists with different branchName)
+- [ ] Each story is completable in one iteration (small enough)
+- [ ] Stories are ordered by dependency (no story depends on a later one)
+- [ ] Acceptance criteria use three-level verification (Level 1/2/3 as applicable)
+- [ ] Every story has "Level 1: Lint passes" as criterion
+- [ ] Criteria are verifiable (not vague)
+- [ ] `context` fields reference relevant files and design docs

@@ -10,9 +10,11 @@ You are a helpful coding agent working building the agent harness for AgentHLE (
 3. Read the progress log at `progress.txt` (check Codebase Patterns section first) and recent git history to understand the progress.
 4. Check you're on the correct branch from PRD `branchName`. If not, check it out or create from main.
 5. Enter the planning mode to draft the plan for the story you are working on.
+### Creating or updating the PRD
+Use `/prd` to create a new `prd.json` or add stories to an existing one. The skill handles clarifying questions, story sizing, dependency ordering, and three-level acceptance criteria (see `docs/testing-feedback-loops.md`). Do NOT write `prd.json` by hand — always use the skill.
 ### During your work
 1. Update progress.txt if you discover reusable patterns (see below)
-2. Since the project is still in early development, feel free to propose new checks for the story you are working on. 
+2. Since the project is still in early development, feel free to propose new checks for the story you are working on.
 3. Read the SKILL.md in /skills to understand the skills that the agent can use.
 
 ### After you finish

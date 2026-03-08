@@ -273,6 +273,33 @@
       "priority": 4,
       "passes": false,
       "notes": "Future story. Inspired by OpenClaw's hybrid search. See docs/memory-system.md for design."
+    },
+    {
+      "id": "US-MEM-RCL",
+      "title": "Improved memory recall prompting strategy",
+      "description": "As an agent, I want clearer, task-agnostic instructions about when and how to use memory_search so I actually invoke it at the right moments instead of forgetting it exists.",
+      "context": {
+        "existingFiles": ["submodules/cua/libs/cua-bench/cua_bench/agents/agenthle_agent.py (instructions= parameter)", "memory/tools.py (tool descriptions)"],
+        "depends": "US-MEM-AGT must be done first (all memory tools wired in)",
+        "designDoc": "docs/memory-system.md (Memory Recall: How the Agent Decides to Search)",
+        "reference": "OpenClaw system-prompt.ts buildMemorySection() — uses task-agnostic categorical triggers (prior work, decisions, dates, strategies, mistakes) not task-specific ones"
+      },
+      "acceptanceCriteria": [
+        "Agent instructions contain a dedicated '## Memory Recall' section (not buried in general instructions)",
+        "Memory recall section lists task-agnostic trigger categories (e.g., prior observations, past strategies, known mistakes, previous decisions — NOT game-specific like 'floor numbers' or 'enemy encounters')",
+        "Instructions use 'mandatory recall step' framing (not a soft suggestion)",
+        "Instructions include failure guidance: what to do when search returns nothing relevant",
+        "memory_search tool description updated to reinforce mandatory recall framing",
+        "memory_get tool description includes guidance to use it after memory_search for targeted reads",
+        "Level 1: Lint passes (uv run ruff check .)",
+        "Level 1: Smoke test run_magic_tower.sh --max-steps 5 doesn't crash",
+        "Level 2: After run_magic_tower.sh (step count at discretion), trajectory logs (turn_NNN/NNNN_agent_response.json) show agent invoked memory_search in at least 3 distinct decision-making contexts (not just once at start). Use: grep -r '\"memory_search\"' trajectories/",
+        "Level 2: Agent reasoning summaries (response.output[].summary[].text) after memory_search calls reference the retrieved content",
+        "Level 2: Search queries in trajectory logs are task-relevant (not random or empty strings)"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": "Future story. Inspired by OpenClaw's system prompt design (buildMemorySection in system-prompt.ts). The current TinyClaw instructions are too vague — 'before making decisions' doesn't give the model enough signal to actually trigger recall. OpenClaw's categorical triggers (prior work, decisions, dates, people, preferences, todos) are more effective. This story adapts that pattern with task-agnostic categories that work across all CUA tasks, not just games. The exact prompt wording should be determined during implementation. See docs/memory-system.md 'Memory Recall' section for full analysis.\n\nOptional enhancement (not required for this story): session-start auto-search — programmatically call memory_search with task-relevant keywords before the first agent step, so prior context is pre-loaded into the conversation."
     }
   ]
 }
