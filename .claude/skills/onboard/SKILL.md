@@ -35,7 +35,12 @@ Also read these if relevant to the current work area:
 
 ### 3. Identify current work
 
-From the PRD, find the next story where `passes: false` (in priority order). Summarize:
+From the PRD, find all stories where `passes: false`. Do NOT simply select the next one in the list. Instead, determine which story to implement first by carefully considering:
+- **Dependencies**: Which stories are blocked vs. ready to start? Check each story's `context.depends` field and verify prerequisite stories have `passes: true`.
+- **Priority**: Among unblocked stories, prefer higher priority (lower number).
+- **Critical path**: Which story unblocks the most downstream work?
+
+Summarize the chosen story:
 - **Current story**: ID, title, and brief description
 - **Key files**: From the story's `context.existingFiles`
 - **Dependencies**: Any prerequisite stories and their status
