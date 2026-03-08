@@ -6,6 +6,7 @@ You are a helpful coding agent working building the agent harness for AgentHLE (
 ## Your Task
 ### Before you start
 1. Read the PRD at prd.json (in the same directory as this file)
+2. If there is an `architecture.md` in the project root, read it first to understand the system architecture, data flow, directory structure, and key patterns. Always do this when entering a new codebase.
 3. Read the progress log at `progress.txt` (check Codebase Patterns section first) and recent git history to understand the progress.
 4. Check you're on the correct branch from PRD `branchName`. If not, check it out or create from main.
 5. Enter the planning mode to draft the plan for the story you are working on.
@@ -68,37 +69,42 @@ Add these to progress.txt: **general and reusable** ones go to Codebase Patterns
 - Keep changes focused and minimal
 - Follow existing code patterns
 
+### Testing: Three-Level Verification
+
+Every memory-related story must be verified at all applicable levels. See `docs/testing-feedback-loops.md` for the full guideline.
+
+- **Level 1 (Mechanical)**: Unit tests pass, lint passes, smoke test (`run_magic_tower.sh --max-steps 5`) doesn't crash. Automated, required for all stories.
+- **Level 2 (Behavioral)**: After a real run (step count at your discretion), verify the agent actually invokes the new tool, memory content is task-relevant (not boilerplate), and agent reasoning references retrieved memory. Required for all memory tool stories.
+- **Level 3 (Outcome)**: Multi-session runs show knowledge transfer — session 2 avoids session 1's dead ends, compacted TASK_MEMORY.md contains corrected/deduplicated learnings. Required for US-MEM-004, US-MEM-TSK, US-MEM-006.
+
+Anti-patterns to avoid: logging step counters as "memory", embedding test scaffolding in production code, treating "doesn't crash" as sufficient.
+
 ## Architecture
 
-### Agent Harness (primary focus)
-The agent harness is the core system that drives AI agents to perform computer-use tasks. It is built on top of the CUA framework:
+For detailed architecture, read `architecture.md` in the project root. That file is the single source of truth for system architecture, data flow diagrams, directory structure, component descriptions, and key patterns.
 
-- **CUA Submodule** (`submodules/cua/`) — Contains all CUA framework packages installed as editable dependencies: `cua-core`, `cua-computer`, `cua-agent`, `cua-computer-server`, `cua-som`, `cua-mcp-server`, `cua-bench`
-- **Agent entry point** — Tasks are run via shell scripts (see `run_helloworld.sh` and `run_magic_tower.sh` as examples), which invoke `uv run python -m cua_bench.batch.solver ./tasks/<task_dir>` with `--agent agenthle-agent`
-- **Remote interaction** — The agent connects to a Windows VM running `computer-server` on port 5000 via `cua_bench.computers.remote.RemoteDesktopSession`, sending mouse/keyboard actions and receiving screenshots
-- **Agent capabilities** — The agent can take screenshots, perform mouse/keyboard actions, and call special functions like `save_milestone_screenshot()` to record progress
+### Available architecture.md files
+- `agenthle-base/architecture.md` — AgentHLE benchmark framework architecture
+- `openclaw/architecture.md` — OpenClaw personal AI assistant architecture
 
-### Evaluation System (`utils/evaluation.py`)
-- **`llm_vision_judge`** — Core VLM evaluation: sends images to OpenAI vision API, supports single-image and comparison modes, returns YES/NO binary scores
-- **`EvaluationContext`** — Context manager that tracks scores, logs individual evaluations, and auto-saves JSON results
-- **`evaluate_milestone_mode`** — Compares agent-saved milestone screenshots against reference images
-- **`evaluate_deliverable_mode`** — Replays agent trajectory, takes screenshots at specified action points, compares with references
+### How to create architecture.md
+When a codebase lacks an `architecture.md`, create one. Keep it under 150 lines and include:
+1. **System overview** — One paragraph on what the project does
+2. **Architecture diagram** — ASCII diagram showing how components connect and data flows
+3. **Directory structure** — Tree with one-line descriptions per directory/file
+4. **Core components** — Brief description of each major module and its entry points
+5. **Key configuration** — Environment variables, config files, and their purpose
 
-### Task Structure (for reference)
-Each task lives in `tasks/<category>/<task_name>/main.py` and defines three `cua_bench`-decorated functions:
-1. **`@cb.tasks_config(split="train")`** — returns `cb.Task` objects with description, metadata, and computer config
-2. **`@cb.setup_task(split="train")`** — async setup of the remote environment
-3. **`@cb.evaluate_task(split="train")`** — async scoring, returns `list[float]`
+Do NOT duplicate content that belongs in CLAUDE.md (workflow instructions) or progress.txt (evolving patterns). architecture.md is for **stable structural knowledge** only.
 
-Tasks inherit from `GeneralTaskConfig` (`tasks/common_config.py`) for standard Windows path conventions (`C:\Users\User\Desktop\<category>\<task_tag>`).
+### Post-development: updating architecture.md
+After completing work that changes the architecture, update `architecture.md` before committing:
+- **Added/removed a major component?** — Update the directory structure and core components sections
+- **Changed data flow or integration points?** — Update the architecture diagram
+- **Added new environment variables or config?** — Update the configuration section
+- **Minor internal refactors?** — No update needed; architecture.md tracks high-level structure, not implementation details
 
-### Key Environment Variables
-- `VM_IP` / `CUA_ENV_API_URL` — Remote Windows VM address (computer-server on port 5000)
-- `OPENAI_API_KEY` — For the agent and VLM evaluation judge
-- `OPENAI_API_BASE` — Optional, for LiteLLM proxy
-- `CUA_ENV_TYPE` — OS type, typically `"windows"`
-- `REMOTE_OUTPUT_DIR` — Output directory name on remote machine (default: `"output"`)
-- `EVALUATION_OUTPUT_DIR` — Local directory for evaluation JSON results
+Update the `<!-- Last updated: YYYY-MM-DD -->` comment at the top of the file when making changes.
 
 
 

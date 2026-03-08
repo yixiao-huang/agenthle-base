@@ -1,15 +1,11 @@
 ## Codebase Patterns
-- Git remotes: `upstream` (cua-verse official), `origin` (personal fork), `private` (private experiments)
-- Work on `paper-experiments` branch, push to `private/paper-experiments`
 - Source `.envrc` directly (`source "/path/.envrc"`) for reliable env var loading in Bash tool (NOT `direnv export bash`)
 - Use `uv sync --reinstall` if editable CUA packages fail to import (agent, cua_bench, etc.)
-- **TinyClaw reference**: OpenClaw's memory system is the design reference for TinyClaw. Key docs live at `../openclaw/docs/` (sibling of agenthle-base under the AgentHLE folder):
-  - `docs/concepts/memory.md` — Architecture overview: memory file layout, memory_search/memory_get tools, automatic pre-compaction flush, vector search config
-  - `docs/experiments/research/memory.md` — Research notes: Letta/MemGPT + Hindsight-inspired retain/recall/reflect loop, proposed bank/ structure, opinion confidence
-  - `docs/cli/memory.md` — CLI reference for `openclaw memory` (status/index/search)
-  - `src/agents/tools/memory-tool.ts` — Source for memory_search and memory_get tool implementations
-  - `src/auto-reply/reply/memory-flush.ts` — Source for pre-compaction memory flush logic (threshold calculation, prompt templates)
-  - TinyClaw simplifies OpenClaw's design: plain keyword search (no embeddings), step-count-based flush (no token estimation), Python BaseTool (not TypeScript)
+- Solver exits with code 1 on MAX_STEPS_EXCEEDED — expected behavior, not an error
+- BaseTool pattern: constructor takes domain object + optional cfg, calls `super().__init__(cfg)`; `@register_tool` sets `cls.name` and adds to `TOOL_REGISTRY`. `_verify_json_format_args` handles both dict and JSON string params.
+- CUA trajectory reasoning summaries: `turn_NNN/NNNN_agent_response.json → response.output[].summary[].text`
+- Turn count ≠ step count: each turn can contain multiple API calls (~2 steps/turn for openai/computer-use-preview)
+- TinyClaw design doc: `docs/memory-system.md`. OpenClaw reference at `../openclaw/`
 
 ## 2026-03-05 - US-001: Configure git remotes and branches
 - Renamed origin to upstream (cua-verse/agenthle-base)
@@ -40,7 +36,6 @@
 - Ran full magic tower task: 373 steps / 186 turns, score 0.333 (floor 1 only out of 3)
 - Files changed: tasks/game/mota_24_easy/understanding_magic_tower.txt (created), tasks/game/mota_24_easy/debug_progress.log (created), prd.json (updated), progress.txt (updated), run_magic_tower.sh (removed hardcoded keys), run_helloworld.sh (removed hardcoded keys)
 - **Learnings for future iterations:**
-  - Turn count ≠ step count: each turn can contain multiple API calls (~2 steps/turn for openai/computer-use-preview)
   - Trajectory files live in turn_XXX/ dirs with sequential NNNN-prefixed files (api_start, api_result, agent_response, screenshot_after, computer_call_result)
   - Agent reasoning is in agent_response.json → kwargs.messages → last assistant message → content[type="output_text"].text
   - The agent enters deterministic repeating cycles when it lacks cross-turn memory — strongest motivation for the tinyclaw memory system
@@ -56,7 +51,6 @@
 - Also fixed pre-existing lint issues in agenthle_agent.py (unused imports, trailing whitespace)
 - Files changed: memory/__init__.py (created), memory/store.py (created), tests/__init__.py (created), tests/test_memory_store.py (created), agenthle_agent.py (modified), prd.json (updated), progress.txt (updated)
 - **Learnings for future iterations:**
-  - The solver exits with code 1 on MAX_STEPS_EXCEEDED — this is expected behavior, not an error
   - MemoryStore base_dir resolves via `Path(...).resolve()` so relative paths work from any cwd
   - self.memory_store on the agent instance makes it available for later stories (tools, callback) without re-instantiation
   - The `run_magic_tower.sh` validation with --max-steps 5 is a quick smoke test (~20s) for integration
@@ -73,7 +67,28 @@
 - All 37 tests pass (12 new + 25 existing), lint clean
 - Files changed: memory/tools.py (created), memory/__init__.py (modified), agenthle_agent.py (modified), tests/test_memory_tools.py (created), prd.json (updated), progress.txt (updated)
 - **Learnings for future iterations:**
-  - BaseTool pattern: constructor takes domain object + optional cfg, calls super().__init__(cfg); @register_tool sets cls.name and adds to TOOL_REGISTRY
-  - BaseTool._verify_json_format_args handles both dict and JSON string params; validates required fields against schema
-  - **US-MEM-004 design note**: MemoryFlushCallback will need memory_search and memory_get tools wired in before the reflection prompt is useful — the agent needs tools to actually write observations
+  - MemoryFlushCallback will need memory_write tool wired in before the nudge prompt is useful — the agent needs tools to actually persist observations
+---
+
+## 2026-03-07 - TinyClaw design finalization and PRD refactor
+- **Design doc**: Created `docs/memory-system.md` — comprehensive comparison of OpenClaw (reference) vs TinyClaw (our design). Covers storage, tools, nudge callback, post-session compaction, CUA trajectory relationship, cross-session flow, search modes, scaling, and intentional omissions.
+- **Testing guideline**: Created `docs/testing-feedback-loops.md` — three-level verification framework (Mechanical → Behavioral → Outcome). Identifies anti-patterns in current code: step-counter logging, self-verification scaffolding, "doesn't crash" as success.
+- **CLAUDE.md updated**: Added three-level testing summary with cross-reference to testing doc.
+- **PRD refactored** for self-contained, single-session-implementable stories:
+  - Restored US-MEM-001/002 to passes:true (tool code is correct; behavioral gaps addressed by downstream stories)
+  - Split US-MEM-TSK (too big) into: US-MEM-TSK-S (storage layer), US-MEM-AGT (agent wiring + cleanup), US-MEM-CMP (LLM compaction)
+  - Added US-MEM-E2E (dedicated Level 2+3 verification, no new code)
+  - Each story now has `context` field with existing files, dependencies, and design doc refs
+  - Updated US-MEM-004 to trajectory-driven nudge (reads agent_response.json reasoning summaries)
+  - Linear dependency chain: MEM-003 → TSK-S → W01 → AGT → 004 → CMP → E2E → 006
+- **Key design decisions finalized**:
+  - Nudge reads CUA trajectory reasoning summaries, currently via computer-use agent, later replaceable by planner LLM
+  - Post-session compaction uses planner LLM (gpt-5-mini, configurable via MEMORY_COMPACTION_MODEL)
+  - Same planner model for both nudge (future) and compaction
+  - TASK_MEMORY.md is read-only during session, compacted only at session end
+  - Session logs (session-NNN.md) are strictly append-only during a run
+- Files changed: docs/memory-system.md (created), docs/testing-feedback-loops.md (created), CLAUDE.md (updated), prd.json (refactored), progress.txt (updated)
+- **Learnings for future iterations:**
+  - OpenClaw's compaction only affects in-memory conversation history, NOT on-disk memory files — daily logs are permanent append-only records
+  - OpenClaw's pre-compaction flush is agent-driven but system-triggered (system decides WHEN, agent decides WHAT)
 ---

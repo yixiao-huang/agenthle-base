@@ -1,7 +1,7 @@
 {
   "project": "AgentHLE",
   "branchName": "tinyclaw",
-  "description": "TinyClaw - Tiny memory infrastructure for AgentHLE, inspired by OpenClaw's memory system. Plain markdown files as source of truth, keyword search, and pre-compaction memory flush.",
+  "description": "TinyClaw - Tiny memory infrastructure for AgentHLE, inspired by OpenClaw's memory system. Plain markdown files, task-scoped cross-session memory, keyword + hybrid semantic search, agent-driven memory writing, periodic reflection callbacks, and LLM post-hoc compaction. See docs/memory-system.md for full design and docs/testing-feedback-loops.md for verification guidelines.",
   "userStories": [
     {
       "id": "US-001",
@@ -16,7 +16,7 @@
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Completed. Renamed origin->upstream, added origin (fork) and private remotes, created paper-experiments branch tracking private/paper-experiments."
+      "notes": "Completed."
     },
     {
       "id": "US-002",
@@ -26,154 +26,252 @@
         "grep -ri 'ralph' skills/ returns no matches",
         "grep -ri 'dev-browser' skills/ returns no matches",
         "grep -i 'AgentHLE' skills/agenthle/SKILL.md returns at least 3 matches",
-        "grep -i 'AgentHLE' skills/prd/SKILL.md returns at least 3 matches",
-        "grep -i 'evaluation\\|cua\\|agent' skills/agenthle/SKILL.md returns matches in example sections",
-        "grep -i 'evaluation\\|cua\\|agent' skills/prd/SKILL.md returns matches in example sections"
+        "grep -i 'AgentHLE' skills/prd/SKILL.md returns at least 3 matches"
       ],
-      "priority": 2,
+      "priority": 1,
       "passes": true,
-      "notes": "Completed. Both SKILL.md files rewritten for AgentHLE context with agent harness examples, CUA-relevant scenarios, and Claude-verifiable acceptance criteria."
+      "notes": "Completed."
     },
     {
       "id": "US-003",
       "title": "Understanding Magic Tower - Deep analysis of the task pipeline",
-      "description": "As a developer, I want a comprehensive understanding of the Magic Tower task so I can use it as a reference for building new features (e.g., memory infrastructure) and evaluating agent capabilities. Static analysis goes in understanding_magic_tower.txt; live run observations and debug notes go in debug_progress.txt.",
+      "description": "As a developer, I want a comprehensive understanding of the Magic Tower task so I can use it as a reference for building new features.",
       "acceptanceCriteria": [
-        "tasks/game/mota_24_easy/understanding_magic_tower.txt exists",
-        "File documents the full task lifecycle: task config, setup, agent execution, evaluation",
-        "File documents the data flow: how task_description reaches the agent, how screenshots are saved and evaluated",
-        "File documents the agent loop: ComputerAgent.run() → step results → usage tracking → DONE detection",
-        "File documents the evaluation pipeline: milestone mode, VLM judge, compare_screenshots_game",
-        "File documents the shell script invocation: cua_bench.batch.solver CLI args and what they do",
-        "File documents environment variables required: VM_IP, OPENAI_API_KEY, CUA_ENV_API_URL, etc.",
-        "File documents integration points: where new tools/callbacks can be injected in agenthle_agent.py",
-        "File documents the remote VM interaction: session.run_file, session.screenshot, session.interface",
+        "tasks/game/mota_24_easy/understanding_magic_tower.txt exists with full pipeline analysis",
         "grep -c 'ComputerAgent\\|perform_task\\|evaluate_milestone\\|MilestoneTool' tasks/game/mota_24_easy/understanding_magic_tower.txt returns at least 4"
       ],
-      "priority": 2,
+      "priority": 1,
       "passes": true,
-      "notes": "Completed. Static pipeline analysis in understanding_magic_tower.txt, live run observations and debug notes in debug_progress.txt."
+      "notes": "Completed."
     },
     {
       "id": "US-MEM-001",
-      "title": "MemoryStore - built, integrated into agent, tested with run_magic_tower.sh",
-      "description": "As a developer, I want a MemoryStore class that manages MEMORY.md and memory_logs/YYYY-MM-DD.md. It must be integrated into agenthle_agent.py, unit-tested, and validated via run_magic_tower.sh (agent starts and runs without MemoryStore errors).",
+      "title": "MemoryStore class",
+      "description": "As a developer, I want a MemoryStore class that manages markdown-based memory files (MEMORY.md and daily logs). This is the storage layer for TinyClaw.",
       "acceptanceCriteria": [
         "memory/store.py exists with MemoryStore class",
         "MemoryStore.__init__ accepts a base_dir path",
-        "read_file returns content with correct line ranges; returns empty string for missing files (no exception)",
+        "read_file returns content with correct line ranges; returns empty string for missing files",
         "append_to_daily_log creates memory_logs/ dir and file if absent, appends with timestamp",
         "write_memory creates or overwrites MEMORY.md",
         "search does case-insensitive substring matching across all markdown files, returns file path, line number, content, score",
         "list_log_files returns sorted paths of existing daily log files",
         "memory/__init__.py exports MemoryStore",
-        "agenthle_agent.py imports MemoryStore and creates an instance in perform_task (base_dir defaults to memory_data/ relative to project root)",
-        "uv run pytest tests/test_memory_store.py passes (covers all MemoryStore methods with tmp_path)",
-        "run_magic_tower.sh starts without import or instantiation errors from MemoryStore (agent initializes and begins execution)",
+        "uv run pytest tests/test_memory_store.py passes",
         "Lint passes (uv run ruff check .)"
       ],
       "priority": 2,
       "passes": true,
-      "notes": "Completed. MemoryStore in memory/store.py, integrated into agenthle_agent.py, 25 unit tests passing, validated with run_magic_tower.sh (5-step run, no errors). base_dir defaults to memory_data/ via MEMORY_BASE_DIR env var."
+      "notes": "Level 1 passed. MemoryStore code is correct. 25 unit tests passing."
     },
     {
       "id": "US-MEM-002",
-      "title": "memory_search tool - built, wired into agent, tested with run_magic_tower.sh",
-      "description": "As an agent, I want a memory_search tool so I can search my memory files using keywords. The tool must be wired into ComputerAgent tools= list, unit-tested, and validated via run_magic_tower.sh (agent has memory_search available and can invoke it).",
+      "title": "memory_search tool",
+      "description": "As an agent, I want a memory_search tool so I can search my memory files using keywords.",
       "acceptanceCriteria": [
-        "memory/tools.py exists with MemorySearchTool class extending BaseTool (from agent.tools.base)",
+        "memory/tools.py exists with MemorySearchTool class extending BaseTool",
         "MemorySearchTool registered with @register_tool('memory_search')",
-        "Accepts keywords (list of strings) and optional max_results (int) parameters",
-        "Delegates to MemoryStore.search() and returns results with file path, line number, matched content",
+        "Accepts keywords (list of strings) and optional max_results (int)",
+        "Delegates to MemoryStore.search() and returns formatted results",
         "Returns helpful message when no results found",
         "memory/__init__.py exports MemorySearchTool",
-        "agenthle_agent.py instantiates MemorySearchTool(store) and adds it to ComputerAgent tools= list",
-        "Agent instructions in agenthle_agent.py describe memory_search and when to use it",
-        "uv run pytest tests/test_memory_tools.py::test_search passes (unit: seeded MemoryStore, correct results)",
-        "run_magic_tower.sh shows memory_search in the agent's available tools and agent runs without tool registration errors",
+        "uv run pytest tests/test_memory_tools.py passes",
         "Lint passes (uv run ruff check .)"
       ],
       "priority": 2,
       "passes": true,
-      "notes": "Completed. MemorySearchTool in memory/tools.py, wired into agenthle_agent.py tools list, 12 unit tests passing, agent instructions updated to describe memory_search."
+      "notes": "Level 1 passed. MemorySearchTool code is correct. 12 unit tests passing."
     },
     {
       "id": "US-MEM-003",
-      "title": "memory_get tool - built, wired into agent, tested with run_magic_tower.sh",
-      "description": "As an agent, I want a memory_get tool so I can read a specific memory file or line range. The tool must be wired into ComputerAgent tools= list, unit-tested, and validated via run_magic_tower.sh (agent has memory_get available and can invoke it).",
+      "title": "memory_get tool",
+      "description": "As an agent, I want a memory_get tool so I can read a specific memory file or line range.",
+      "context": {
+        "existingFiles": ["memory/store.py (MemoryStore with read_file method)", "memory/tools.py (MemorySearchTool as reference pattern)", "tests/test_memory_tools.py"],
+        "pattern": "Follow MemorySearchTool pattern: extend BaseTool, @register_tool, constructor takes MemoryStore, implement call() method"
+      },
       "acceptanceCriteria": [
-        "memory/tools.py contains MemoryGetTool class extending BaseTool (from agent.tools.base)",
+        "memory/tools.py gains MemoryGetTool class extending BaseTool",
         "MemoryGetTool registered with @register_tool('memory_get')",
-        "Accepts file_path (string), optional start_line and end_line (int) parameters",
-        "Restricts file_path to MEMORY.md and memory_logs/ (rejects path traversal with ..)",
-        "Returns empty string with message for missing files (no exception)",
+        "Accepts file_path (string), optional start_line and end_line (int)",
+        "Restricts file_path to memory_data/ tree (rejects path traversal with ..)",
+        "Delegates to MemoryStore.read_file() and returns content",
+        "Returns helpful message for missing files (no exception)",
         "memory/__init__.py exports MemoryGetTool",
-        "agenthle_agent.py instantiates MemoryGetTool(store) and adds it to ComputerAgent tools= list",
-        "Agent instructions in agenthle_agent.py describe memory_get and when to use it",
-        "uv run pytest tests/test_memory_tools.py::test_get passes (unit: read MEMORY.md full + line range, read daily log, path traversal rejected)",
-        "run_magic_tower.sh shows memory_get in the agent's available tools and agent runs without tool registration errors",
+        "uv run pytest tests/test_memory_tools.py passes (add tests: read full file, line range, path traversal rejected, missing file)",
         "Lint passes (uv run ruff check .)"
       ],
       "priority": 2,
       "passes": false,
-      "notes": ""
+      "notes": "Pure tool implementation — no agent wiring needed yet (done in US-MEM-AGT). Follow MemorySearchTool pattern in same file."
     },
     {
-      "id": "US-MEM-004",
-      "title": "MemoryFlushCallback - Agent-driven memory reflection",
-      "description": "As a system operator, I want a callback that periodically prompts the agent to reflect and save observations to memory, and auto-appends a run summary at end. The agent decides what to write (agent-driven); the callback decides when to prompt (system-driven).",
+      "id": "US-MEM-TSK-S",
+      "title": "Task-scoped storage layer",
+      "description": "As a developer, I want MemoryStore to support task-scoped directories with session files and TASK_MEMORY.md. This extends the existing MemoryStore with new methods but does NOT touch the agent code.",
+      "context": {
+        "existingFiles": ["memory/store.py (MemoryStore class)", "tests/test_memory_store.py (25 existing tests)"],
+        "storageLayout": "memory_data/tasks/<task_id>/TASK_MEMORY.md + session-NNN.md",
+        "designDoc": "docs/memory-system.md (Part 2: TinyClaw Design → Storage section)"
+      },
       "acceptanceCriteria": [
-        "memory/callback.py exists with MemoryFlushCallback extending AsyncCallbackHandler",
-        "Constructor accepts MemoryStore, flush_interval (default 20), and task_description",
-        "on_llm_start: every flush_interval steps, appends a memory reflection system message to messages list prompting the agent to save observations",
-        "Reflection prompt references memory tools (memory_search, memory_get) and instructs agent to save failed strategies, discoveries, state observations",
-        "on_run_end: auto-appends structured run summary (task, steps, tokens, outcome) to daily log via MemoryStore",
-        "Does not crash if memory_logs/ directory does not exist (creates it)",
-        "memory/__init__.py exports MemoryFlushCallback",
-        "agenthle_agent.py instantiates MemoryFlushCallback and passes it in ComputerAgent callbacks= list",
-        "uv run pytest tests/test_memory_callback.py passes",
-        "run_magic_tower.sh completes and memory_data/memory_logs/ contains daily log with auto-summary entry from on_run_end",
+        "MemoryStore.__init__ gains optional task_id parameter",
+        "MemoryStore.init_session() creates memory_data/tasks/<task_id>/ if absent, determines next session number by scanning existing session-NNN.md files, returns session file path",
+        "MemoryStore.append_to_session_log(content) appends timestamped content to current session-NNN.md (created by init_session)",
+        "MemoryStore.write_task_memory(content) overwrites tasks/<task_id>/TASK_MEMORY.md",
+        "MemoryStore.read_task_memory() returns TASK_MEMORY.md content or empty string if not exists",
+        "MemoryStore.list_session_files() returns sorted list of session-NNN.md paths for current task",
+        "search() with task_id set searches tasks/<task_id>/ first, then global MEMORY.md",
+        "All existing tests still pass (backward compatible — task_id is optional)",
+        "uv run pytest tests/test_memory_store.py passes (add tests: init_session creates dirs, session numbering increments, session log append-only, task memory read/write, scoped search)",
+        "Lint passes (uv run ruff check .)"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": "Storage-only story. No agent changes, no LLM calls, no tools. Just extending MemoryStore with task-scoped methods. Prerequisite for US-MEM-W01 and US-MEM-AGT."
+    },
+    {
+      "id": "US-MEM-W01",
+      "title": "memory_write tool",
+      "description": "As an agent, I want a memory_write tool so I can save observations, strategies, and discoveries to my memory files. The agent operates on a remote VM with no local file access — this tool is its only way to persist knowledge.",
+      "context": {
+        "existingFiles": ["memory/store.py (MemoryStore with append_to_session_log, write_memory, write_task_memory from US-MEM-TSK-S)", "memory/tools.py (MemorySearchTool as pattern)"],
+        "depends": "US-MEM-TSK-S must be done first (provides append_to_session_log, write_task_memory methods)"
+      },
+      "acceptanceCriteria": [
+        "memory/tools.py gains MemoryWriteTool class extending BaseTool",
+        "MemoryWriteTool registered with @register_tool('memory_write')",
+        "Accepts content (string) and optional target: 'session' (default, appends to session log), 'memory' (overwrites MEMORY.md), 'task_memory' (overwrites TASK_MEMORY.md)",
+        "Delegates to appropriate MemoryStore method based on target",
+        "Returns confirmation message with file path and bytes written",
+        "Rejects empty content with helpful error message",
+        "memory/__init__.py exports MemoryWriteTool",
+        "uv run pytest tests/test_memory_tools.py passes (add tests: write to session, write to memory, write to task_memory, empty content rejected)",
+        "Lint passes (uv run ruff check .)"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": "Pure tool implementation — no agent wiring yet (done in US-MEM-AGT). Depends on US-MEM-TSK-S for session/task_memory storage methods."
+    },
+    {
+      "id": "US-MEM-AGT",
+      "title": "Wire all memory tools into agent and clean up scaffolding",
+      "description": "As a developer, I want all memory tools (search, get, write) wired into the agent with proper instructions, and the existing scaffolding code removed. This is the single story that modifies agenthle_agent.py for the memory tool suite.",
+      "context": {
+        "existingFiles": ["submodules/cua/libs/cua-bench/cua_bench/agents/agenthle_agent.py"],
+        "currentState": "Agent currently has: (1) MemoryStore init + MemorySearchTool wired in, (2) step counter logging to daily log (lines 112-115, anti-pattern), (3) post-run self-verification code (lines 154-171, anti-pattern)",
+        "depends": "US-MEM-003 (memory_get), US-MEM-W01 (memory_write), US-MEM-TSK-S (task-scoped storage)"
+      },
+      "acceptanceCriteria": [
+        "Remove step counter logging (lines 112-115: 'Step N: tokens=X' appended every turn — anti-pattern)",
+        "Remove post-run self-verification code (lines 154-171: memory_search call + log evidence — test scaffolding in production code)",
+        "MemoryStore initialized with task_id from task config (derived from task directory name or config tag)",
+        "MemoryStore.init_session() called at start to create session file",
+        "TASK_MEMORY.md content injected into agent instructions at session start (if exists)",
+        "All three tools wired into ComputerAgent tools= list: MemorySearchTool, MemoryGetTool, MemoryWriteTool",
+        "Agent instructions updated to describe all three tools and when to use each",
+        "run_magic_tower.sh smoke test passes (no crashes)",
+        "Level 2: After a real run, trajectory logs show agent invoked at least one memory tool autonomously",
+        "Level 2: Memory files contain task-relevant content (not just step counters)",
         "Lint passes (uv run ruff check .)"
       ],
       "priority": 3,
       "passes": false,
-      "notes": "Depends on US-MEM-002/003 for the agent to actually write via tools. Without tools, the reflection prompt is injected but agent can only acknowledge it."
+      "notes": "This is the integration story that wires everything together. All tool stories (MEM-003, W01) and storage (TSK-S) must be done first. After this story, the agent has a complete memory tool suite and clean production code."
+    },
+    {
+      "id": "US-MEM-004",
+      "title": "MemoryFlushCallback - Trajectory-driven periodic nudge",
+      "description": "As a system operator, I want a callback that periodically reads recent CUA trajectory reasoning summaries and nudges the agent to summarize observations into the session log. During a session, only session-NNN.md is written to (append-only). TASK_MEMORY.md is read-only during the session.",
+      "context": {
+        "existingFiles": ["submodules/cua/libs/cua-bench/cua_bench/agents/agenthle_agent.py (agent with memory tools wired in from US-MEM-AGT)"],
+        "trajectoryFormat": "CUA trajectories are at trajectory_dir/turn_NNN/NNNN_agent_response.json — each contains response.output[].summary[].text with reasoning summaries like 'Entering game, selecting start option'",
+        "depends": "US-MEM-AGT must be done first (agent has memory_write tool wired in)",
+        "designDoc": "docs/memory-system.md (MemoryFlushCallback section)"
+      },
+      "acceptanceCriteria": [
+        "memory/callback.py exists with MemoryFlushCallback class",
+        "Constructor accepts MemoryStore, flush_interval (default 20), and trajectory_dir path",
+        "Every flush_interval turns: reads last N turns' reasoning summaries from turn_NNN/NNNN_agent_response.json files",
+        "Injects a system message with trajectory context, prompting agent to use memory_write(target='session') to save observations",
+        "Does not crash if trajectory files are missing or malformed (skips with warning)",
+        "memory/__init__.py exports MemoryFlushCallback",
+        "agenthle_agent.py instantiates MemoryFlushCallback and passes it in ComputerAgent callbacks= list",
+        "uv run pytest tests/test_memory_callback.py passes (unit: nudge fires at correct intervals, trajectory reading parses reasoning summaries, missing files handled gracefully)",
+        "Level 2: After a real run with enough steps, session log contains nudge-appended entries at expected intervals",
+        "Lint passes (uv run ruff check .)"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": "Currently the computer-use agent performs summarization via the nudge prompt. Later replaceable by a planner LLM (gpt-5-mini via MEMORY_COMPACTION_MODEL). See docs/memory-system.md for design."
+    },
+    {
+      "id": "US-MEM-CMP",
+      "title": "Post-session LLM compaction",
+      "description": "As a system operator, I want a post-session step that uses a planner LLM to merge the finalized session log into TASK_MEMORY.md. This runs after the agent session ends — it is NOT part of the agent loop.",
+      "context": {
+        "existingFiles": ["memory/store.py (MemoryStore with read_task_memory, write_task_memory, session files)"],
+        "depends": "US-MEM-AGT (agent writes to session log during run), US-MEM-004 (nudge populates session log with observations)",
+        "designDoc": "docs/memory-system.md (Post-Session Compaction section)"
+      },
+      "acceptanceCriteria": [
+        "memory/compaction.py exists with async compact_task_memory(session_log: str, current_task_memory: str, model: str) function",
+        "Uses OpenAI Python SDK directly (not ComputerAgent) to call the planner LLM",
+        "Default model: gpt-5-mini with reasoning, configurable via MEMORY_COMPACTION_MODEL env var",
+        "Prompt instructs LLM to merge session learnings into TASK_MEMORY.md, remove contradictions, deduplicate, keep only actionable knowledge",
+        "Returns the rewritten TASK_MEMORY.md content as string",
+        "Graceful failure: if LLM call fails, raises exception but session log is preserved (caller handles)",
+        "agenthle_agent.py calls compact_task_memory after agent loop ends, writes result via MemoryStore.write_task_memory()",
+        "If compaction fails, prints warning but does not crash the run",
+        "uv run pytest tests/test_memory_compaction.py passes (unit: mock OpenAI call, verify prompt contains session log + task memory, verify contradictions removed in mock response)",
+        "Lint passes (uv run ruff check .)"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": "Uses the same planner model (gpt-5-mini) that the nudge (US-MEM-004) will eventually use when upgraded. See docs/memory-system.md for compaction design."
+    },
+    {
+      "id": "US-MEM-E2E",
+      "title": "End-to-end multi-session verification",
+      "description": "As a developer, I want to verify that TinyClaw's memory system works end-to-end: the agent writes meaningful observations during a session, compaction produces useful TASK_MEMORY.md, and a second session benefits from the first session's learnings.",
+      "context": {
+        "depends": "All prior memory stories must be done (MEM-001 through MEM-CMP)",
+        "testingDoc": "docs/testing-feedback-loops.md (Level 2 and Level 3 verification)",
+        "task": "mota_24_easy (Magic Tower easy task)"
+      },
+      "acceptanceCriteria": [
+        "Level 2 — Session 1: Run mota_24_easy, verify: (a) trajectory logs show agent invoked memory tools, (b) session-001.md contains task-relevant observations (floor numbers, items, strategies — not just step counters), (c) nudge-appended entries exist in session log",
+        "Level 2 — Compaction: After session 1, TASK_MEMORY.md exists and contains compacted learnings from session-001.md",
+        "Level 3 — Session 2: Run mota_24_easy again, verify: (a) agent's initial context includes TASK_MEMORY.md content, (b) session-002.md shows agent referencing previous learnings, (c) agent does not repeat session 1's identified dead ends",
+        "Level 3 — Outcome: Floor reached in session 2 >= floor reached in session 1 (or at minimum, agent demonstrates knowledge of session 1's findings)",
+        "Document results in a test report at docs/e2e-verification-report.md"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": "This is a verification-only story — no new code, just running real tasks and checking results. Step counts at the testing agent's discretion. See docs/testing-feedback-loops.md for what to check."
     },
     {
       "id": "US-MEM-006",
-      "title": "Upgrade memory_search to semantic/vector search",
-      "description": "As an agent, I want memory_search to use embedding-based semantic search so I can find conceptually related memories even when exact keywords don't match (e.g., searching 'stuck' finds 'blocked', searching 'floor 3' finds 'third level'). This upgrades the current keyword substring matching to vector similarity, following OpenClaw's approach but keeping TinyClaw's simplicity.",
+      "title": "Hybrid search with chunking",
+      "description": "As an agent, I want memory_search to use hybrid search (vector + keyword) so I can find conceptually related memories, not just exact keyword matches.",
+      "context": {
+        "existingFiles": ["memory/store.py (MemoryStore.search with keyword mode)", "memory/tools.py (MemorySearchTool)"],
+        "designDoc": "docs/memory-system.md (Search Modes section)"
+      },
       "acceptanceCriteria": [
-        "MemoryStore.search() supports a backend parameter: 'keyword' (current default) or 'semantic'",
-        "Semantic backend embeds query and memory lines using a configurable embedding model (default: OpenAI text-embedding-3-small or a local model)",
-        "Embedding index is built lazily on first semantic search and refreshed when files change (mtime check)",
-        "memory_search tool gains optional 'mode' parameter: 'keyword', 'semantic', or 'auto' (default 'auto' which falls back to keyword if embeddings unavailable)",
-        "Optional 'min_score' parameter for semantic mode to filter low-relevance results",
-        "Graceful degradation: if embedding API is unavailable or OPENAI_API_KEY not set, falls back to keyword search with a warning in results",
-        "No new required dependencies — embedding support is optional (guard imports with try/except)",
-        "uv run pytest tests/test_memory_search_semantic.py passes (tests: semantic finds synonyms keyword misses, fallback to keyword on missing API key, min_score filtering, index refresh on file change)",
-        "run_magic_tower.sh works with both modes (keyword default still works, semantic opt-in via env var)",
+        "memory/chunking.py exists: chunk_markdown(text, tokens_per_chunk=400, overlap=80) splits into overlapping chunks with start_line/end_line metadata",
+        "memory/hybrid.py exists: merge_results(vector_results, keyword_results, vector_weight=0.7, text_weight=0.3) combines and deduplicates",
+        "MemoryStore.search() gains mode parameter: 'keyword' (current), 'semantic', or 'hybrid' (default)",
+        "Embedding via OpenAI text-embedding-3-small, configurable via MEMORY_EMBEDDING_MODEL env var",
+        "Embedding cache by content hash (no re-embedding unchanged chunks)",
+        "Graceful fallback to keyword-only if OPENAI_API_KEY not set or API unavailable",
+        "memory_search tool gains optional 'mode' parameter",
+        "uv run pytest tests/test_memory_hybrid.py passes",
         "Lint passes (uv run ruff check .)"
       ],
       "priority": 4,
       "passes": false,
-      "notes": "Upgrade path from keyword to semantic search. Trigger conditions: memory corpus grows large, cross-task memory needed, or agent recall drops due to vocabulary mismatch. OpenClaw uses embedding providers with fallback; TinyClaw should keep it simpler with a single optional embedding backend. Consider local embeddings (e.g., sentence-transformers) to avoid API cost."
-    },
-    {
-      "id": "US-MEM-005",
-      "title": "End-to-end memory system validation",
-      "description": "As a developer, I want a comprehensive end-to-end test that exercises all memory features together (MemoryStore, memory_search, memory_get, MemoryFlushCallback) both in pytest and via a full run_magic_tower.sh run, proving the entire memory system works as a cohesive whole.",
-      "acceptanceCriteria": [
-        "tests/test_memory_e2e.py exists: wires all memory components together (same as agenthle_agent.py), seeds data, exercises search/get/callback in sequence, verifies shared MemoryStore state across components",
-        "uv run pytest tests/test_memory_e2e.py -v passes",
-        "run_magic_tower.sh completes a full run: agent uses memory_search and memory_get tools (visible in trajectory logs), MemoryFlushCallback fires and creates daily log entries",
-        "After run_magic_tower.sh, memory_data/memory_logs/ contains at least one daily log with run summary, and memory_data/MEMORY.md exists if agent wrote to it",
-        "uv run python -c 'from memory import MemoryStore, MemorySearchTool, MemoryGetTool, MemoryFlushCallback' succeeds",
-        "Lint passes (uv run ruff check .)"
-      ],
-      "priority": 2,
-      "passes": false,
-      "notes": "Final validation story. Each feature is already individually integrated and tested in US-MEM-001 through US-MEM-004. The run_magic_tower.sh test requires a running VM (VM_IP set)."
+      "notes": "Future story. Inspired by OpenClaw's hybrid search. See docs/memory-system.md for design."
     }
   ]
 }
