@@ -93,8 +93,8 @@
       "acceptanceCriteria": [
         "memory/tools.py gains MemoryGetTool class extending BaseTool",
         "MemoryGetTool registered with @register_tool('memory_get')",
-        "Accepts file_path (string), optional start_line and end_line (int)",
-        "Restricts file_path to memory_data/ tree (rejects path traversal with ..)",
+        "Accepts path (string), optional from and lines (int) — matches OpenClaw API",
+        "Restricts path to .md files, rejects path traversal (..) and absolute paths",
         "Delegates to MemoryStore.read_file() and returns content",
         "Returns helpful message for missing files (no exception)",
         "memory/__init__.py exports MemoryGetTool",
@@ -102,8 +102,8 @@
         "Lint passes (uv run ruff check .)"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": "Pure tool implementation — no agent wiring needed yet (done in US-MEM-AGT). Follow MemorySearchTool pattern in same file.\n\nContext retention caveat: Same as memory_search — function_call_output items are ephemeral and get truncated. The agent should act on retrieved content immediately (e.g., write key findings to session log via memory_write) rather than relying on it persisting in context. See docs/cua-context-management.md."
+      "passes": true,
+      "notes": "Implemented with OpenClaw-aligned API (path/from/lines). Also wired into agenthle_agent.py tools list. Reference attribution docstring added citing openclaw source.\n\nContext retention caveat: Same as memory_search — function_call_output items are ephemeral and get truncated. The agent should act on retrieved content immediately (e.g., write key findings to session log via memory_write) rather than relying on it persisting in context. See docs/cua-context-management.md."
     },
     {
       "id": "US-MEM-TSK-S",

@@ -36,6 +36,7 @@ Run `/onboard` to read all key files, check git state, and identify the current 
 
 - Do NOT commit broken code. Keep changes focused and minimal. Follow existing code patterns.
 - Commit frequently.
+- **Reference attribution**: When a component's design is heavily based on an external implementation, add a docstring noting the source file(s) and what was adopted (API shape, validation rules, etc.).
 
 ### Three-Level Verification
 

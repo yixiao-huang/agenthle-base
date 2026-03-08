@@ -125,3 +125,21 @@
   - `$ARGUMENTS` in skill body captures the user's input after the slash command (e.g., `/eval US-MEM-003` → `$ARGUMENTS = "US-MEM-003"`)
   - When creating a skill that produces a report, explicitly state "Your final output is the ONLY thing the user sees" — subagents don't know their output is the deliverable unless told
 ---
+
+## 2026-03-08 - US-MEM-003: memory_get tool
+- Created MemoryGetTool in memory/tools.py: `@register_tool("memory_get")`, extends BaseTool
+- API: `path` (string, required), `from` (int, optional), `lines` (int, optional) — matches OpenClaw reference
+- Security: rejects `..` path traversal, absolute paths, non-.md files
+- Delegates to MemoryStore.read_file() with from/lines → start_line/end_line conversion
+- Updated memory/__init__.py to export MemoryGetTool
+- Wired into agenthle_agent.py: imported, instantiated, added to tools list, updated agent instructions
+- 10 new tests in tests/test_memory_tools.py (22 total): schema, full read, line range, path traversal, absolute path, non-.md, missing file, log file, JSON string params
+- Added reference attribution docstring citing openclaw source files
+- Added reference attribution guideline to CLAUDE.md Quality Requirements
+- Updated architecture.md (tool listing, agent tools, test counts)
+- Files changed: memory/tools.py, memory/__init__.py, tests/test_memory_tools.py, agenthle_agent.py, CLAUDE.md, architecture.md, .claude/skills/eval/SKILL.md
+- **Learnings for future iterations:**
+  - OpenClaw uses `from`/`lines` (count-based) not `start_line`/`end_line` (range-based) — count-based is more intuitive for agents pulling N lines of context
+  - OpenClaw enforces .md-only access — important defense-in-depth even when MemoryStore scopes to base_dir
+  - When a golden reference exists, compare API shape early — easier to align upfront than refactor later
+---

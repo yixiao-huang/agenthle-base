@@ -1,9 +1,9 @@
-"""Tests for memory.tools.MemorySearchTool."""
+"""Tests for memory tools (MemorySearchTool, MemoryGetTool)."""
 
 import pytest
 
 from memory.store import MemoryStore
-from memory.tools import MemorySearchTool
+from memory.tools import MemoryGetTool, MemorySearchTool
 
 
 @pytest.fixture
@@ -76,3 +76,62 @@ class TestMemorySearchTool:
         (store.logs_dir / "2026-03-05.md").write_text("found the key\n", encoding="utf-8")
         result = tool.call({"keywords": ["key"]})
         assert "memory_logs/2026-03-05.md" in result
+
+
+@pytest.fixture
+def get_tool(store):
+    return MemoryGetTool(store)
+
+
+class TestMemoryGetTool:
+    def test_name_registered(self, get_tool):
+        assert get_tool.name == "memory_get"
+
+    def test_parameters_schema(self, get_tool):
+        params = get_tool.parameters
+        assert params["type"] == "object"
+        assert "path" in params["properties"]
+        assert "from" in params["properties"]
+        assert "lines" in params["properties"]
+        assert params["required"] == ["path"]
+
+    def test_read_full_file(self, store, get_tool):
+        store.write_memory("line one\nline two\nline three\n")
+        result = get_tool.call({"path": "MEMORY.md"})
+        assert "line one" in result
+        assert "line three" in result
+
+    def test_read_line_range(self, store, get_tool):
+        store.write_memory("line one\nline two\nline three\nline four\n")
+        result = get_tool.call({"path": "MEMORY.md", "from": 2, "lines": 2})
+        assert "line two" in result
+        assert "line three" in result
+        assert "line one" not in result
+        assert "line four" not in result
+
+    def test_path_traversal_rejected(self, get_tool):
+        result = get_tool.call({"path": "../etc/passwd"})
+        assert "not allowed" in result
+
+    def test_absolute_path_rejected(self, get_tool):
+        result = get_tool.call({"path": "/etc/passwd"})
+        assert "not allowed" in result
+
+    def test_non_md_rejected(self, get_tool):
+        result = get_tool.call({"path": "secrets.txt"})
+        assert "only .md files" in result
+
+    def test_missing_file(self, get_tool):
+        result = get_tool.call({"path": "nonexistent.md"})
+        assert "not found or empty" in result
+
+    def test_read_log_file(self, store, get_tool):
+        store.logs_dir.mkdir(parents=True)
+        (store.logs_dir / "2026-03-05.md").write_text("log entry here\n", encoding="utf-8")
+        result = get_tool.call({"path": "memory_logs/2026-03-05.md"})
+        assert "log entry here" in result
+
+    def test_json_string_params(self, store, get_tool):
+        store.write_memory("test content\n")
+        result = get_tool.call('{"path": "MEMORY.md"}')
+        assert "test content" in result

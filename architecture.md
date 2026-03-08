@@ -1,4 +1,4 @@
-<!-- Last updated: 2026-03-07 (context management doc added) -->
+<!-- Last updated: 2026-03-08 (added MemoryGetTool) -->
 # AgentHLE Architecture
 
 ## Overview
@@ -61,7 +61,7 @@ agenthle-base/
 ├── memory/                      # TinyClaw memory system
 │   ├── __init__.py              # Exports MemoryStore, MemorySearchTool
 │   ├── store.py                 # MemoryStore (MEMORY.md + daily logs)
-│   └── tools.py                 # MemorySearchTool (BaseTool)
+│   └── tools.py                 # MemorySearchTool, MemoryGetTool (BaseTool)
 │
 ├── memory_data/                 # Runtime memory storage
 │   └── memory_logs/             # Daily logs (YYYY-MM-DD.md)
@@ -78,7 +78,7 @@ agenthle-base/
 │
 ├── tests/
 │   ├── test_memory_store.py     # 25 tests for MemoryStore
-│   └── test_memory_tools.py     # 12 tests for MemorySearchTool
+│   └── test_memory_tools.py     # 22 tests for MemorySearchTool + MemoryGetTool
 │
 ├── .claude/skills/              # Claude Code skills (SKILL.md files)
 │   ├── onboard/SKILL.md        # /onboard — session startup, reads key files
@@ -121,7 +121,7 @@ agenthle-base/
 The `AgentHLEAgent` class (`@register_agent("agenthle-agent")`):
 
 - **`perform_task()`** — Main async entry point
-  - Creates `ComputerAgent` from CUA SDK with tools: Computer, MilestoneTool, MemorySearchTool
+  - Creates `ComputerAgent` from CUA SDK with tools: Computer, MilestoneTool, MemorySearchTool, MemoryGetTool
   - Model: configurable, default `anthropic/claude-sonnet-4-20250514`
   - Only keeps 3 most recent images in context
   - Runs agent loop, tracking tokens and steps
@@ -162,6 +162,12 @@ Tasks extend `GeneralTaskConfig` (`tasks/common_config.py`) which provides:
 - Registered as `memory_search` via `@register_tool`
 - Accepts: `keywords: list[str]`, `max_results: int`
 - Returns formatted results with file, line, score, content
+
+**MemoryGetTool** (`memory/tools.py`):
+- Registered as `memory_get` via `@register_tool`
+- Accepts: `path: str`, `from: int` (optional), `lines: int` (optional)
+- Reads specific file content with line slicing; .md-only, rejects path traversal
+- Ref: openclaw/src/agents/tools/memory-tool.ts
 
 ## Data Flow
 
