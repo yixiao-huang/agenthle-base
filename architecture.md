@@ -80,8 +80,12 @@ agenthle-base/
 │   ├── test_memory_store.py     # 25 tests for MemoryStore
 │   └── test_memory_tools.py     # 12 tests for MemorySearchTool
 │
-├── skills/                      # Claude Code skills (SKILL.md files)
-│   ├── agenthle/SKILL.md
+├── .claude/skills/              # Claude Code skills (SKILL.md files)
+│   ├── onboard/SKILL.md        # /onboard — session startup, reads key files
+│   ├── prd/SKILL.md            # /prd — create/update prd.json
+│   ├── eval/SKILL.md           # /eval — subagent evaluator (context:fork)
+│   └── ship/SKILL.md           # /ship — self-review, commit, push
+├── skills/                      # Legacy skills directory
 │   └── prd/SKILL.md
 │
 ├── run_helloworld.sh            # Task runners

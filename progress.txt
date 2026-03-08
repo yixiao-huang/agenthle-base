@@ -114,3 +114,14 @@
   - Artifact counter in trajectory files is per-turn (resets each turn), so glob for `*_agent_response.json` not a fixed prefix
   - ImageRetentionCallback removes triplets: reasoning → computer_call → computer_call_output. It only checks the single item immediately before computer_call, so non-adjacent reasoning items survive by accident
 ---
+
+## 2026-03-08 - /eval skill + golden references concept
+- **/eval skill**: Created `.claude/skills/eval/SKILL.md` — subagent evaluator using `context: fork` frontmatter. Reads PRD story, finds golden references, critiques acceptance criteria, runs Level 1 checks, designs Level 2/3 test plans. Returns structured report with PASS/FAIL/NEEDS WORK verdict.
+- **Golden references**: Upgraded `context.reference` in PRD skill from vague "external references" to first-class concept. Added to PRD output format, checklist, and eval skill's critique workflow.
+- Updated CLAUDE.md workflow (eval before ship), architecture.md (skills directory), docs/testing-feedback-loops.md (eval cross-reference)
+- Files changed: .claude/skills/eval/SKILL.md (new), .claude/skills/prd/SKILL.md, CLAUDE.md, architecture.md, docs/testing-feedback-loops.md, progress.txt
+- **Learnings for future iterations:**
+  - Claude Code skills use `context: fork` + `agent: <type>` frontmatter to automatically spawn subagents — no manual Agent tool calls needed
+  - `$ARGUMENTS` in skill body captures the user's input after the slash command (e.g., `/eval US-MEM-003` → `$ARGUMENTS = "US-MEM-003"`)
+  - When creating a skill that produces a report, explicitly state "Your final output is the ONLY thing the user sees" — subagents don't know their output is the deliverable unless told
+---

@@ -18,7 +18,8 @@ Run `/onboard` to read all key files, check git state, and identify the current 
 4. Check `skills/` for available skills (read SKILL.md files).
 
 ### After you finish
-Run `/ship` to self-review, update PRD + progress, and commit+push.
+1. Run `/eval` to spawn an evaluator subagent that critiques your acceptance criteria, designs proper tests, and checks Level 1 results.
+2. Run `/ship` to self-review, update PRD + progress, and commit+push.
 
 ## Key Files
 

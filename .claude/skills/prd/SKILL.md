@@ -49,7 +49,8 @@ Format with lettered options so users can respond quickly ("1A, 2C, 3B").
       "context": {
         "existingFiles": ["relevant/file.py (what it contains)"],
         "depends": "US-000 must be done first (reason)",
-        "designDoc": "docs/relevant-doc.md (section name)"
+        "designDoc": "docs/relevant-doc.md (section name)",
+        "reference": "path/to/reference.py:ClassName (golden reference — what good looks like)"
       },
       "acceptanceCriteria": [
         "Level 1: Lint passes (uv run ruff check .)",
@@ -151,7 +152,15 @@ Each story should include a `context` object to help the implementing agent:
 - **depends**: Which stories must be done first and why
 - **designDoc**: Relevant design docs with section references
 - **pattern**: Existing code patterns to follow (e.g., "Follow MemorySearchTool pattern in same file")
-- **reference**: External references that informed the design
+- **reference**: Golden reference — a mature, working implementation of similar functionality that sets the quality bar. Can be code in the codebase, an upstream module, or a design doc section. The implementing agent should read it to understand expected behavior and edge cases. The evaluator (`/eval`) uses it to critique acceptance criteria.
+
+**Golden references** are the single most useful piece of context you can give to both the implementer and the evaluator. A good reference answers "what does good look like?" without being a rigid spec.
+
+Examples:
+- `"memory/tools.py:MemorySearchTool (same file, follow this pattern for new tools)"`
+- `"docs/memory-system.md § OpenClaw Memory System (reference design for TinyClaw)"`
+- `"submodules/cua/.../base.py:BaseTool (upstream pattern for all tool classes)"`
+- `"tests/test_memory_store.py (test structure and coverage level to match)"`
 
 Only include fields that are relevant. Omit the entire `context` object for simple stories.
 
@@ -204,3 +213,4 @@ Before writing prd.json, verify:
 - [ ] Every story has "Level 1: Lint passes" as criterion
 - [ ] Criteria are verifiable (not vague)
 - [ ] `context` fields reference relevant files and design docs
+- [ ] Stories with non-trivial logic include a `reference` (golden reference) in `context` — the evaluator will use it to critique criteria
