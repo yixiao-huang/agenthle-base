@@ -1,4 +1,4 @@
-<!-- Last updated: 2026-03-07 -->
+<!-- Last updated: 2026-03-07 (context management doc added) -->
 # AgentHLE Architecture
 
 ## Overview
@@ -122,6 +122,8 @@ The `AgentHLEAgent` class (`@register_agent("agenthle-agent")`):
   - Only keeps 3 most recent images in context
   - Runs agent loop, tracking tokens and steps
   - Returns `AgentResult` with usage stats and failure mode
+
+For details on how the CUA agent loop manages its conversation context (sliding window, truncation, what survives across turns, and why TinyClaw is needed), see [docs/cua-context-management.md](docs/cua-context-management.md).
 
 ### 2. Task System
 

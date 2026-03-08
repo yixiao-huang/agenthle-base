@@ -42,24 +42,37 @@ The learnings section is critical - it helps future iterations avoid repeating m
 
 ## Consolidate Patterns
 
-If you discover a **reusable pattern** that future iterations should know, add it to the `## Codebase Patterns` section at the TOP of progress.txt (create it if it doesn't exist). This section should consolidate the most important learnings:
+### Where to put learnings
+
+**Codebase Patterns** (top of progress.txt) — ONLY for patterns that apply **across multiple stories**. Ask: "Would someone working on an unrelated story need this?" If yes, it's a pattern. If it only matters for one feature area, it's story-specific.
 
 ```
 ## Codebase Patterns
-- Example: Use `sql<number>` template for aggregations
-- Example: Always use `IF NOT EXISTS` for migrations
-- Example: Export types from actions.ts for UI components
+- GOOD: Use `uv sync --reinstall` if editable CUA packages fail to import
+- GOOD: `function_call_output` items are ephemeral — agent must act immediately
+- BAD:  Artifact counter in trajectory files is per-turn (only matters for trajectory parsing)
+- BAD:  ImageRetentionCallback removes triplets (only matters for context management work)
 ```
 
-Only add patterns that are **general and reusable**, not story-specific details. For story-specific details, add them to the `**Learnings for future iterations:**` section in each story entry.
+**Story learnings** (`**Learnings for future iterations:**` in each story entry) — for details specific to one feature area. These help someone continuing or debugging that specific work.
 
-Before committing, review your changes for learnings worth preserving:
-- API patterns or conventions specific to a module
-- Gotchas or non-obvious requirements
-- Dependencies between files
-- Testing approaches, configuration or environment requirements
+### Distinguishing the two
 
-Add these to progress.txt: **general and reusable** ones go to Codebase Patterns, **story-specific** ones go to the story's `**Learnings for future iterations:**` section.
+| Goes in Codebase Patterns | Goes in story learnings |
+|---------------------------|------------------------|
+| Applies to any story in this repo | Only matters for one feature/story area |
+| About tooling, env, build, or repo-wide conventions | About a specific module's internals |
+| You'd tell a new contributor on day 1 | You'd tell someone picking up your PR |
+
+When in doubt, put it in story learnings. It's easy to promote a learning to a pattern later; it's harder to notice a pattern section is bloated with story-specific noise.
+
+### Before committing
+
+Review your changes for learnings worth preserving:
+- API patterns or conventions specific to a module → **story learnings**
+- Gotchas or non-obvious requirements → **story learnings** (unless repo-wide)
+- Dependencies between files → **story learnings**
+- Tooling, env setup, or repo-wide conventions → **Codebase Patterns**
 
 **Do NOT duplicate patterns** across progress.txt and CLAUDE.md. CLAUDE.md is for static project structure and architecture only — progress.txt is the living knowledge base.
 
@@ -86,6 +99,10 @@ For detailed architecture, read `architecture.md` in the project root. That file
 ### Available architecture.md files
 - `agenthle-base/architecture.md` — AgentHLE benchmark framework architecture
 - `openclaw/architecture.md` — OpenClaw personal AI assistant architecture
+
+### Key design docs
+- `docs/cua-context-management.md` — How CUA agent context works (sliding window, truncation, what survives). Critical for any story that injects content into the agent's context.
+- `docs/memory-system.md` — TinyClaw memory system design (storage, tools, nudge, compaction)
 
 ### How to create architecture.md
 When a codebase lacks an `architecture.md`, create one. Keep it under 150 lines and include:

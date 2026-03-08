@@ -80,7 +80,7 @@
       ],
       "priority": 2,
       "passes": true,
-      "notes": "Level 1 passed. MemorySearchTool code is correct. 12 unit tests passing."
+      "notes": "Level 1 passed. MemorySearchTool code is correct. 12 unit tests passing.\n\nContext retention caveat: function_call_output items (search results) are ephemeral — they get truncated by OpenAI's truncation:auto like other conversation items. The agent only benefits from search results in the turn they're retrieved. The primary cross-session knowledge transfer is via TASK_MEMORY.md in instructions (US-MEM-AGT), not via search. See docs/cua-context-management.md."
     },
     {
       "id": "US-MEM-003",
@@ -103,7 +103,7 @@
       ],
       "priority": 2,
       "passes": false,
-      "notes": "Pure tool implementation — no agent wiring needed yet (done in US-MEM-AGT). Follow MemorySearchTool pattern in same file."
+      "notes": "Pure tool implementation — no agent wiring needed yet (done in US-MEM-AGT). Follow MemorySearchTool pattern in same file.\n\nContext retention caveat: Same as memory_search — function_call_output items are ephemeral and get truncated. The agent should act on retrieved content immediately (e.g., write key findings to session log via memory_write) rather than relying on it persisting in context. See docs/cua-context-management.md."
     },
     {
       "id": "US-MEM-TSK-S",
@@ -177,7 +177,7 @@
       ],
       "priority": 3,
       "passes": false,
-      "notes": "This is the integration story that wires everything together. All tool stories (MEM-003, W01) and storage (TSK-S) must be done first. After this story, the agent has a complete memory tool suite and clean production code."
+      "notes": "This is the integration story that wires everything together. All tool stories (MEM-003, W01) and storage (TSK-S) must be done first. After this story, the agent has a complete memory tool suite and clean production code.\n\nCRITICAL DESIGN INSIGHT (see docs/cua-context-management.md): The CUA agent's context is a narrow sliding window. ImageRetentionCallback keeps only the last N screenshot triplets (reasoning + computer_call + computer_call_output), and OpenAI's truncation:auto drops the rest. By turn 100, only ~20 items survive out of ~300+. This has two key implications:\n\n1. TASK_MEMORY.md MUST be injected into the `instructions` parameter (not as a tool result), because PromptInstructionsCallback prepends it on EVERY turn — it's the only content guaranteed to never be truncated. This is the primary cross-session knowledge transfer mechanism.\n\n2. function_call_output items (memory_search/memory_get results) are ephemeral — they get truncated by the API like everything else. The agent only benefits from search results in the turn they're retrieved. Don't rely on the agent choosing to search; the most important memory goes in instructions."
     },
     {
       "id": "US-MEM-004",
@@ -203,7 +203,7 @@
       ],
       "priority": 3,
       "passes": false,
-      "notes": "Currently the computer-use agent performs summarization via the nudge prompt. Later replaceable by a planner LLM (gpt-5-mini via MEMORY_COMPACTION_MODEL). See docs/memory-system.md for design."
+      "notes": "Currently the computer-use agent performs summarization via the nudge prompt. Later replaceable by a planner LLM (gpt-5-mini via MEMORY_COMPACTION_MODEL). See docs/memory-system.md for design.\n\nImplementation note: The nudge should be injected via on_llm_start (appending a user message to the message list), similar to how PromptInstructionsCallback prepends instructions. This ensures the nudge is visible in the current turn's context. See docs/cua-context-management.md for how the CUA context window works and why on_llm_start is the correct hook."
     },
     {
       "id": "US-MEM-CMP",
@@ -242,6 +242,7 @@
       "acceptanceCriteria": [
         "Level 2 — Session 1: Run mota_24_easy, verify: (a) trajectory logs show agent invoked memory tools, (b) session-001.md contains task-relevant observations (floor numbers, items, strategies — not just step counters), (c) nudge-appended entries exist in session log",
         "Level 2 — Compaction: After session 1, TASK_MEMORY.md exists and contains compacted learnings from session-001.md",
+        "Level 2 — Tool output retention check: In trajectory api_start.json files, verify whether function_call_output items from memory tool calls survive into subsequent turns' input, or get truncated away. Document the effective retention window (how many turns a tool result stays visible). See docs/cua-context-management.md for context.",
         "Level 3 — Session 2: Run mota_24_easy again, verify: (a) agent's initial context includes TASK_MEMORY.md content, (b) session-002.md shows agent referencing previous learnings, (c) agent does not repeat session 1's identified dead ends",
         "Level 3 — Outcome: Floor reached in session 2 >= floor reached in session 1 (or at minimum, agent demonstrates knowledge of session 1's findings)",
         "Document results in a test report at docs/e2e-verification-report.md"
