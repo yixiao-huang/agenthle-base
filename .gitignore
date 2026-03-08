@@ -50,3 +50,6 @@ helloworld/
 
 # TinyClaw runtime memory data
 memory_data/
+
+# Claude Code local settings
+.claude/settings.local.json
