@@ -166,3 +166,17 @@
   - Skills with overlapping scope cause confusion — better to have one comprehensive skill than two partial ones
   - `context: fork` + `agent: general-purpose` in skill frontmatter spawns a subagent automatically
 ---
+
+## 2026-03-08 - US-PRD-REF: Add golden references to all PRD stories
+- Added `context.reference` to 10 stories in prd.json (MEM-001 through MEM-RCL)
+- Created `context` objects for MEM-001 and MEM-002 (previously had none)
+- Each reference uses `primary | secondary` format: OpenClaw source file + our docs/code
+- US-MEM-E2E has no OpenClaw equivalent (verification story) — secondary-only reference
+- US-MEM-RCL already had reference — no change needed
+- US-001/002/003 are setup stories — no external reference needed, skipped
+- Marked US-PRD-REF passes:true
+- Files changed: prd.json, progress.txt
+- **Learnings for future iterations:**
+  - Reference format convention: `openclaw/src/... (description) | docs/... § Section Name` — pipe separates primary from secondary
+  - Setup stories (env config, file rewrites, analysis) don't need golden references — they have no external design inspiration
+---

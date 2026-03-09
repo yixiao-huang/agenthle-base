@@ -60,6 +60,9 @@
         "uv run pytest tests/test_memory_store.py passes",
         "Lint passes (uv run ruff check .)"
       ],
+      "context": {
+        "reference": "openclaw/src/memory/manager.ts (MemoryManager — storage, file ops, search) | docs/memory-system.md § TinyClaw Storage"
+      },
       "priority": 2,
       "passes": true,
       "notes": "Level 1 passed. MemoryStore code is correct. 25 unit tests passing."
@@ -78,6 +81,9 @@
         "uv run pytest tests/test_memory_tools.py passes",
         "Lint passes (uv run ruff check .)"
       ],
+      "context": {
+        "reference": "openclaw/src/agents/tools/memory-tool.ts (createMemorySearchTool — query, maxResults, minScore) | docs/openclaw-context-flow.md § memory_search tool schema"
+      },
       "priority": 2,
       "passes": true,
       "notes": "Level 1 passed. MemorySearchTool code is correct. 12 unit tests passing.\n\nContext retention caveat: function_call_output items (search results) are ephemeral — they get truncated by OpenAI's truncation:auto like other conversation items. The agent only benefits from search results in the turn they're retrieved. The primary cross-session knowledge transfer is via TASK_MEMORY.md in instructions (US-MEM-AGT), not via search. See docs/cua-context-management.md."
@@ -88,7 +94,8 @@
       "description": "As an agent, I want a memory_get tool so I can read a specific memory file or line range.",
       "context": {
         "existingFiles": ["memory/store.py (MemoryStore with read_file method)", "memory/tools.py (MemorySearchTool as reference pattern)", "tests/test_memory_tools.py"],
-        "pattern": "Follow MemorySearchTool pattern: extend BaseTool, @register_tool, constructor takes MemoryStore, implement call() method"
+        "pattern": "Follow MemorySearchTool pattern: extend BaseTool, @register_tool, constructor takes MemoryStore, implement call() method",
+        "reference": "openclaw/src/agents/tools/memory-tool.ts (createMemoryGetTool — path/from/lines, .md-only) + openclaw/src/memory/manager.ts (readFile) | memory/tools.py:MemorySearchTool (in-repo pattern followed)"
       },
       "acceptanceCriteria": [
         "memory/tools.py gains MemoryGetTool class extending BaseTool",
@@ -112,7 +119,8 @@
       "context": {
         "existingFiles": ["prd.json (current PRD with stories missing context.reference)", "docs/memory-system.md (OpenClaw reference design)", "docs/cua-context-management.md (CUA context analysis)"],
         "pattern": "US-MEM-RCL already has a reference field — follow that example for all other stories",
-        "designDoc": "docs/memory-system.md (Part 1: OpenClaw Memory System — source of most golden references)"
+        "designDoc": "docs/memory-system.md (Part 1: OpenClaw Memory System — source of most golden references)",
+        "reference": "Self-referential story — adds references to all other stories"
       },
       "acceptanceCriteria": [
         "Every story with passes:false in prd.json has a context.reference field",
@@ -123,7 +131,7 @@
         "Level 1: prd.json is valid JSON (python -m json.tool prd.json)"
       ],
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "notes": "This is a PRD-only story — no code changes. The goal is to make every story self-contained by pointing to the implementation that inspired it. OpenClaw source lives at openclaw/ (or referenced in docs/memory-system.md). CUA framework files are at submodules/cua/. For stories without a clear external reference, point to the relevant design doc section or an existing in-repo pattern."
     },
     {
@@ -133,7 +141,8 @@
       "context": {
         "existingFiles": ["memory/store.py (MemoryStore class)", "tests/test_memory_store.py (25 existing tests)"],
         "storageLayout": "memory_data/tasks/<task_id>/TASK_MEMORY.md + session-NNN.md",
-        "designDoc": "docs/memory-system.md (Part 2: TinyClaw Design → Storage section)"
+        "designDoc": "docs/memory-system.md (Part 2: TinyClaw Design → Storage section)",
+        "reference": "openclaw/src/memory/manager.ts (session transcripts, file-based storage layout) | docs/memory-system.md § TinyClaw Storage (three-layer: MEMORY.md / TASK_MEMORY.md / session-NNN.md)"
       },
       "acceptanceCriteria": [
         "MemoryStore.__init__ gains optional task_id parameter",
@@ -157,7 +166,8 @@
       "description": "As an agent, I want a memory_write tool so I can save observations, strategies, and discoveries to my memory files. The agent operates on a remote VM with no local file access — this tool is its only way to persist knowledge.",
       "context": {
         "existingFiles": ["memory/store.py (MemoryStore with append_to_session_log, write_memory, write_task_memory from US-MEM-TSK-S)", "memory/tools.py (MemorySearchTool as pattern)"],
-        "depends": "US-MEM-TSK-S must be done first (provides append_to_session_log, write_task_memory methods)"
+        "depends": "US-MEM-TSK-S must be done first (provides append_to_session_log, write_task_memory methods)",
+        "reference": "openclaw/src/agents/tools/memory-tool.ts (agent writes via file tools — TinyClaw adapts with explicit memory_write) | memory/tools.py:MemorySearchTool (in-repo tool pattern) + submodules/cua/.../tools/base.py:BaseTool"
       },
       "acceptanceCriteria": [
         "memory/tools.py gains MemoryWriteTool class extending BaseTool",
@@ -181,7 +191,8 @@
       "context": {
         "existingFiles": ["submodules/cua/libs/cua-bench/cua_bench/agents/agenthle_agent.py"],
         "currentState": "Agent currently has: (1) MemoryStore init + MemorySearchTool wired in, (2) step counter logging to daily log (lines 112-115, anti-pattern), (3) post-run self-verification code (lines 154-171, anti-pattern)",
-        "depends": "US-MEM-003 (memory_get), US-MEM-W01 (memory_write), US-MEM-TSK-S (task-scoped storage)"
+        "depends": "US-MEM-003 (memory_get), US-MEM-W01 (memory_write), US-MEM-TSK-S (task-scoped storage)",
+        "reference": "openclaw/src/agents/system-prompt.ts (buildAgentSystemPrompt — 8-section construction, memory NOT injected as content) | docs/openclaw-context-flow.md § MEMORY.md NOT injected + docs/cua-context-management.md (instructions= is only non-truncated content)"
       },
       "acceptanceCriteria": [
         "Remove step counter logging (lines 112-115: 'Step N: tokens=X' appended every turn — anti-pattern)",
@@ -208,7 +219,8 @@
         "existingFiles": ["submodules/cua/libs/cua-bench/cua_bench/agents/agenthle_agent.py (agent with memory tools wired in from US-MEM-AGT)"],
         "trajectoryFormat": "CUA trajectories are at trajectory_dir/turn_NNN/NNNN_agent_response.json — each contains response.output[].summary[].text with reasoning summaries like 'Entering game, selecting start option'",
         "depends": "US-MEM-AGT must be done first (agent has memory_write tool wired in)",
-        "designDoc": "docs/memory-system.md (MemoryFlushCallback section)"
+        "designDoc": "docs/memory-system.md (MemoryFlushCallback section)",
+        "reference": "openclaw/src/agents/embedded.ts (pre-compaction memory flush — silent user msg, agent-driven/system-triggered) | docs/openclaw-context-flow.md § Safeguard: Pre-Compaction Memory Flush (verbatim prompt) + docs/memory-system.md § MemoryFlushCallback"
       },
       "acceptanceCriteria": [
         "memory/callback.py exists with MemoryFlushCallback class",
@@ -233,7 +245,8 @@
       "context": {
         "existingFiles": ["memory/store.py (MemoryStore with read_task_memory, write_task_memory, session files)"],
         "depends": "US-MEM-AGT (agent writes to session log during run), US-MEM-004 (nudge populates session log with observations)",
-        "designDoc": "docs/memory-system.md (Post-Session Compaction section)"
+        "designDoc": "docs/memory-system.md (Post-Session Compaction section)",
+        "reference": "openclaw/src/agents/compaction.ts (SUMMARIZATION_PROMPT, UPDATE_SUMMARIZATION_PROMPT, TURN_PREFIX_SUMMARIZATION_PROMPT) | docs/openclaw-context-flow.md § Compaction Summary (3 prompt variants, reserveTokens=16384, keepRecentTokens=20000) + docs/memory-system.md § Post-Session Compaction"
       },
       "acceptanceCriteria": [
         "memory/compaction.py exists with async compact_task_memory(session_log: str, current_task_memory: str, model: str) function",
@@ -258,7 +271,8 @@
       "context": {
         "depends": "All prior memory stories must be done (MEM-001 through MEM-CMP)",
         "testingDoc": "docs/testing-feedback-loops.md (Level 2 and Level 3 verification)",
-        "task": "mota_24_easy (Magic Tower easy task)"
+        "task": "mota_24_easy (Magic Tower easy task)",
+        "reference": "docs/testing-feedback-loops.md § Level 2 + Level 3 verification + docs/memory-system.md § Cross-Session Flow (mota_24_easy example)"
       },
       "acceptanceCriteria": [
         "Level 2 — Session 1: Run mota_24_easy, verify: (a) trajectory logs show agent invoked memory tools, (b) session-001.md contains task-relevant observations (floor numbers, items, strategies — not just step counters), (c) nudge-appended entries exist in session log",
@@ -278,7 +292,8 @@
       "description": "As an agent, I want memory_search to use hybrid search (vector + keyword) so I can find conceptually related memories, not just exact keyword matches.",
       "context": {
         "existingFiles": ["memory/store.py (MemoryStore.search with keyword mode)", "memory/tools.py (MemorySearchTool)"],
-        "designDoc": "docs/memory-system.md (Search Modes section)"
+        "designDoc": "docs/memory-system.md (Search Modes section)",
+        "reference": "openclaw/src/memory/chunking.ts (400 tokens/chunk, 80 overlap) + openclaw/src/memory/search.ts (hybrid: 0.7 vector + 0.3 keyword, embedding cache) | docs/memory-system.md § OpenClaw Chunking + § Search Modes"
       },
       "acceptanceCriteria": [
         "memory/chunking.py exists: chunk_markdown(text, tokens_per_chunk=400, overlap=80) splits into overlapping chunks with start_line/end_line metadata",
