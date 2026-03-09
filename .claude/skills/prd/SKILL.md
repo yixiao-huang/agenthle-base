@@ -107,7 +107,7 @@ Automated checks that verify the code runs without errors.
 ```
 "Level 1: Lint passes (uv run ruff check .)"
 "Level 1: Unit tests pass (uv run pytest tests/test_*.py)"
-"Level 1: Smoke test run_magic_tower.sh --max-steps 5 doesn't crash"
+"Level 1: Smoke test run_magic_tower.sh 5 doesn't crash"
 ```
 
 **VM test rule**: Any verification step that requires a remote VM (smoke test, real runs, trajectory analysis) is mandatory. If you cannot run it (e.g., no VM connection), you MUST explain why and ask the user to decide the next step — do NOT silently skip it or declare it impractical.
@@ -143,7 +143,7 @@ Multi-session runs show knowledge transfer. Only required when the story's value
 ### Always include:
 - `"Level 1: Lint passes (uv run ruff check .)"` in every story
 - `"Level 1: Unit tests pass"` for stories with testable logic
-- `"Level 1: Smoke test run_magic_tower.sh --max-steps 5 doesn't crash"` in every story
+- `"Level 1: Smoke test run_magic_tower.sh 5 doesn't crash"` in every story
 
 ---
 

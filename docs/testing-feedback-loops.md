@@ -14,7 +14,7 @@ This tells us the code works mechanically but says nothing about whether the mem
 **Question**: Does the code run without errors?
 
 - Unit tests with `tmp_path` and seeded data
-- `run_magic_tower.sh --max-steps 5` smoke test
+- `run_magic_tower.sh 5` smoke test
 - Tool appears in trajectory JSON
 
 **What it catches**: Import errors, type mismatches, missing files, API contract violations.
@@ -83,7 +83,7 @@ Every memory-related story should include verification at **all applicable level
 ### Level 1 (Mechanical) — automated
 - [ ] Unit tests pass (uv run pytest)
 - [ ] Lint passes (uv run ruff check .)
-- [ ] Smoke test: run_magic_tower.sh --max-steps 5 doesn't crash
+- [ ] Smoke test: run_magic_tower.sh 5 doesn't crash
 
 ### Level 2 (Behavioral) — after real run
 - [ ] Run: run_magic_tower.sh N (step count at your discretion)

@@ -106,7 +106,7 @@ Automated checks that verify the code runs without errors.
 ```
 "Level 1: Lint passes (uv run ruff check .)"
 "Level 1: Unit tests pass (uv run pytest tests/test_*.py)"
-"Level 1: Smoke test run_magic_tower.sh --max-steps 5 doesn't crash"
+"Level 1: Smoke test run_magic_tower.sh 5 doesn't crash"
 ```
 
 ### Level 2 — Behavioral (required for agent/tool stories)
