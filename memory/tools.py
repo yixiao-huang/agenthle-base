@@ -159,7 +159,12 @@ class MemoryGetTool(BaseTool):
 
 @register_tool("memory_write")
 class MemoryWriteTool(BaseTool):
-    """Tool for writing content to memory files."""
+    """Tool for writing content to memory files.
+
+    TinyClaw-specific: no direct OpenClaw equivalent. OpenClaw agents write
+    memory via filesystem access; this explicit tool enables the same capability
+    for CUA agents that lack direct file I/O.
+    """
 
     def __init__(self, store: MemoryStore, cfg=None):
         self.store = store
@@ -218,4 +223,4 @@ class MemoryWriteTool(BaseTool):
             self.store.write_task_memory(content)
             path = "TASK_MEMORY.md"
 
-        return f"Wrote {len(content)} bytes to {path}"
+        return f"Wrote {len(content.encode('utf-8'))} bytes to {path}"

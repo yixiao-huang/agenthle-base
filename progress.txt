@@ -211,3 +211,13 @@
   - Adding a `query` alias early (before hybrid search) avoids API breaks — agents learn parameter shapes and re-prompting is costly
   - When a judge report flags deviations from a golden reference, document intentional deviations in docstrings so future reviewers don't re-raise the same issues
 ---
+
+## 2026-03-09 - US-MEM-W01 polish (judge action items)
+- Fixed byte count: `len(content)` → `len(content.encode('utf-8'))` so "Wrote N bytes" message is accurate for multi-byte characters.
+- Added reference attribution docstring to MemoryWriteTool: TinyClaw-specific, no direct OpenClaw equivalent.
+- Added `test_invalid_target_rejected` — covers the `target not in _WRITE_TARGETS` error path (line 203-204).
+- Marked US-MEM-W01 passes:true in prd.json.
+- Files changed: memory/tools.py, tests/test_memory_tools.py, prd.json, progress.txt
+- **Learnings for future iterations:**
+  - `len(str)` returns character count, not byte count — use `len(str.encode('utf-8'))` when the message says "bytes"
+---

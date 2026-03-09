@@ -231,6 +231,11 @@ class TestMemoryWriteTool:
         assert "Error" in result
         assert "session" in result.lower()
 
+    def test_invalid_target_rejected(self, write_tool):
+        result = write_tool.call({"content": "hello", "target": "bogus"})
+        assert "Error" in result
+        assert "bogus" in result
+
     def test_json_string_params(self, task_store, write_tool):
         result = write_tool.call('{"content": "json test", "target": "memory"}')
         assert "Wrote" in result

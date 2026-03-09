@@ -183,8 +183,8 @@
         "Level 1: Smoke test run_magic_tower.sh 5 doesn't crash (tool not wired into agent yet, but validates no import breakage)"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": "Pure tool implementation — no agent wiring yet (done in US-MEM-AGT). Depends on US-MEM-TSK-S for session/task_memory storage methods."
+      "passes": true,
+      "notes": "Level 1 passed. 39 tests passing in test_memory_tools.py (including new invalid-target test). Post-review polish: fixed byte count accuracy (len→utf-8 encode), added reference attribution docstring, added test_invalid_target_rejected. Judge score: 88/100 → all quick-win items addressed."
     },
     {
       "id": "US-MEM-AGT",
