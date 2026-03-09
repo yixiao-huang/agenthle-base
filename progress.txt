@@ -153,3 +153,16 @@
   - HTML interactive docs are NOT useful for AI agents — they can't render visuals, and content is buried in JS string literals. Always create a markdown companion for agent consumption.
   - Cross-reference new docs in at least: CLAUDE.md Key Files, architecture.md relevant section, onboard skill, and the design doc it extends
 ---
+
+## 2026-03-08 - Merge /eval into /judge skill
+- Created `.claude/skills/judge/SKILL.md` — rewrote from scratch for AgentHLE (was copied from subliminal learning project)
+- Incorporated /eval's unique capabilities: per-criterion acceptance criteria audit (OK/WEAK/WRONG/MISSING verdicts), golden reference comparison via `context.reference`, design challenge questions, verification level classification
+- Key design: two modes — `/judge` for full project audit, `/judge US-MEM-003` for single-story deep dive
+- Focus on real VM tests (Level 2/3), not unit tests/lint (Level 1). If VM unavailable, agent pauses and asks user for help.
+- Removed `.claude/skills/eval/` directory (was never committed to git)
+- Updated all references from `/eval` to `/judge` in: CLAUDE.md, architecture.md, docs/testing-feedback-loops.md, .claude/skills/prd/SKILL.md
+- Files changed: .claude/skills/judge/SKILL.md (created), .claude/skills/eval/ (removed), CLAUDE.md, architecture.md, docs/testing-feedback-loops.md, .claude/skills/prd/SKILL.md
+- **Learnings for future iterations:**
+  - Skills with overlapping scope cause confusion — better to have one comprehensive skill than two partial ones
+  - `context: fork` + `agent: general-purpose` in skill frontmatter spawns a subagent automatically
+---
