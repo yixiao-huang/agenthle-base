@@ -155,7 +155,7 @@
         "All existing tests still pass (backward compatible — task_id is optional)",
         "uv run pytest tests/test_memory_store.py passes (add tests: init_session creates dirs, session numbering increments, session log append-only, task memory read/write, scoped search)",
         "Level 1: Lint passes (uv run ruff check .)",
-        "Level 1: Smoke test run_magic_tower.sh 5 doesn't crash (backward compatible — no agent changes, but validates no import breakage)"
+        "Level 1: Smoke test run_magic_tower.sh 20 doesn't crash (backward compatible — no agent changes, but validates no import breakage)"
       ],
       "priority": 2,
       "passes": true,
@@ -180,7 +180,7 @@
         "memory/__init__.py exports MemoryWriteTool",
         "uv run pytest tests/test_memory_tools.py passes (add tests: write to session, write to memory, write to task_memory, empty content rejected)",
         "Level 1: Lint passes (uv run ruff check .)",
-        "Level 1: Smoke test run_magic_tower.sh 5 doesn't crash (tool not wired into agent yet, but validates no import breakage)"
+        "Level 1: Smoke test run_magic_tower.sh 20 doesn't crash (tool not wired into agent yet, but validates no import breakage)"
       ],
       "priority": 2,
       "passes": true,
@@ -234,7 +234,7 @@
         "agenthle_agent.py instantiates MemoryFlushCallback and passes it in ComputerAgent callbacks= list",
         "uv run pytest tests/test_memory_callback.py passes (unit: nudge fires at correct intervals, trajectory reading parses reasoning summaries, missing files handled gracefully)",
         "Level 1: Lint passes (uv run ruff check .)",
-        "Level 1: Smoke test run_magic_tower.sh 5 doesn't crash",
+        "Level 1: Smoke test run_magic_tower.sh 20 doesn't crash",
         "Level 2: After a real run with enough steps, session log contains nudge-appended entries at expected intervals"
       ],
       "priority": 3,
@@ -262,7 +262,7 @@
         "If compaction fails, prints warning but does not crash the run",
         "uv run pytest tests/test_memory_compaction.py passes (unit: mock OpenAI call, verify prompt contains session log + task memory, verify contradictions removed in mock response)",
         "Level 1: Lint passes (uv run ruff check .)",
-        "Level 1: Smoke test run_magic_tower.sh 5 doesn't crash",
+        "Level 1: Smoke test run_magic_tower.sh 20 doesn't crash",
         "Level 2: After a real run, compaction runs post-session and produces TASK_MEMORY.md with content derived from the session log (not empty, not identical to session log)",
         "Level 2: If compaction LLM call fails, the run still completes and session log is preserved"
       ],
@@ -315,7 +315,7 @@
         "uv run pytest tests/test_memory_db.py passes (new tests: schema creation, chunking correctness, hash-based sync skips unchanged files, FTS5 search returns ranked results, word-boundary matching, empty corpus)",
         "uv run pytest tests/test_memory_chunking.py passes (new tests: overlap correctness, line number tracking, small file single chunk, empty input)",
         "Level 1: Lint passes (uv run ruff check .)",
-        "Level 1: Smoke test run_magic_tower.sh 5 doesn't crash",
+        "Level 1: Smoke test run_magic_tower.sh 20 doesn't crash",
         "Level 2: After a real run, memory_search results show BM25-ranked ordering (not simple count-based)",
         "MemorySearchTool gains optional minScore parameter (float) that filters results below the threshold (default: no filtering for backward compat)"
       ],
@@ -344,7 +344,7 @@
         "memory_search tool gains optional 'mode' parameter",
         "uv run pytest tests/test_memory_hybrid.py passes",
         "Level 1: Lint passes (uv run ruff check .)",
-        "Level 1: Smoke test run_magic_tower.sh 5 doesn't crash",
+        "Level 1: Smoke test run_magic_tower.sh 20 doesn't crash",
         "Level 2: After a real run, memory_search with mode='hybrid' returns results that include semantic matches (not just exact keyword hits)"
       ],
       "priority": 4,
@@ -369,7 +369,7 @@
         "memory_search tool description updated to reinforce mandatory recall framing",
         "memory_get tool description includes guidance to use it after memory_search for targeted reads",
         "Level 1: Lint passes (uv run ruff check .)",
-        "Level 1: Smoke test run_magic_tower.sh 5 doesn't crash",
+        "Level 1: Smoke test run_magic_tower.sh 20 doesn't crash",
         "Level 2: After run_magic_tower.sh (step count at discretion), trajectory logs (turn_NNN/NNNN_agent_response.json) show agent invoked memory_search in at least 3 distinct decision-making contexts (not just once at start). Use: grep -r '\"memory_search\"' trajectories/",
         "Level 2: Agent reasoning summaries (response.output[].summary[].text) after memory_search calls reference the retrieved content",
         "Level 2: Search queries in trajectory logs are task-relevant (not random or empty strings)"
