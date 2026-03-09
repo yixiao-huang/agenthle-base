@@ -210,8 +210,32 @@
         "Lint passes (uv run ruff check .)"
       ],
       "priority": 3,
-      "passes": false,
+      "passes": true,
       "notes": "This is the integration story that wires everything together. All tool stories (MEM-003, W01) and storage (TSK-S) must be done first. After this story, the agent has a complete memory tool suite and clean production code.\n\nCRITICAL DESIGN INSIGHT (see docs/cua-context-management.md): The CUA agent's context is a narrow sliding window. ImageRetentionCallback keeps only the last N screenshot triplets (reasoning + computer_call + computer_call_output), and OpenAI's truncation:auto drops the rest. By turn 100, only ~20 items survive out of ~300+. This has two key implications:\n\n1. TASK_MEMORY.md MUST be injected into the `instructions` parameter (not as a tool result), because PromptInstructionsCallback prepends it on EVERY turn — it's the only content guaranteed to never be truncated. This is the primary cross-session knowledge transfer mechanism.\n\n2. function_call_output items (memory_search/memory_get results) are ephemeral — they get truncated by the API like everything else. The agent only benefits from search results in the turn they're retrieved. Don't rely on the agent choosing to search; the most important memory goes in instructions."
+    },
+    {
+      "id": "US-MEM-PLN",
+      "title": "Central planner LLM client for memory operations",
+      "description": "As a developer, I want a shared planner LLM client (memory/planner.py) that US-MEM-004 and US-MEM-CMP both use for LLM-powered memory operations. This avoids duplicating OpenAI SDK setup and model configuration across stories.",
+      "context": {
+        "existingFiles": ["memory/store.py (MemoryStore)", "memory/tools.py (existing tool pattern)"],
+        "depends": "US-MEM-AGT (memory tools wired in)",
+        "designDoc": "docs/memory-system.md (Post-Session Compaction section, MemoryFlushCallback section)",
+        "reference": "openclaw/src/agents/compaction.ts (summarizeWithFallback — uses OpenAI chat completions with system+user messages)"
+      },
+      "acceptanceCriteria": [
+        "memory/planner.py exists with async call_planner(system_prompt: str, user_prompt: str, model: str | None) → str",
+        "Default model from MEMORY_COMPACTION_MODEL env var, fallback to 'gpt-4.1-mini'",
+        "Uses OpenAI Python SDK (openai.AsyncOpenAI) — respects OPENAI_API_KEY and OPENAI_API_BASE env vars",
+        "Returns the assistant message content as string",
+        "Raises on API failure (caller decides fallback behavior)",
+        "memory/__init__.py exports call_planner",
+        "uv run pytest tests/test_memory_planner.py passes (unit: mock OpenAI call, verify system/user prompts passed correctly, verify env var model override)",
+        "Level 1: Lint passes (uv run ruff check .)"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": "Thin wrapper — just the OpenAI SDK call with model configuration. Both US-MEM-004 (nudge) and US-MEM-CMP (compaction) import call_planner instead of duplicating SDK setup. If OPENAI_API_BASE is set (e.g., LiteLLM proxy), the client respects it automatically."
     },
     {
       "id": "US-MEM-004",
@@ -220,7 +244,7 @@
       "context": {
         "existingFiles": ["submodules/cua/libs/cua-bench/cua_bench/agents/agenthle_agent.py (agent with memory tools wired in from US-MEM-AGT)"],
         "trajectoryFormat": "CUA trajectories are at trajectory_dir/turn_NNN/NNNN_agent_response.json — each contains response.output[].summary[].text with reasoning summaries like 'Entering game, selecting start option'",
-        "depends": "US-MEM-AGT must be done first (agent has memory_write tool wired in)",
+        "depends": "US-MEM-AGT (agent has memory_write tool), US-MEM-PLN (shared planner client for optional LLM-powered summarization)",
         "designDoc": "docs/memory-system.md (MemoryFlushCallback section)",
         "reference": "openclaw/src/agents/pi-embedded.ts (barrel entry point) + openclaw/src/agents/pi-embedded-runner/run/attempt.ts (actual pre-compaction flush logic) | docs/openclaw-context-flow.md § Safeguard: Pre-Compaction Memory Flush (verbatim prompt) + docs/memory-system.md § MemoryFlushCallback"
       },
@@ -239,36 +263,39 @@
       ],
       "priority": 3,
       "passes": false,
-      "notes": "Currently the computer-use agent performs summarization via the nudge prompt. Later replaceable by a planner LLM (gpt-5-mini via MEMORY_COMPACTION_MODEL). See docs/memory-system.md for design.\n\nImplementation note: The nudge should be injected via on_llm_start (appending a user message to the message list), similar to how PromptInstructionsCallback prepends instructions. This ensures the nudge is visible in the current turn's context. See docs/cua-context-management.md for how the CUA context window works and why on_llm_start is the correct hook."
+      "notes": "Uses call_planner from US-MEM-PLN for optional LLM-powered summarization. The nudge should be injected via on_llm_start (appending a user message to the message list), similar to how PromptInstructionsCallback prepends instructions. This ensures the nudge is visible in the current turn's context. See docs/cua-context-management.md for how the CUA context window works and why on_llm_start is the correct hook."
     },
     {
       "id": "US-MEM-CMP",
-      "title": "Post-session LLM compaction",
-      "description": "As a system operator, I want a post-session step that uses a planner LLM to merge the finalized session log into TASK_MEMORY.md. This runs after the agent session ends — it is NOT part of the agent loop.",
+      "title": "Post-session LLM compaction for TASK_MEMORY.md and MEMORY.md",
+      "description": "As a system operator, I want a post-session step that uses a planner LLM to (1) merge the finalized session log into a compacted TASK_MEMORY.md, and (2) extract cross-task patterns from TASK_MEMORY.md into a compacted MEMORY.md. This runs after the agent session ends — it is NOT part of the agent loop. Replaces the naive append consolidation added in US-MEM-AGT with LLM-powered compaction.",
       "context": {
-        "existingFiles": ["memory/store.py (MemoryStore with read_task_memory, write_task_memory, session files)"],
-        "depends": "US-MEM-AGT (agent writes to session log during run), US-MEM-004 (nudge populates session log with observations)",
+        "existingFiles": [
+          "memory/store.py (MemoryStore with read_task_memory, write_task_memory, read_file, write_memory, session files)",
+          "submodules/cua/libs/cua-bench/cua_bench/agents/agenthle_agent.py (post-run block at lines 188-222 — naive append consolidation to TASK_MEMORY.md and MEMORY.md that this story replaces with LLM compaction)"
+        ],
+        "depends": "US-MEM-AGT (agent writes to session log during run, naive consolidation serves as interim fallback), US-MEM-PLN (shared planner client), US-MEM-004 (nudge populates session log with observations)",
         "designDoc": "docs/memory-system.md (Post-Session Compaction section)",
         "reference": "openclaw/src/agents/compaction.ts (MERGE_SUMMARIES_INSTRUCTIONS, summarizeInStages, summarizeWithFallback) + openclaw/src/agents/pi-extensions/compaction-safeguard.ts (TURN_PREFIX_INSTRUCTIONS) | docs/openclaw-context-flow.md § Compaction Summary (3 prompt variants, reserveTokens=16384, keepRecentTokens=20000) + docs/memory-system.md § Post-Session Compaction"
       },
       "acceptanceCriteria": [
-        "memory/compaction.py exists with async compact_task_memory(session_log: str, current_task_memory: str, model: str) function",
-        "Uses OpenAI Python SDK directly (not ComputerAgent) to call the planner LLM",
-        "Default model: gpt-5-mini with reasoning, configurable via MEMORY_COMPACTION_MODEL env var",
-        "Prompt instructs LLM to merge session learnings into TASK_MEMORY.md, remove contradictions, deduplicate, keep only actionable knowledge",
-        "Returns the rewritten TASK_MEMORY.md content as string",
-        "Graceful failure: if LLM call fails, raises exception but session log is preserved (caller handles)",
-        "agenthle_agent.py calls compact_task_memory after agent loop ends, writes result via MemoryStore.write_task_memory()",
-        "If compaction fails, prints warning but does not crash the run",
-        "uv run pytest tests/test_memory_compaction.py passes (unit: mock OpenAI call, verify prompt contains session log + task memory, verify contradictions removed in mock response)",
+        "memory/compaction.py exists with two async functions: compact_task_memory(session_log, current_task_memory) and compact_global_memory(task_memory, current_memory, task_id) — both use call_planner from US-MEM-PLN",
+        "compact_task_memory: merges session learnings into TASK_MEMORY.md — remove contradictions, deduplicate, keep only actionable task-specific knowledge",
+        "compact_global_memory: extracts cross-task patterns from TASK_MEMORY.md into MEMORY.md — strategies, tool usage patterns, environment observations that generalize beyond the current task",
+        "Uses call_planner from memory/planner.py (US-MEM-PLN) — model and API config handled there",
+        "Both functions return the rewritten content as string; graceful failure on LLM errors (caller handles)",
+        "agenthle_agent.py post-run block replaced: calls compact_task_memory first, then compact_global_memory with the compacted task memory",
+        "If compaction fails, falls back to the existing naive append consolidation (don't lose data)",
+        "uv run pytest tests/test_memory_compaction.py passes (unit: mock OpenAI calls, verify prompts contain correct inputs, verify task-specific vs cross-task separation in outputs)",
         "Level 1: Lint passes (uv run ruff check .)",
         "Level 1: Smoke test run_magic_tower.sh 20 doesn't crash",
-        "Level 2: After a real run, compaction runs post-session and produces TASK_MEMORY.md with content derived from the session log (not empty, not identical to session log)",
-        "Level 2: If compaction LLM call fails, the run still completes and session log is preserved"
+        "Level 2: After a real run, TASK_MEMORY.md contains compacted task-specific knowledge (not raw session log appends)",
+        "Level 2: After a real run, MEMORY.md contains cross-task patterns extracted from TASK_MEMORY.md (not raw session log appends)",
+        "Level 2: If compaction LLM call fails, the run still completes with naive append fallback and session log is preserved"
       ],
       "priority": 3,
       "passes": false,
-      "notes": "Uses the same planner model (gpt-5-mini) that the nudge (US-MEM-004) will eventually use when upgraded. See docs/memory-system.md for compaction design."
+      "notes": "Uses the same planner model (gpt-4.1-mini) that the nudge (US-MEM-004) will eventually use when upgraded. See docs/memory-system.md for compaction design.\n\nTwo-phase compaction:\n1. compact_task_memory: session-NNN.md + existing TASK_MEMORY.md → compacted TASK_MEMORY.md (task-specific)\n2. compact_global_memory: compacted TASK_MEMORY.md + existing MEMORY.md → compacted MEMORY.md (cross-task patterns)\n\nThe naive append consolidation in agenthle_agent.py (lines 188-222) serves as the interim mechanism and becomes the fallback if LLM compaction fails. This ensures data is never lost even if the compaction model is unavailable."
     },
     {
       "id": "US-MEM-E2E",
@@ -353,30 +380,56 @@
     },
     {
       "id": "US-MEM-RCL",
-      "title": "Improved memory recall prompting strategy",
-      "description": "As an agent, I want clearer, task-agnostic instructions about when and how to use memory_search so I actually invoke it at the right moments instead of forgetting it exists.",
+      "title": "Improved memory recall prompting and search scope control",
+      "description": "As an agent, I want (1) clearer, task-agnostic instructions about when and how to use memory_search, and (2) a scope parameter on memory_search so I can choose to search only the current task, only global memory, or all memory.",
       "context": {
-        "existingFiles": ["submodules/cua/libs/cua-bench/cua_bench/agents/agenthle_agent.py (instructions= parameter)", "memory/tools.py (tool descriptions)"],
+        "existingFiles": ["submodules/cua/libs/cua-bench/cua_bench/agents/agenthle_agent.py (instructions= parameter)", "memory/tools.py (tool descriptions + MemorySearchTool)", "memory/store.py (search method — currently searches all files with no scope control)"],
         "depends": "US-MEM-AGT must be done first (all memory tools wired in)",
-        "designDoc": "docs/memory-system.md (Memory Recall: How the Agent Decides to Search)",
-        "reference": "OpenClaw system-prompt.ts buildMemorySection() — uses task-agnostic categorical triggers (prior work, decisions, dates, strategies, mistakes) not task-specific ones"
+        "designDoc": "docs/memory-system.md (Memory Recall: How the Agent Decides to Search + Search Modes)",
+        "reference": "OpenClaw system-prompt.ts buildMemorySection() — uses task-agnostic categorical triggers (prior work, decisions, dates, strategies, mistakes) not task-specific ones",
+        "searchScopeGap": "docs/memory-system.md planned a task_id? parameter on memory_search but it was never implemented. Currently search() scans ALL session files (001, 002, 003, ...) + TASK_MEMORY.md + MEMORY.md + daily logs in one call with no agent control."
       },
       "acceptanceCriteria": [
+        "memory_search tool gains optional 'scope' parameter: 'all' (default, current behavior), 'task' (only task-scoped files: TASK_MEMORY.md + session-*.md), 'global' (only MEMORY.md + memory_logs/)",
+        "MemoryStore.search() gains scope parameter that filters which files are scanned",
         "Agent instructions contain a dedicated '## Memory Recall' section (not buried in general instructions)",
         "Memory recall section lists task-agnostic trigger categories (e.g., prior observations, past strategies, known mistakes, previous decisions — NOT game-specific like 'floor numbers' or 'enemy encounters')",
         "Instructions use 'mandatory recall step' framing (not a soft suggestion)",
         "Instructions include failure guidance: what to do when search returns nothing relevant",
-        "memory_search tool description updated to reinforce mandatory recall framing",
+        "memory_search tool description updated to reinforce mandatory recall framing and explain scope parameter",
         "memory_get tool description includes guidance to use it after memory_search for targeted reads",
         "Level 1: Lint passes (uv run ruff check .)",
+        "Level 1: Unit tests pass — add tests for scope='task' and scope='global' filtering",
         "Level 1: Smoke test run_magic_tower.sh 20 doesn't crash",
-        "Level 2: After run_magic_tower.sh (step count at discretion), trajectory logs (turn_NNN/NNNN_agent_response.json) show agent invoked memory_search in at least 3 distinct decision-making contexts (not just once at start). Use: grep -r '\"memory_search\"' trajectories/",
-        "Level 2: Agent reasoning summaries (response.output[].summary[].text) after memory_search calls reference the retrieved content",
+        "Level 2: After run_magic_tower.sh (step count at discretion), trajectory logs show agent invoked memory_search in at least 3 distinct decision-making contexts (not just once at start)",
+        "Level 2: Agent reasoning summaries after memory_search calls reference the retrieved content",
         "Level 2: Search queries in trajectory logs are task-relevant (not random or empty strings)"
       ],
       "priority": 4,
       "passes": false,
-      "notes": "Future story. Inspired by OpenClaw's system prompt design (buildMemorySection in system-prompt.ts). The current TinyClaw instructions are too vague — 'before making decisions' doesn't give the model enough signal to actually trigger recall. OpenClaw's categorical triggers (prior work, decisions, dates, people, preferences, todos) are more effective. This story adapts that pattern with task-agnostic categories that work across all CUA tasks, not just games. The exact prompt wording should be determined during implementation. See docs/memory-system.md 'Memory Recall' section for full analysis.\n\nOptional enhancement (not required for this story): session-start auto-search — programmatically call memory_search with task-relevant keywords before the first agent step, so prior context is pre-loaded into the conversation."
+      "notes": "Two parts in one story:\n\n1. **Search scope control**: Currently memory_search scans everything (all session files, TASK_MEMORY.md, MEMORY.md, daily logs) in one call. The agent has no way to narrow the search. Adding a scope parameter lets the agent focus on task-specific or global memory as needed. Default 'all' preserves backward compatibility.\n\n2. **Recall prompting**: Inspired by OpenClaw's system prompt design (buildMemorySection in system-prompt.ts). The current TinyClaw instructions are too vague — 'before making decisions' doesn't give the model enough signal. OpenClaw's categorical triggers (prior work, decisions, dates, strategies, mistakes) are more effective.\n\nOptional enhancement: session-start auto-search — programmatically call memory_search with task-relevant keywords before the first agent step."
+    },
+    {
+      "id": "US-MEM-EVAL",
+      "title": "Planner model comparison for compaction quality",
+      "description": "As a developer, I want to compare different planner models (gpt-4.1-mini, gpt-4.1, claude-sonnet-4-20250514, etc.) on compaction quality so we can pick the best cost/quality tradeoff for MEMORY_COMPACTION_MODEL.",
+      "context": {
+        "depends": "US-MEM-CMP (compaction must be working end-to-end before comparing models)",
+        "existingFiles": ["memory/compaction.py (compact_task_memory, compact_global_memory)", "memory/planner.py (call_planner with MEMORY_COMPACTION_MODEL env var)"],
+        "reference": "openclaw/src/agents/compaction.ts (summarizeWithFallback — uses gpt-4.1-mini as default, falls back to gpt-4.1)"
+      },
+      "acceptanceCriteria": [
+        "scripts/eval_compaction.py exists — takes a session log + existing TASK_MEMORY.md, runs compaction with N different models, and outputs the compacted results side-by-side",
+        "Evaluates at least: gpt-4.1-mini, gpt-4.1, claude-sonnet-4-20250514",
+        "For each model, measures: output token count, latency, cost estimate, and a qualitative rubric score (contradiction removal, deduplication, actionability, conciseness)",
+        "Qualitative scoring uses a judge LLM (configurable) that rates each compacted output on a 1-5 scale per rubric dimension",
+        "Results written to docs/compaction-model-eval.md with a comparison table and recommendation",
+        "Level 1: Lint passes (uv run ruff check .)",
+        "Level 1: Script runs without errors on a sample session log (can use existing memory_data/tasks/mota_24_easy/ session files)"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": "Evaluation-only story — no production code changes. The goal is to validate the default model choice and document alternatives. The recommended model becomes the new default in MEMORY_COMPACTION_MODEL if it outperforms gpt-4.1-mini.\n\nCandidate models to evaluate:\n- gpt-4.1-mini (current default — fast, cheap)\n- gpt-4.1 (higher quality, more expensive)\n- claude-sonnet-4-20250514 (alternative provider)\n- Any reasoning model variants available\n\nKey quality dimensions:\n1. Contradiction removal — does the compacted output resolve conflicting observations?\n2. Deduplication — are redundant observations merged?\n3. Actionability — does the output contain concrete strategies vs vague summaries?\n4. Conciseness — is the output compact enough to fit in agent instructions without bloat?"
     }
   ]
 }

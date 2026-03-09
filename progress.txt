@@ -221,3 +221,23 @@
 - **Learnings for future iterations:**
   - `len(str)` returns character count, not byte count — use `len(str.encode('utf-8'))` when the message says "bytes"
 ---
+
+## 2026-03-09 - US-MEM-AGT: Wire all memory tools into agent and clean up scaffolding
+- **MemoryWriteTool wired in**: imported + instantiated + added to ComputerAgent tools list
+- **Task-scoped storage**: MEMORY_TASK_ID env var → task_id → MemoryStore, init_session() creates session file
+- **TASK_MEMORY.md injection**: read at startup, prepended as "## Prior Task Knowledge" in instructions
+- **MEMORY.md injection**: read at startup, prepended as "## Global Memory (cross-task)" in instructions — was previously write-only
+- **Agent instructions rewritten**: describes all 3 tools, mandatory Step 1 memory_search, ongoing session writes, periodic task_memory writes every ~10 steps, explains TASK_MEMORY.md is injected word-for-word into future runs
+- **Anti-patterns removed**: step-counter logging (append_to_daily_log "Step N: tokens=X"), post-run self-verification block (18 lines of test scaffolding)
+- **Post-run consolidation**: safety net that appends session observations to both TASK_MEMORY.md and MEMORY.md when agent is cut off at max_steps
+- **Shell scripts**: added `export MEMORY_TASK_ID` to run_magic_tower.sh and run_helloworld.sh
+- **PRD updates**: new US-MEM-PLN (central planner client), US-MEM-EVAL (model comparison), updated US-MEM-CMP (two-phase compaction for both TASK_MEMORY.md and MEMORY.md), updated US-MEM-RCL (search scope parameter), replaced gpt-5-mini → gpt-4.1-mini everywhere
+- Files changed: agenthle_agent.py (major), run_magic_tower.sh, run_helloworld.sh, prd.json
+- **Verified**: Level 1 (lint + 87 tests + 20-step smoke) + Level 2 (50-step run: memory_search on turn 0, memory_write across 9+ turns, session log has 4 task-relevant observations, post-run consolidation to TASK_MEMORY.md confirmed)
+- **Learnings for future iterations:**
+  - openai/computer-use-preview respects the "Step 1 MANDATORY" framing — it called memory_search as its very first action
+  - The model writes to session log frequently when told to, but needs periodic TASK_MEMORY.md write instructions to survive max_steps cutoff
+  - Post-run consolidation is essential — the agent almost never writes to task_memory before being cut off
+  - MEMORY.md was write-only (consolidated to but never read) — now injected into instructions alongside TASK_MEMORY.md
+  - memory_search searches ALL session files + TASK_MEMORY.md + MEMORY.md with no scope filtering — US-MEM-RCL will add a scope parameter
+---

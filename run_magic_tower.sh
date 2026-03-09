@@ -15,6 +15,7 @@ export CUA_TELEMETRY_DISABLED="true"
 export CUA_ENV_VNC_URL=""
 export XDG_DATA_HOME="./trycua"
 task="mota_24_easy"
+export MEMORY_TASK_ID="${task}"
 export EVALUATION_OUTPUT_DIR="./trycua/cua-bench/${task}"
 
 # Run the Magic Tower Demo task

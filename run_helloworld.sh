@@ -16,6 +16,7 @@ export CUA_ENV_TYPE="windows"
 export CUA_TELEMETRY_DISABLED="true"
 export CUA_ENV_VNC_URL=""
 export XDG_DATA_HOME="./trycua"
+export MEMORY_TASK_ID="helloworld"
 export EVALUATION_OUTPUT_DIR="./helloworld"
 
 
