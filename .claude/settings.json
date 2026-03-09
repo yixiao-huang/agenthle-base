@@ -5,9 +5,5 @@
       "Bash(ls:*)",
       "Read:*"
     ]
-  },
-  "statusLine": {
-    "type": "command",
-    "command": "bash /media/volume/MOL-System/agenthle-base/.claude/statusline-command.sh"
   }
 }

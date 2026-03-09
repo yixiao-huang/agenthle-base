@@ -188,3 +188,13 @@
 - **Learnings for future iterations:**
   - Split one-time setup from per-session sync — keeps /onboard fast and avoids redundant checks every session
 ---
+
+## 2026-03-09 - OpenClaw reference accuracy audit
+- Audited all openclaw file references in prd.json against actual source files
+- Fixed 5 inaccurate references across US-MEM-001, US-MEM-004, US-MEM-CMP, US-MEM-SQL, US-MEM-006
+- Fixes: MemoryManager→MemoryIndexManager, added pi-embedded-runner implementation file, corrected compaction variable names + added safeguard file, split search references to correct files
+- Files changed: prd.json, .claude/settings.json (removed stale apiKeyHelper)
+- **Learnings for future iterations:**
+  - openclaw pi-embedded.ts is a barrel file — actual logic is in pi-embedded-runner/run/attempt.ts
+  - openclaw search is split: manager-search.ts (FTS5 low-level), hybrid.ts (ranking), agents/memory-search.ts (defaults/config)
+---
