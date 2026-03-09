@@ -32,6 +32,7 @@ Run `/onboard` to read all key files, check git state, and identify the current 
 | `docs/memory-system.md` | TinyClaw memory system design |
 | `docs/openclaw-context-flow.md` | OpenClaw context management reference (prompts, compaction, tools) |
 | `docs/testing-feedback-loops.md` | Three-level verification guidelines |
+| `.current-story` | Story lock file — contains the active story ID (e.g., `US-MEM-003`). Written by `/onboard`, read by `/judge` and `/review-judge`, cleared by `/ship`. Agents must check it before starting — if non-empty with a different story, ask the user before overwriting. |
 
 ## Quality Requirements
 

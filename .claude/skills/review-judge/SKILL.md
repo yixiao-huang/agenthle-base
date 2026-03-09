@@ -10,7 +10,7 @@ agent: general-purpose
 
 Read the two most recent `/judge` audit reports (for the target story if specified, or the two most recent overall), compare them, and produce a prioritized action plan for the current session.
 
-Target: $ARGUMENTS (if empty, reviews the two most recent reports regardless of story).
+Target: $ARGUMENTS (if empty, read `.current-story` — if it contains a story ID, use that to filter reports for that story; if `.current-story` is also empty, reviews the two most recent reports regardless of story).
 
 ---
 

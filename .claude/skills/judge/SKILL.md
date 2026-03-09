@@ -16,7 +16,7 @@ You are NOT a cheerleader. You are a tough but fair reviewer who cares about cor
 - `/judge` — full project audit (all stories, architecture, real VM run)
 - `/judge US-MEM-003` — deep-dive a specific story (acceptance criteria audit, golden reference comparison, targeted VM verification)
 
-Target: $ARGUMENTS (if empty, audit everything done so far).
+Target: $ARGUMENTS (if empty, read `.current-story` — if it contains a story ID, use that as the target for a single-story deep dive; if `.current-story` is also empty, audit everything done so far).
 
 ---
 

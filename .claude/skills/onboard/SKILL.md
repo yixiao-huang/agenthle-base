@@ -58,7 +58,14 @@ Summarize the chosen story:
 - **Dependencies**: Any prerequisite stories and their status
 - **Acceptance criteria**: What needs to pass
 
-### 5. Report to user
+### 5. Write story lock
+
+Write the chosen story ID to `.current-story` in the project root. This signals to other agents and skills which story is active.
+
+- If `.current-story` is empty or matches the chosen story, write the story ID.
+- If `.current-story` contains a **different** story ID, warn the user that another agent may be working on that story and ask before overwriting.
+
+### 6. Report to user
 
 Present a concise summary:
 
@@ -76,7 +83,7 @@ Present a concise summary:
 - [What to work on, based on PRD priority]
 ```
 
-### 6. Enter planning mode
+### 7. Enter planning mode
 
 After reporting, enter planning mode to draft the plan for the current story.
 

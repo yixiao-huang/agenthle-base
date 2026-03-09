@@ -3,7 +3,8 @@
     "allow": [
       "Bash(find:*)",
       "Bash(ls:*)",
-      "Read:*"
+      "Read:*",
+      "Bash(uv run pytest*)"
     ]
   }
 }

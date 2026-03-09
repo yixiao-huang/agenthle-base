@@ -82,7 +82,11 @@ git commit -m "feat: [Story ID] - [Story Title]"
 git push
 ```
 
-### 8. Final verification
+### 8. Clear story lock
+
+After successful commit and push, clear `.current-story` (write an empty string) to release the story lock.
+
+### 9. Final verification
 
 Run `git status` and `git log --oneline -3` to confirm the commit landed cleanly.
 
