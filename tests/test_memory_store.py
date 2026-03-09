@@ -11,6 +11,12 @@ def store(tmp_path):
     return MemoryStore(tmp_path)
 
 
+@pytest.fixture
+def task_store(tmp_path):
+    """Create a task-scoped MemoryStore backed by a temporary directory."""
+    return MemoryStore(tmp_path, task_id="mota_24_easy")
+
+
 class TestReadFile:
     def test_missing_file_returns_empty(self, store):
         assert store.read_file("MEMORY.md") == ""
@@ -160,3 +166,168 @@ class TestListLogFiles:
             "memory_logs/2026-03-05.md",
             "memory_logs/2026-03-10.md",
         ]
+
+
+# --- Task-scoped storage tests ---
+
+
+class TestTaskDir:
+    def test_raises_without_task_id(self, store):
+        with pytest.raises(ValueError, match="task_dir requires a task_id"):
+            _ = store.task_dir
+
+    def test_returns_correct_path(self, task_store):
+        assert task_store.task_dir == task_store.base_dir / "tasks" / "mota_24_easy"
+
+
+class TestInitSession:
+    def test_creates_dir_and_first_session(self, task_store):
+        path = task_store.init_session()
+        assert path == "tasks/mota_24_easy/session-001.md"
+        assert task_store.task_dir.exists()
+        assert (task_store.task_dir / "session-001.md").exists()
+
+    def test_increments_session_number(self, task_store):
+        task_store.init_session()
+        # Create a new store instance (simulating a new session)
+        store2 = MemoryStore(task_store.base_dir, task_id="mota_24_easy")
+        path = store2.init_session()
+        assert path == "tasks/mota_24_easy/session-002.md"
+
+    def test_multiple_calls_on_same_instance(self, task_store):
+        p1 = task_store.init_session()
+        p2 = task_store.init_session()
+        assert p1 == "tasks/mota_24_easy/session-001.md"
+        assert p2 == "tasks/mota_24_easy/session-002.md"
+
+    def test_session_file_has_header(self, task_store):
+        task_store.init_session()
+        content = (task_store.task_dir / "session-001.md").read_text(encoding="utf-8")
+        assert content.startswith("# Session 001")
+
+    def test_non_session_md_files_ignored_for_numbering(self, task_store):
+        """TASK_MEMORY.md and other .md files don't affect session numbering."""
+        task_store.task_dir.mkdir(parents=True)
+        (task_store.task_dir / "TASK_MEMORY.md").write_text("notes", encoding="utf-8")
+        (task_store.task_dir / "scratch.md").write_text("tmp", encoding="utf-8")
+        path = task_store.init_session()
+        assert path == "tasks/mota_24_easy/session-001.md"
+
+    def test_raises_without_task_id(self, store):
+        with pytest.raises(ValueError):
+            store.init_session()
+
+
+class TestAppendToSessionLog:
+    def test_appends_with_timestamp(self, task_store):
+        task_store.init_session()
+        path = task_store.append_to_session_log("found a key on floor 2")
+        assert path == "tasks/mota_24_easy/session-001.md"
+        content = (task_store.task_dir / "session-001.md").read_text(encoding="utf-8")
+        assert "found a key on floor 2" in content
+        # Timestamp format [HH:MM:SS]
+        assert "[" in content
+
+    def test_raises_without_init_session(self, task_store):
+        with pytest.raises(RuntimeError, match="init_session"):
+            task_store.append_to_session_log("should fail")
+
+    def test_multiple_appends(self, task_store):
+        task_store.init_session()
+        task_store.append_to_session_log("first observation")
+        task_store.append_to_session_log("second observation")
+        content = (task_store.task_dir / "session-001.md").read_text(encoding="utf-8")
+        assert "first observation" in content
+        assert "second observation" in content
+        assert content.count("[") >= 2
+
+
+class TestWriteTaskMemory:
+    def test_creates_file(self, task_store):
+        task_store.write_task_memory("yellow door needs yellow key")
+        content = (task_store.task_dir / "TASK_MEMORY.md").read_text(encoding="utf-8")
+        assert content == "yellow door needs yellow key"
+
+    def test_overwrites_existing(self, task_store):
+        task_store.write_task_memory("old knowledge")
+        task_store.write_task_memory("new knowledge")
+        content = (task_store.task_dir / "TASK_MEMORY.md").read_text(encoding="utf-8")
+        assert content == "new knowledge"
+
+    def test_creates_dir_if_absent(self, task_store):
+        assert not task_store.task_dir.exists()
+        task_store.write_task_memory("content")
+        assert task_store.task_dir.exists()
+
+
+class TestReadTaskMemory:
+    def test_reads_content(self, task_store):
+        task_store.write_task_memory("floor 3 strategy")
+        assert task_store.read_task_memory() == "floor 3 strategy"
+
+    def test_returns_empty_if_missing(self, task_store):
+        task_store.task_dir.mkdir(parents=True, exist_ok=True)
+        assert task_store.read_task_memory() == ""
+
+    def test_returns_empty_if_dir_missing(self, task_store):
+        # task_dir doesn't exist yet — should still return ""
+        # But task_dir property raises if no task_id, so we need task_store
+        assert task_store.read_task_memory() == ""
+
+
+class TestListSessionFiles:
+    def test_empty_when_no_dir(self, task_store):
+        assert task_store.list_session_files() == []
+
+    def test_returns_sorted(self, task_store):
+        task_store.task_dir.mkdir(parents=True)
+        # Create out of order
+        (task_store.task_dir / "session-003.md").write_text("", encoding="utf-8")
+        (task_store.task_dir / "session-001.md").write_text("", encoding="utf-8")
+        (task_store.task_dir / "session-002.md").write_text("", encoding="utf-8")
+        files = task_store.list_session_files()
+        assert files == [
+            "tasks/mota_24_easy/session-001.md",
+            "tasks/mota_24_easy/session-002.md",
+            "tasks/mota_24_easy/session-003.md",
+        ]
+
+    def test_ignores_non_session_files(self, task_store):
+        task_store.task_dir.mkdir(parents=True)
+        (task_store.task_dir / "session-001.md").write_text("", encoding="utf-8")
+        (task_store.task_dir / "TASK_MEMORY.md").write_text("", encoding="utf-8")
+        files = task_store.list_session_files()
+        assert files == ["tasks/mota_24_easy/session-001.md"]
+
+
+class TestScopedSearch:
+    def test_searches_task_files_and_global(self, task_store):
+        # Set up task-scoped files
+        task_store.write_task_memory("yellow key is on floor 2\n")
+        task_store.init_session()
+        task_store.append_to_session_log("found yellow key")
+        # Set up global memory
+        task_store.write_memory("general strategy notes about keys\n")
+        results = task_store.search(["key"])
+        assert len(results) >= 2
+        # Task files should appear (TASK_MEMORY.md and session)
+        file_paths = [r.file_path for r in results]
+        assert any("TASK_MEMORY" in fp for fp in file_paths)
+        assert any("MEMORY.md" in fp for fp in file_paths)
+
+    def test_task_id_none_unchanged(self, store):
+        """Existing behavior: no task_id means only global files searched."""
+        store.write_memory("test content\n")
+        results = store.search(["test"])
+        assert len(results) == 1
+        assert results[0].file_path == "MEMORY.md"
+
+    def test_task_files_included_in_search(self, task_store):
+        """Task-scoped files are included alongside global files in search."""
+        task_store.write_task_memory("keyword match\n")
+        task_store.write_memory("keyword match\n")
+        results = task_store.search(["keyword"])
+        assert len(results) == 2
+        file_paths = {r.file_path for r in results}
+        assert any("TASK_MEMORY" in fp for fp in file_paths)
+        assert any("MEMORY.md" in fp for fp in file_paths)

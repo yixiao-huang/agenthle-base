@@ -1,8 +1,10 @@
 """
 MemoryStore - Markdown file storage layer for TinyClaw memory system.
-Manages MEMORY.md (curated long-term) and memory_logs/YYYY-MM-DD.md (daily append-only logs).
+Manages MEMORY.md (curated long-term), memory_logs/YYYY-MM-DD.md (daily append-only logs),
+and task-scoped storage: tasks/<task_id>/TASK_MEMORY.md + session-NNN.md files.
 """
 
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
@@ -28,18 +30,24 @@ class SearchResult:
 
 class MemoryStore:
     """
-    Manages memory files: MEMORY.md and memory_logs/YYYY-MM-DD.md.
+    Manages memory files: MEMORY.md, memory_logs/YYYY-MM-DD.md, and
+    task-scoped storage (tasks/<task_id>/TASK_MEMORY.md + session-NNN.md).
 
     Args:
         base_dir: Root directory for memory files. MEMORY.md lives here,
                   memory_logs/ is a subdirectory.
+        task_id: Optional task identifier for task-scoped storage.
     """
 
     MEMORY_FILE = "MEMORY.md"
     LOGS_DIR = "memory_logs"
+    TASKS_DIR = "tasks"
+    TASK_MEMORY_FILE = "TASK_MEMORY.md"
 
-    def __init__(self, base_dir: str | Path):
+    def __init__(self, base_dir: str | Path, task_id: str | None = None):
         self.base_dir = Path(base_dir)
+        self.task_id = task_id
+        self._current_session_path: Path | None = None
 
     @property
     def memory_path(self) -> Path:
@@ -48,6 +56,93 @@ class MemoryStore:
     @property
     def logs_dir(self) -> Path:
         return self.base_dir / self.LOGS_DIR
+
+    @property
+    def task_dir(self) -> Path:
+        """Path to the task-scoped directory. Raises ValueError if no task_id set."""
+        if self.task_id is None:
+            raise ValueError("task_dir requires a task_id to be set")
+        return self.base_dir / self.TASKS_DIR / self.task_id
+
+    def init_session(self) -> str:
+        """
+        Initialize a new session for the current task.
+
+        Creates the task directory if absent, scans existing session-NNN.md files
+        to determine the next session number, creates an empty session file, and
+        stores the path for use by append_to_session_log().
+
+        Returns:
+            Relative path to the new session file (e.g. "tasks/mota_24_easy/session-001.md").
+        """
+        task_dir = self.task_dir  # raises if no task_id
+        task_dir.mkdir(parents=True, exist_ok=True)
+
+        # Scan existing session files to determine next number
+        existing = sorted(task_dir.glob("session-*.md"))
+        next_num = 1
+        if existing:
+            # Extract the highest session number
+            for f in existing:
+                match = re.match(r"session-(\d+)\.md$", f.name)
+                if match:
+                    next_num = max(next_num, int(match.group(1)) + 1)
+
+        session_file = task_dir / f"session-{next_num:03d}.md"
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        header = f"# Session {next_num:03d} — {timestamp}\n\n"
+        session_file.write_text(header, encoding="utf-8")
+        self._current_session_path = session_file
+
+        return str(session_file.relative_to(self.base_dir))
+
+    def append_to_session_log(self, content: str) -> str:
+        """
+        Append timestamped content to the current session file.
+
+        Args:
+            content: Text to append.
+
+        Returns:
+            Relative path to the session file.
+
+        Raises:
+            RuntimeError: If init_session() has not been called.
+        """
+        if self._current_session_path is None:
+            raise RuntimeError("init_session() must be called before append_to_session_log()")
+
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        entry = f"\n[{timestamp}] {content}\n"
+
+        with open(self._current_session_path, "a", encoding="utf-8") as f:
+            f.write(entry)
+
+        return str(self._current_session_path.relative_to(self.base_dir))
+
+    def write_task_memory(self, content: str) -> None:
+        """Overwrite TASK_MEMORY.md for the current task. Creates dir if absent."""
+        task_dir = self.task_dir  # raises if no task_id
+        task_dir.mkdir(parents=True, exist_ok=True)
+        (task_dir / self.TASK_MEMORY_FILE).write_text(content, encoding="utf-8")
+
+    def read_task_memory(self) -> str:
+        """Read TASK_MEMORY.md content. Returns empty string if missing."""
+        task_memory_path = self.task_dir / self.TASK_MEMORY_FILE
+        if not task_memory_path.exists():
+            return ""
+        try:
+            return task_memory_path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            return ""
+
+    def list_session_files(self) -> list[str]:
+        """Return sorted list of session-NNN.md relative paths for the current task."""
+        task_dir = self.task_dir  # raises if no task_id
+        if not task_dir.exists():
+            return []
+        files = sorted(task_dir.glob("session-*.md"))
+        return [str(f.relative_to(self.base_dir)) for f in files]
 
     def read_file(
         self, relative_path: str, start_line: int = 1, end_line: Optional[int] = None
@@ -130,6 +225,17 @@ class MemoryStore:
         results: list[SearchResult] = []
 
         md_files: list[Path] = []
+
+        # When task_id is set, search task-scoped files first
+        if self.task_id is not None:
+            task_dir = self.task_dir
+            if task_dir.exists():
+                task_memory = task_dir / self.TASK_MEMORY_FILE
+                if task_memory.exists():
+                    md_files.append(task_memory)
+                md_files.extend(sorted(task_dir.glob("session-*.md")))
+
+        # Then global files
         if self.memory_path.exists():
             md_files.append(self.memory_path)
         if self.logs_dir.exists():
