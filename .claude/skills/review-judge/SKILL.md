@@ -23,7 +23,7 @@ ls -t docs/judges/judge_*.md 2>/dev/null
 ```
 
 - If **0 reports**: stop and tell the user to run `/judge` first.
-- If a **story ID** was given as target: scan reports for ones that audited that story (check the report's "Target" or "PRD Story Audit" section). Use the two most recent that cover it.
+- If a **story ID** was given as target: first look for reports with the story ID in the filename (e.g., `judge_*_US-MEM-003.md`), then fall back to scanning report contents ("Target" or "PRD Story Audit" section). Use the two most recent that cover it.
 - If **no story ID** given: use the two most recent reports.
 - If only **1 report** matches: skip the diff section, just triage that report.
 
@@ -94,16 +94,16 @@ Produce a concrete session plan:
 
 ### 5. Write the review to `docs/review-judges/`
 
-Save as a timestamped file:
+Save as a timestamped file. If a story ID was targeted, include it in the filename:
 ```
-docs/review-judges/review_YYYY-MM-DD_HHMM.md
+docs/review-judges/review_YYYY-MM-DD_HHMM[_STORYID].md
 ```
 
 The file must contain the diff (if two reports) and triage from steps 3-4.
 
 After writing, print a summary to the console:
 ```
-Review written to docs/review-judges/review_YYYY-MM-DD_HHMM.md
+Review written to docs/review-judges/review_YYYY-MM-DD_HHMM[_STORYID].md
 Score trend: [prev] -> [current] ([+/-] overall)  (or "Single report: [score] overall" if only one)
 Top 3 actions: 1) [action] 2) [action] 3) [action]
 ```

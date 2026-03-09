@@ -24,20 +24,23 @@ Target: $ARGUMENTS (if empty, audit everything done so far).
 
 All Level 1+ verification commands (unit tests, lint, smoke tests, VM runs, trajectory analysis) MUST be logged to a single file for traceability.
 
-**Log file path**: `logs/judge_YYYY-MM-DD_HHMM.log` (same timestamp as the final report)
+**Log file path**: `logs/judge_YYYY-MM-DD_HHMM[_STORYID].log` (same timestamp as the final report; includes story ID if targeting a specific story)
 
 **Before running any tests**, initialize the log:
 ```bash
 mkdir -p logs
 TIMESTAMP=$(date +%Y-%m-%d_%H%M)
-LOG_FILE="logs/judge_${TIMESTAMP}.log"
+# If targeting a specific story, include its ID in the filename
+# e.g., SUFFIX="_US-MEM-003" or SUFFIX="" for full audit
+SUFFIX=""  # set to "_<STORY-ID>" if a story target was given
+LOG_FILE="logs/judge_${TIMESTAMP}${SUFFIX}.log"
 echo "=== AgentHLE Judge Audit Log ===" > "$LOG_FILE"
 echo "Started: $(date -Iseconds)" >> "$LOG_FILE"
 echo "Target: [story ID or 'full project']" >> "$LOG_FILE"
 echo "========================================" >> "$LOG_FILE"
 ```
 
-Store `$LOG_FILE` and `$TIMESTAMP` for use throughout the audit.
+Store `$LOG_FILE`, `$TIMESTAMP`, and `$SUFFIX` for use throughout the audit.
 
 **What to log** (Level 1+ verification only):
 
@@ -69,7 +72,7 @@ cat memory_data/tasks/*/session-*.md 2>&1 >> "$LOG_FILE"
 ```bash
 echo -e "\n========================================" >> "$LOG_FILE"
 echo "Completed: $(date -Iseconds)" >> "$LOG_FILE"
-echo "Report: docs/judges/judge_${TIMESTAMP}.md" >> "$LOG_FILE"
+echo "Report: docs/judges/judge_${TIMESTAMP}${SUFFIX}.md" >> "$LOG_FILE"
 ```
 
 ---
@@ -105,14 +108,16 @@ Create the raw log file BEFORE running any tests. All Level 1+ verification outp
 ```bash
 mkdir -p logs
 TIMESTAMP=$(date +%Y-%m-%d_%H%M)
-LOG_FILE="logs/judge_${TIMESTAMP}.log"
+# If targeting a specific story, include its ID in the filename
+SUFFIX=""  # set to "_<STORY-ID>" if a story target was given
+LOG_FILE="logs/judge_${TIMESTAMP}${SUFFIX}.log"
 echo "=== AgentHLE Judge Audit Log ===" > "$LOG_FILE"
 echo "Started: $(date -Iseconds)" >> "$LOG_FILE"
 echo "Target: [story ID or 'full project']" >> "$LOG_FILE"
 echo "========================================" >> "$LOG_FILE"
 ```
 
-Store `$LOG_FILE` and `$TIMESTAMP` — you'll use them throughout.
+Store `$LOG_FILE`, `$TIMESTAMP`, and `$SUFFIX` — you'll use them throughout.
 
 ### 1. Gather the full picture (parallel reads)
 
@@ -276,7 +281,7 @@ Produce concrete, prioritized suggestions in these categories:
 ```bash
 echo -e "\n========================================" >> "$LOG_FILE"
 echo "Completed: $(date -Iseconds)" >> "$LOG_FILE"
-echo "Report: docs/judges/judge_${TIMESTAMP}.md" >> "$LOG_FILE"
+echo "Report: docs/judges/judge_${TIMESTAMP}${SUFFIX}.md" >> "$LOG_FILE"
 ```
 
 **Then**, write the audit report. The report MUST include the raw log path near the top.
@@ -284,8 +289,8 @@ echo "Report: docs/judges/judge_${TIMESTAMP}.md" >> "$LOG_FILE"
 ```markdown
 ## AgentHLE Audit Report
 
-**Raw audit log**: `logs/judge_YYYY-MM-DD_HHMM.log`
-**Report**: `docs/judges/judge_YYYY-MM-DD_HHMM.md`
+**Raw audit log**: `logs/judge_YYYY-MM-DD_HHMM[_STORYID].log`
+**Report**: `docs/judges/judge_YYYY-MM-DD_HHMM[_STORYID].md`
 
 ### Overall Assessment
 [1-2 sentence summary: How sound is the current work? What's the biggest gap?]
@@ -349,11 +354,11 @@ echo "Report: docs/judges/judge_${TIMESTAMP}.md" >> "$LOG_FILE"
 **[PASS / FAIL / NEEDS WORK]** — [one-sentence summary of what's good and what must change]
 ```
 
-Save as `docs/judges/judge_${TIMESTAMP}.md` (same timestamp as the log). If a previous report exists, do NOT overwrite it — each run creates a new timestamped file.
+Save as `docs/judges/judge_${TIMESTAMP}${SUFFIX}.md` (same timestamp as the log). If a previous report exists, do NOT overwrite it — each run creates a new timestamped file.
 
 After writing, print a one-line summary:
 ```
-Judge report written to docs/judges/judge_YYYY-MM-DD_HHMM.md (log: logs/judge_YYYY-MM-DD_HHMM.log) — [1-sentence summary]
+Judge report written to docs/judges/judge_YYYY-MM-DD_HHMM[_STORYID].md (log: logs/judge_YYYY-MM-DD_HHMM[_STORYID].log) — [1-sentence summary]
 ```
 
 ---
