@@ -69,9 +69,9 @@ This is the ultimate test of usefulness. Requires multiple runs:
    - After compaction: TASK_MEMORY.md should contain corrected info, not both contradicting statements
    - A text LLM judges the compacted output for contradictions
 
-## Automated Evaluation: `/eval`
+## Automated Evaluation: `/judge`
 
-The `/eval` skill spawns a subagent that operationalizes this framework. It reads the PRD story, finds golden references, critiques acceptance criteria, runs Level 1 checks, and designs Level 2/3 test plans. Run `/eval US-MEM-003` (or just `/eval` for the current story) after implementing and before `/ship`.
+The `/judge` skill spawns a subagent that operationalizes this framework. It reads the PRD story, compares against golden references, audits acceptance criteria, runs a real VM test, and analyzes behavioral evidence from trajectory logs. Run `/judge US-MEM-003` (or just `/judge` for a full project audit) after implementing and before `/ship`.
 
 ## Verification Checklist (Per Story)
 

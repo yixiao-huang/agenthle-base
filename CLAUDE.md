@@ -18,7 +18,7 @@ Run `/onboard` to read all key files, check git state, and identify the current 
 4. Check `skills/` for available skills (read SKILL.md files).
 
 ### After you finish
-1. Run `/eval` to spawn an evaluator subagent that critiques your acceptance criteria, designs proper tests, and checks Level 1 results.
+1. Run `/judge` to audit acceptance criteria, compare against golden references, run a real VM test, and get a critical review.
 2. Run `/ship` to self-review, update PRD + progress, and commit+push.
 
 ## Key Files
@@ -30,6 +30,7 @@ Run `/onboard` to read all key files, check git state, and identify the current 
 | `progress.txt` | Codebase Patterns (top) + per-story progress entries |
 | `docs/cua-context-management.md` | How CUA agent context works (sliding window, truncation) |
 | `docs/memory-system.md` | TinyClaw memory system design |
+| `docs/openclaw-context-flow.md` | OpenClaw context management reference (prompts, compaction, tools) |
 | `docs/testing-feedback-loops.md` | Three-level verification guidelines |
 
 ## Quality Requirements

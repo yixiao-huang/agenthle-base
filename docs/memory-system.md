@@ -2,6 +2,8 @@
 
 This document captures the research on OpenClaw's production memory system and the proposed TinyClaw design for AgentHLE. TinyClaw is intentionally simpler — it takes the ideas that matter for a benchmark agent and leaves the rest behind.
 
+For OpenClaw's full context management pipeline (system prompt construction, compaction prompts, tool loop, sub-agents), see [openclaw-context-flow.md](openclaw-context-flow.md). That doc covers the broader architecture; this doc focuses specifically on the memory subsystem.
+
 ## Part 1: OpenClaw Memory System (Reference)
 
 OpenClaw is a personal AI assistant running across 20+ messaging channels. Its memory system is built for long-running, multi-session conversations with persistent user context.

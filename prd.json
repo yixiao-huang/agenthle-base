@@ -106,6 +106,27 @@
       "notes": "Implemented with OpenClaw-aligned API (path/from/lines). Also wired into agenthle_agent.py tools list. Reference attribution docstring added citing openclaw source.\n\nContext retention caveat: Same as memory_search — function_call_output items are ephemeral and get truncated. The agent should act on retrieved content immediately (e.g., write key findings to session log via memory_write) rather than relying on it persisting in context. See docs/cua-context-management.md."
     },
     {
+      "id": "US-PRD-REF",
+      "title": "Add golden references to all PRD stories",
+      "description": "As a developer, I want each PRD story to have a context.reference field pointing to the golden reference (mature implementation or design doc section) that defines what good looks like, so that both implementers and the /judge skill have a quality bar to compare against.",
+      "context": {
+        "existingFiles": ["prd.json (current PRD with stories missing context.reference)", "docs/memory-system.md (OpenClaw reference design)", "docs/cua-context-management.md (CUA context analysis)"],
+        "pattern": "US-MEM-RCL already has a reference field — follow that example for all other stories",
+        "designDoc": "docs/memory-system.md (Part 1: OpenClaw Memory System — source of most golden references)"
+      },
+      "acceptanceCriteria": [
+        "Every story with passes:false in prd.json has a context.reference field",
+        "Completed stories (passes:true) that had OpenClaw-inspired implementations also gain context.reference retroactively",
+        "References point to specific files, classes, or doc sections — not vague pointers",
+        "References include OpenClaw source files for memory tools (store, search, get, write, callback, compaction)",
+        "References include CUA framework files for agent wiring patterns",
+        "Level 1: prd.json is valid JSON (python -m json.tool prd.json)"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": "This is a PRD-only story — no code changes. The goal is to make every story self-contained by pointing to the implementation that inspired it. OpenClaw source lives at openclaw/ (or referenced in docs/memory-system.md). CUA framework files are at submodules/cua/. For stories without a clear external reference, point to the relevant design doc section or an existing in-repo pattern."
+    },
+    {
       "id": "US-MEM-TSK-S",
       "title": "Task-scoped storage layer",
       "description": "As a developer, I want MemoryStore to support task-scoped directories with session files and TASK_MEMORY.md. This extends the existing MemoryStore with new methods but does NOT touch the agent code.",

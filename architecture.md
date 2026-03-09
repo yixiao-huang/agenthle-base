@@ -83,7 +83,7 @@ agenthle-base/
 ├── .claude/skills/              # Claude Code skills (SKILL.md files)
 │   ├── onboard/SKILL.md        # /onboard — session startup, reads key files
 │   ├── prd/SKILL.md            # /prd — create/update prd.json
-│   ├── eval/SKILL.md           # /eval — subagent evaluator (context:fork)
+│   ├── judge/SKILL.md          # /judge — peer-review, VM test, golden ref audit
 │   └── ship/SKILL.md           # /ship — self-review, commit, push
 ├── skills/                      # Legacy skills directory
 │   └── prd/SKILL.md
@@ -127,7 +127,7 @@ The `AgentHLEAgent` class (`@register_agent("agenthle-agent")`):
   - Runs agent loop, tracking tokens and steps
   - Returns `AgentResult` with usage stats and failure mode
 
-For details on how the CUA agent loop manages its conversation context (sliding window, truncation, what survives across turns, and why TinyClaw is needed), see [docs/cua-context-management.md](docs/cua-context-management.md).
+For details on how the CUA agent loop manages its conversation context (sliding window, truncation, what survives across turns, and why TinyClaw is needed), see [docs/cua-context-management.md](docs/cua-context-management.md). For the OpenClaw reference implementation (system prompt, compaction prompts, memory recall, tool loop), see [docs/openclaw-context-flow.md](docs/openclaw-context-flow.md).
 
 ### 2. Task System
 

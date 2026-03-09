@@ -26,6 +26,7 @@ Read ALL of these files to understand the project and current state:
 Also read these if relevant to the current work area:
 - `docs/memory-system.md` — memory system design (for memory features)
 - `docs/cua-context-management.md` — how CUA agent context works (for agent/context work)
+- `docs/openclaw-context-flow.md` — OpenClaw reference: system prompt, compaction prompts, memory recall, tool loop (for memory/compaction/recall stories)
 
 ### 2. Check git state
 

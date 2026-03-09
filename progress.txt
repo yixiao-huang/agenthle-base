@@ -143,3 +143,13 @@
   - OpenClaw enforces .md-only access — important defense-in-depth even when MemoryStore scopes to base_dir
   - When a golden reference exists, compare API shape early — easier to align upfront than refactor later
 ---
+
+## 2026-03-08 - OpenClaw context flow extract + cross-references + US-PRD-REF story
+- Created `docs/openclaw-context-flow.md` — markdown extract of `docs/openclaw-context-flow.html` (interactive visual) for AI agent consumption. Covers system prompt construction, Memory Recall verbatim prompt, compaction pipeline (safeguard flush, 3 summarization prompt variants, constants), tool loop, and TinyClaw relevance map.
+- Added cross-references to `openclaw-context-flow.md` in: CLAUDE.md (Key Files), architecture.md (Agent Harness), docs/memory-system.md (intro), .claude/skills/onboard/SKILL.md (conditional reads)
+- Added US-PRD-REF story to prd.json for adding golden references to all stories
+- Files changed: docs/openclaw-context-flow.md (created), CLAUDE.md, architecture.md, docs/memory-system.md, .claude/skills/onboard/SKILL.md, prd.json
+- **Learnings for future iterations:**
+  - HTML interactive docs are NOT useful for AI agents — they can't render visuals, and content is buried in JS string literals. Always create a markdown companion for agent consumption.
+  - Cross-reference new docs in at least: CLAUDE.md Key Files, architecture.md relevant section, onboard skill, and the design doc it extends
+---

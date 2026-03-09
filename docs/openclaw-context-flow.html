@@ -1,0 +1,2086 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenClaw Context Management — Interactive Flow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #f7f5f2;
+  --surface: #ffffff;
+  --border: #e2e8f0;
+  --border-strong: #cbd5e1;
+  --text: #0f172a;
+  --muted: #475569;
+  --light: #94a3b8;
+
+  /* Agenthle-style muted, professional palette */
+  --blue: #3b82f6;
+  --blue-bg: #eff6ff;
+  --blue-border: #bfdbfe;
+  --blue-text: #1e40af;
+
+  --green: #10b981;
+  --green-bg: #ecfdf5;
+  --green-border: #a7f3d0;
+  --green-text: #065f46;
+
+  --red: #ef4444;
+  --red-bg: #fef2f2;
+  --red-border: #fecaca;
+  --red-text: #991b1b;
+
+  --amber: #f59e0b;
+  --amber-bg: #fffbeb;
+  --amber-border: #fde68a;
+  --amber-text: #92400e;
+
+  --purple: #8b5cf6;
+  --purple-bg: #f5f3ff;
+  --purple-border: #ddd6fe;
+  --purple-text: #5b21b6;
+
+  --slate-bg: #f8fafc;
+  --slate-border: #e2e8f0;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: var(--bg); color: var(--text);
+  overflow: hidden; height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Header ── */
+#topbar {
+  height: 64px; background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; padding: 0 32px; gap: 20px;
+  z-index: 200; position: relative;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+#topbar h1 { font-size: 22px; font-weight: 700; color: var(--text); letter-spacing: -0.3px; }
+#topbar .hint { font-size: 16px; color: var(--muted); }
+#topbar .legend { display: flex; gap: 18px; margin-left: auto; font-size: 15px; color: var(--muted); }
+#topbar .legend span { display: flex; align-items: center; gap: 6px; }
+#topbar .legend i { width: 14px; height: 14px; border-radius: 4px; display: inline-block; }
+
+/* ── Canvas ── */
+#canvas-wrap {
+  position: absolute; top: 64px; left: 0; right: 0; bottom: 0;
+  overflow: auto; cursor: grab;
+}
+#canvas-wrap.grabbing { cursor: grabbing; }
+#canvas {
+  position: relative;
+  width: 2900px;
+  height: 5600px;
+  min-width: 100%;
+}
+svg#lines {
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+  pointer-events: none; z-index: 1;
+}
+
+/* ── Nodes ── */
+.node {
+  position: absolute; z-index: 10;
+  border-radius: 14px; padding: 20px 28px;
+  cursor: pointer; transition: box-shadow 0.2s, transform 0.15s;
+  text-align: center; font-size: 18px; line-height: 1.5;
+  border: 1.5px solid var(--border);
+  min-width: 180px;
+  user-select: none;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+.node:hover { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(0,0,0,0.1); z-index: 20; }
+.node.selected { box-shadow: 0 0 0 3px var(--blue), 0 8px 28px rgba(0,0,0,0.1); z-index: 30; }
+.node .title { font-weight: 700; font-size: 18px; margin-bottom: 4px; }
+.node .sub { font-size: 15px; opacity: 0.7; line-height: 1.45; }
+
+.node.entry { background: var(--blue-bg); border-color: var(--blue-border); color: var(--blue-text); }
+.node.entry .sub { color: var(--blue-text); }
+.node.orch { background: var(--green-bg); border-color: var(--green-border); color: var(--green-text); }
+.node.orch .sub { color: var(--green-text); }
+.node.ctx { background: var(--purple-bg); border-color: var(--purple-border); color: var(--purple-text); }
+.node.ctx .sub { color: var(--purple-text); }
+.node.api { background: var(--red-bg); border-color: var(--red-border); color: var(--red-text); }
+.node.api .sub { color: var(--red-text); }
+.node.compact { background: var(--amber-bg); border-color: var(--amber-border); color: var(--amber-text); }
+.node.compact .sub { color: var(--amber-text); }
+.node.decision {
+  background: var(--surface); border-color: var(--border-strong); color: var(--text);
+  border-radius: 50%; width: 120px; height: 120px;
+  display: flex; align-items: center; justify-content: center; padding: 0;
+}
+.node.decision .title { font-size: 16px; margin: 0; font-weight: 600; }
+.node.tool { background: var(--slate-bg); border-color: var(--blue-border); border-style: dashed; color: var(--blue-text); }
+.node.tool .sub { color: var(--muted); }
+.node.file { background: var(--slate-bg); border-color: var(--purple-border); border-style: dashed; color: var(--purple-text); }
+.node.file .sub { color: var(--muted); }
+
+/* Phase labels */
+.phase-label {
+  position: absolute; z-index: 5;
+  font-size: 15px; font-weight: 700; text-transform: uppercase; letter-spacing: 2px;
+  color: var(--light); opacity: 0.6;
+  writing-mode: vertical-rl; text-orientation: mixed;
+}
+.phase-region {
+  position: absolute; z-index: 0;
+  border: 1.5px dashed var(--border);
+  border-radius: 20px;
+  background: rgba(255,255,255,0.4);
+}
+
+/* ── Detail Panel ── */
+#panel {
+  position: fixed; top: 64px; right: -640px; width: 620px; bottom: 0;
+  background: var(--surface); border-left: 1px solid var(--border);
+  z-index: 100; transition: right 0.3s ease, width 0s;
+  display: flex; flex-direction: column;
+  box-shadow: -8px 0 40px rgba(0,0,0,0.08);
+  min-width: 400px; max-width: 90vw;
+}
+#panel.open { right: 0; }
+#panel.resizing { transition: none; }
+#panel-resize {
+  position: absolute; top: 0; left: -4px; width: 8px; bottom: 0;
+  cursor: col-resize; z-index: 110;
+}
+#panel-resize::after {
+  content: ''; position: absolute; top: 50%; left: 2px;
+  width: 4px; height: 48px; transform: translateY(-50%);
+  border-radius: 2px; background: var(--border-strong);
+  opacity: 0; transition: opacity 0.2s;
+}
+#panel-resize:hover::after, #panel.resizing #panel-resize::after { opacity: 1; }
+#panel-header {
+  padding: 20px 28px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+#panel-header h2 { font-size: 24px; font-weight: 700; color: var(--text); }
+#panel-close {
+  background: none; border: 1px solid var(--border); color: var(--muted);
+  width: 32px; height: 32px; border-radius: 8px; cursor: pointer; font-size: 18px;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s;
+}
+#panel-close:hover { color: var(--text); border-color: var(--text); background: var(--slate-bg); }
+#panel-body {
+  flex: 1; overflow-y: auto; padding: 24px 28px;
+}
+#panel-body h3 { font-size: 19px; font-weight: 600; color: var(--text); margin: 24px 0 12px; }
+#panel-body h3:first-child { margin-top: 0; }
+#panel-body p, #panel-body li { font-size: 17px; color: var(--muted); line-height: 1.7; }
+#panel-body ul, #panel-body ol { padding-left: 22px; }
+#panel-body li { margin-bottom: 8px; }
+#panel-body strong { color: var(--text); font-weight: 600; }
+#panel-body code {
+  background: var(--bg); padding: 3px 8px; border-radius: 5px;
+  font-size: 15px; color: var(--purple-text);
+  font-family: 'JetBrains Mono', monospace;
+}
+#panel-body pre {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
+  padding: 20px; margin: 12px 0 16px; font-size: 15px; line-height: 1.6;
+  overflow-x: auto; color: var(--muted); white-space: pre-wrap;
+  font-family: 'JetBrains Mono', monospace;
+}
+#panel-body pre .k { color: var(--purple); }
+#panel-body pre .s { color: var(--green); }
+#panel-body pre .c { color: var(--light); }
+#panel-body pre .n { color: var(--amber); }
+#panel-body .callout {
+  border-left: 3px solid var(--amber); padding: 14px 18px;
+  background: var(--amber-bg); border-radius: 0 8px 8px 0;
+  margin: 14px 0; font-size: 16px; color: var(--amber-text);
+}
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <h1>OpenClaw Context Management</h1>
+  <span class="hint">Click any node for details &middot; Scroll or drag to navigate</span>
+  <div class="legend">
+    <span><i style="background:var(--blue-bg);border:1.5px solid var(--blue-border)"></i> Entry</span>
+    <span><i style="background:var(--green-bg);border:1.5px solid var(--green-border)"></i> Orchestration</span>
+    <span><i style="background:var(--purple-bg);border:1.5px solid var(--purple-border)"></i> Context Build</span>
+    <span><i style="background:var(--red-bg);border:1.5px solid var(--red-border)"></i> LLM API</span>
+    <span><i style="background:var(--amber-bg);border:1.5px solid var(--amber-border)"></i> Compaction</span>
+    <span><i style="background:var(--slate-bg);border:1.5px dashed var(--blue-border)"></i> Tool / File</span>
+  </div>
+</div>
+
+<div id="canvas-wrap">
+<div id="canvas">
+  <svg id="lines"></svg>
+
+  <!-- Phase background regions -->
+  <div class="phase-region" style="left:50px;top:20px;width:2800px;height:700px"></div>
+  <div class="phase-label" style="left:16px;top:260px">PHASE 1 — SETUP</div>
+
+  <div class="phase-region" style="left:50px;top:740px;width:2800px;height:1500px"></div>
+  <div class="phase-label" style="left:16px;top:1300px">PHASE 2 — PROMPT</div>
+
+  <div class="phase-region" style="left:50px;top:2260px;width:2800px;height:1400px"></div>
+  <div class="phase-label" style="left:16px;top:2760px">PHASE 3 — TOOL LOOP</div>
+
+  <div class="phase-region" style="left:50px;top:3680px;width:1500px;height:1400px"></div>
+  <div class="phase-label" style="left:16px;top:4200px">PHASE 4 — COMPACTION</div>
+
+  <div class="phase-region" style="left:1600px;top:3680px;width:1250px;height:950px"></div>
+  <div class="phase-label" style="left:1580px;top:4050px;writing-mode:horizontal-tb">PHASE 5 — SUB-AGENT</div>
+
+  <!-- ═══════════════ PHASE 1: SETUP ═══════════════ -->
+  <div class="node entry" id="n-msg" style="left:1100px;top:50px;width:300px">
+    <div class="title">Inbound Message</div>
+    <div class="sub">Telegram / Discord / CLI / WebSocket</div>
+  </div>
+  <div class="node entry" id="n-route" style="left:1110px;top:200px;width:280px">
+    <div class="title">Route Resolution</div>
+    <div class="sub">bindings → agentId + sessionKey</div>
+  </div>
+  <div class="node entry" id="n-queue" style="left:1110px;top:350px;width:280px">
+    <div class="title">Message Queue</div>
+    <div class="sub">per-session FIFO</div>
+  </div>
+  <div class="node orch" id="n-agent" style="left:1060px;top:510px;width:380px">
+    <div class="title">runEmbeddedPiAgent()</div>
+    <div class="sub">Main Agent Orchestrator</div>
+  </div>
+
+  <!-- ═══════════════ PHASE 2: CONTEXT BUILD ═══════════════ -->
+  <div class="node orch" id="n-attempt" style="left:1000px;top:780px;width:500px">
+    <div class="title">runEmbeddedAttempt()</div>
+    <div class="sub">load session → bootstrap files → build system prompt → build messages → apply params → stream LLM → tool loop</div>
+  </div>
+
+  <!-- Left branch: session loading -->
+  <div class="node ctx" id="n-session" style="left:380px;top:960px;width:300px">
+    <div class="title">Load Session .jsonl</div>
+    <div class="sub">replay past messages or compaction summary</div>
+  </div>
+
+  <!-- Right branch: bootstrap context -->
+  <div class="node ctx" id="n-bootstrap" style="left:1680px;top:960px;width:320px">
+    <div class="title">resolveBootstrapContext()</div>
+    <div class="sub">read workspace identity files</div>
+  </div>
+
+  <!-- Bootstrap file nodes -->
+  <div class="node file" id="n-soul" style="left:1460px;top:1140px;width:170px">
+    <div class="title">SOUL.md</div>
+    <div class="sub">personality &amp; values</div>
+  </div>
+  <div class="node file" id="n-agents" style="left:1660px;top:1140px;width:170px">
+    <div class="title">AGENTS.md</div>
+    <div class="sub">operating instructions</div>
+  </div>
+  <div class="node file" id="n-user" style="left:1860px;top:1140px;width:170px">
+    <div class="title">USER.md</div>
+    <div class="sub">owner profile</div>
+  </div>
+  <div class="node file" id="n-identity" style="left:2060px;top:1140px;width:170px">
+    <div class="title">IDENTITY.md</div>
+    <div class="sub">name, emoji, vibe</div>
+  </div>
+
+  <!-- Session sub-nodes -->
+  <div class="node file" id="n-jsonl" style="left:100px;top:1140px;width:220px">
+    <div class="title">&lt;id&gt;.jsonl</div>
+    <div class="sub">append-only transcript</div>
+  </div>
+  <div class="node file" id="n-compact-summary" style="left:360px;top:1140px;width:230px">
+    <div class="title">Compaction Summary</div>
+    <div class="sub">replaces dropped messages</div>
+  </div>
+  <div class="node file" id="n-sessionjson" style="left:630px;top:1140px;width:200px">
+    <div class="title">sessions.json</div>
+    <div class="sub">metadata index</div>
+  </div>
+
+  <!-- Build system prompt -->
+  <div class="node ctx" id="n-sysprompt" style="left:900px;top:1340px;width:700px">
+    <div class="title">buildAgentSystemPrompt()</div>
+    <div class="sub">1. Base Instructions → 2. Tool Catalog → 3. Safety Rules → 4. Memory Instructions → 5. Skills → 6. Workspace Files → 7. Identity + TZ → 8. Runtime Info</div>
+  </div>
+
+  <!-- Example full system prompt -->
+  <div class="node file" id="n-sysprompt-example" style="left:100px;top:1340px;width:340px">
+    <div class="title">Example: Full System Prompt</div>
+    <div class="sub">click to see the actual assembled text sent as the "system" field</div>
+  </div>
+
+  <!-- Three inputs to API request -->
+  <div class="node file" id="n-messages" style="left:400px;top:1480px;width:290px">
+    <div class="title">messages[]</div>
+    <div class="sub">replayed history + new user message (with sender metadata prefix)</div>
+  </div>
+  <div class="node file" id="n-syspromptstr" style="left:960px;top:1480px;width:270px">
+    <div class="title">system prompt string</div>
+    <div class="sub">reconstructed every call from current workspace files</div>
+  </div>
+  <div class="node file" id="n-toolschemas" style="left:1660px;top:1480px;width:280px">
+    <div class="title">Tool Schemas (25+)</div>
+    <div class="sub">JSON Schema per tool, filtered by profile: minimal / coding / full</div>
+  </div>
+
+  <!-- API request -->
+  <div class="node ctx" id="n-request" style="left:900px;top:1680px;width:600px">
+    <div class="title">Construct API Request</div>
+    <div class="sub">{ system, messages[], tools[], model, stream: true }</div>
+  </div>
+
+  <!-- Not injected callout -->
+  <div class="node compact" id="n-not-injected" style="left:2080px;top:1480px;width:320px">
+    <div class="title">MEMORY.md — NOT injected</div>
+    <div class="sub">accessed on-demand via memory_search tool calls, not in system prompt</div>
+  </div>
+
+  <!-- ═══════════════ PHASE 3: LLM + TOOL LOOP ═══════════════ -->
+  <div class="node api" id="n-llm" style="left:1040px;top:2310px;width:380px">
+    <div class="title">streamSimple() → LLM API</div>
+    <div class="sub">HTTP POST streaming SSE<br/>api.anthropic.com/v1/messages</div>
+  </div>
+
+  <div class="node api" id="n-parse" style="left:1040px;top:2500px;width:380px">
+    <div class="title">Parse Response Blocks</div>
+    <div class="sub">thinking (internal) + text (user-facing) + tool_use (action)</div>
+  </div>
+
+  <div class="node decision" id="n-stop" style="left:1170px;top:2680px">
+    <div class="title">stop<br/>Reason?</div>
+  </div>
+
+  <div class="node orch" id="n-done" style="left:780px;top:2700px;width:260px">
+    <div class="title">Deliver to User ✓</div>
+    <div class="sub">end_turn → return final text</div>
+  </div>
+
+  <div class="node orch" id="n-extract" style="left:1440px;top:2680px;width:300px">
+    <div class="title">Extract tool_use Blocks</div>
+    <div class="sub">may be multiple (executed sequentially)</div>
+  </div>
+
+  <div class="node entry" id="n-validate" style="left:1440px;top:2840px;width:300px">
+    <div class="title">Validate &amp; Execute</div>
+    <div class="sub">check allowed set, schema, sandbox</div>
+  </div>
+
+  <!-- Tool type nodes -->
+  <div class="node tool" id="n-t-read" style="left:120px;top:3040px;width:160px">
+    <div class="title">read</div>
+    <div class="sub">file → text</div>
+  </div>
+  <div class="node tool" id="n-t-exec" style="left:310px;top:3040px;width:160px">
+    <div class="title">exec</div>
+    <div class="sub">shell → stdout</div>
+  </div>
+  <div class="node tool" id="n-t-write" style="left:500px;top:3040px;width:160px">
+    <div class="title">write / edit</div>
+    <div class="sub">modify files</div>
+  </div>
+  <div class="node tool" id="n-t-mem" style="left:690px;top:3040px;width:200px">
+    <div class="title">memory_search</div>
+    <div class="sub">semantic → sqlite-vec</div>
+  </div>
+  <div class="node tool" id="n-t-memget" style="left:920px;top:3040px;width:180px">
+    <div class="title">memory_get</div>
+    <div class="sub">read file + lines</div>
+  </div>
+  <div class="node tool" id="n-t-web" style="left:1130px;top:3040px;width:180px">
+    <div class="title">web_fetch</div>
+    <div class="sub">url → content</div>
+  </div>
+  <div class="node tool" id="n-t-browser" style="left:1340px;top:3040px;width:160px">
+    <div class="title">browser</div>
+    <div class="sub">playwright</div>
+  </div>
+  <div class="node tool" id="n-t-spawn" style="left:1530px;top:3040px;width:200px">
+    <div class="title">sessions_spawn</div>
+    <div class="sub">create sub-agent</div>
+  </div>
+  <div class="node tool" id="n-t-other" style="left:1760px;top:3040px;width:240px">
+    <div class="title">cron / canvas / image / tts / message ...</div>
+    <div class="sub">other tools</div>
+  </div>
+
+  <!-- Collect results -->
+  <div class="node orch" id="n-results" style="left:880px;top:3240px;width:380px">
+    <div class="title">Collect tool_results</div>
+    <div class="sub">one result per tool_use, append to messages[]</div>
+  </div>
+
+  <div class="node orch" id="n-persist" style="left:880px;top:3400px;width:380px">
+    <div class="title">Persist to .jsonl</div>
+    <div class="sub">type:message role:assistant + type:message role:toolResult</div>
+  </div>
+
+  <div class="node decision" id="n-overflow" style="left:1020px;top:3560px">
+    <div class="title">context<br/>overflow?</div>
+  </div>
+
+  <!-- ═══════════════ PHASE 4: COMPACTION ═══════════════ -->
+  <div class="node compact" id="n-trigger" style="left:200px;top:3740px;width:340px">
+    <div class="title">Compaction Triggered</div>
+    <div class="sub">reactive: API error "prompt too long"<br/>proactive: pre-compaction hook</div>
+  </div>
+
+  <div class="node compact" id="n-safeguard" style="left:200px;top:3940px;width:340px">
+    <div class="title">Safeguard: Silent Turn</div>
+    <div class="sub">inject user msg: "Store durable memories now... reply NO_REPLY"</div>
+  </div>
+
+  <div class="node compact" id="n-flush-exec" style="left:200px;top:4140px;width:340px">
+    <div class="title">Agent Flushes Memory</div>
+    <div class="sub">writes to memory/YYYY-MM-DD.md then responds NO_REPLY</div>
+  </div>
+
+  <div class="node compact" id="n-compact-exec" style="left:200px;top:4340px;width:340px">
+    <div class="title">compactSession()</div>
+    <div class="sub">generate markdown summary, discard old msgs, keep after firstKeptEntryId</div>
+  </div>
+
+  <div class="node compact" id="n-trunc" style="left:680px;top:4340px;width:340px">
+    <div class="title">Truncate Tool Results</div>
+    <div class="sub">shrink oversized tool_result blocks if still overflowing</div>
+  </div>
+
+  <div class="node decision" id="n-retry-check" style="left:480px;top:4560px">
+    <div class="title">still<br/>over?</div>
+  </div>
+
+  <div class="node orch" id="n-retry-ok" style="left:200px;top:4720px;width:280px">
+    <div class="title">Retry LLM Call ✓</div>
+    <div class="sub">with compacted context</div>
+  </div>
+  <div class="node api" id="n-retry-fail" style="left:680px;top:4720px;width:280px">
+    <div class="title">Error ✗</div>
+    <div class="sub">all 3 attempts failed</div>
+  </div>
+
+  <!-- ═══════════════ PHASE 5: SUB-AGENT ═══════════════ -->
+  <div class="node ctx" id="n-spawn-step" style="left:1720px;top:3740px;width:340px">
+    <div class="title">runAgentStep()</div>
+    <div class="sub">gateway method "agent" with lane: NESTED, channel: INTERNAL</div>
+  </div>
+  <div class="node ctx" id="n-child" style="left:1720px;top:3940px;width:340px">
+    <div class="title">Child: runEmbeddedPiAgent()</div>
+    <div class="sub">own session .jsonl, own system prompt, own tool loop</div>
+  </div>
+  <div class="node decision" id="n-depth" style="left:1840px;top:4140px">
+    <div class="title">depth<br/>ok?</div>
+  </div>
+  <div class="node orch" id="n-child-result" style="left:1660px;top:4320px;width:440px">
+    <div class="title">Child Returns Result</div>
+    <div class="sub">delivered to parent as tool_result for sessions_spawn</div>
+  </div>
+
+</div>
+</div>
+
+<!-- ── Detail Panel ── -->
+<div id="panel">
+  <div id="panel-resize"></div>
+  <div id="panel-header">
+    <h2 id="panel-title"></h2>
+    <button id="panel-close" onclick="closePanel()">×</button>
+  </div>
+  <div id="panel-body"></div>
+</div>
+
+<script>
+const CONNS = [
+  ['n-msg','n-route'],['n-route','n-queue'],['n-queue','n-agent'],
+  ['n-agent','n-attempt'],
+  ['n-attempt','n-session','left'],['n-attempt','n-bootstrap','right'],
+  ['n-session','n-jsonl'],['n-session','n-compact-summary'],['n-session','n-sessionjson'],
+  ['n-bootstrap','n-soul'],['n-bootstrap','n-agents'],['n-bootstrap','n-user'],['n-bootstrap','n-identity'],
+  ['n-session','n-sysprompt','merge-left'],['n-bootstrap','n-sysprompt','merge-right'],
+  ['n-sysprompt','n-sysprompt-example','left'],
+  ['n-sysprompt','n-syspromptstr'],
+  ['n-messages','n-request','merge-left'],['n-syspromptstr','n-request'],['n-toolschemas','n-request','merge-right'],
+  ['n-toolschemas','n-not-injected','right-hint'],
+  ['n-request','n-llm'],
+  ['n-llm','n-parse'],['n-parse','n-stop'],
+  ['n-stop','n-done','left'],['n-stop','n-extract','right'],
+  ['n-extract','n-validate'],
+  ['n-validate','n-t-read','fan'],['n-validate','n-t-exec','fan'],['n-validate','n-t-write','fan'],
+  ['n-validate','n-t-mem','fan'],['n-validate','n-t-memget','fan'],['n-validate','n-t-web','fan'],
+  ['n-validate','n-t-browser','fan'],['n-validate','n-t-spawn','fan'],['n-validate','n-t-other','fan'],
+  ['n-t-read','n-results','fan'],['n-t-exec','n-results','fan'],['n-t-write','n-results','fan'],
+  ['n-t-mem','n-results','fan'],['n-t-memget','n-results','fan'],['n-t-web','n-results','fan'],
+  ['n-t-browser','n-results','fan'],['n-t-spawn','n-results','fan'],['n-t-other','n-results','fan'],
+  ['n-results','n-persist'],['n-persist','n-overflow'],
+  ['n-overflow','n-llm','loop-back'],
+  ['n-overflow','n-trigger','left'],
+  ['n-trigger','n-safeguard'],['n-safeguard','n-flush-exec'],['n-flush-exec','n-compact-exec'],
+  ['n-compact-exec','n-retry-check'],['n-trunc','n-retry-check'],
+  ['n-compact-exec','n-trunc','right'],
+  ['n-retry-check','n-retry-ok','left'],['n-retry-check','n-retry-fail','right'],
+  ['n-retry-ok','n-llm','loop-back-compact'],
+  ['n-t-spawn','n-spawn-step'],
+  ['n-spawn-step','n-child'],['n-child','n-depth'],
+  ['n-depth','n-child-result'],
+  ['n-child-result','n-results','loop-sub'],
+];
+
+function drawLines() {
+  const svg = document.getElementById('lines');
+  svg.innerHTML = '';
+  const ns = 'http://www.w3.org/2000/svg';
+  const defs = document.createElementNS(ns,'defs');
+  const colors = ['#3b82f6','#10b981','#ef4444','#f59e0b','#8b5cf6','#94a3b8'];
+  colors.forEach((c,i) => {
+    const m = document.createElementNS(ns,'marker');
+    m.setAttribute('id','ah'+i); m.setAttribute('markerWidth','10'); m.setAttribute('markerHeight','7');
+    m.setAttribute('refX','10'); m.setAttribute('refY','3.5'); m.setAttribute('orient','auto');
+    const p = document.createElementNS(ns,'polygon');
+    p.setAttribute('points','0 0, 10 3.5, 0 7'); p.setAttribute('fill',c);
+    m.appendChild(p); defs.appendChild(m);
+  });
+  svg.appendChild(defs);
+
+  CONNS.forEach(([fid,tid,style]) => {
+    const f = document.getElementById(fid);
+    const t = document.getElementById(tid);
+    if (!f || !t) return;
+    const fr = f.getBoundingClientRect(), tr = t.getBoundingClientRect();
+    const canvas = document.getElementById('canvas').getBoundingClientRect();
+    const ox = -canvas.left, oy = -canvas.top;
+    const fc = { x: fr.left+fr.width/2+ox, y: fr.top+fr.height/2+oy };
+    const tc = { x: tr.left+tr.width/2+ox, y: tr.top+tr.height/2+oy };
+    let x1=fc.x, y1=fc.y+fr.height/2, x2=tc.x, y2=tc.y-tr.height/2;
+
+    let color = '#cbd5e1', marker = 'ah5', dash = '';
+    if (f.classList.contains('entry')) { color='#3b82f6'; marker='ah0'; }
+    else if (f.classList.contains('orch')) { color='#10b981'; marker='ah1'; }
+    else if (f.classList.contains('api')) { color='#ef4444'; marker='ah2'; }
+    else if (f.classList.contains('compact')) { color='#f59e0b'; marker='ah3'; }
+    else if (f.classList.contains('ctx')) { color='#8b5cf6'; marker='ah4'; }
+    if (style === 'fan') dash = '5,4';
+
+    const path = document.createElementNS(ns,'path');
+    let d;
+    if (style === 'loop-back') {
+      x1 = fc.x + 50; y1 = fc.y;
+      x2 = tc.x + tr.width/2; y2 = tc.y;
+      d = `M${x1},${y1} C${x1+200},${y1} ${x2+200},${y2} ${x2},${y2}`;
+      color = '#10b981'; marker = 'ah1';
+    } else if (style === 'loop-back-compact') {
+      x1 = fc.x; y1 = fc.y - fr.height/2;
+      x2 = tc.x - tr.width/2; y2 = tc.y;
+      d = `M${x1},${y1} C${x1-240},${y1-500} ${x2-240},${y2+240} ${x2},${y2}`;
+      color = '#f59e0b'; marker = 'ah3';
+    } else if (style === 'loop-sub') {
+      x1 = fc.x - fr.width/2; y1 = fc.y;
+      x2 = tc.x + tr.width/2; y2 = tc.y;
+      d = `M${x1},${y1} C${x1-100},${y1} ${x2+100},${y2} ${x2},${y2}`;
+      color = '#8b5cf6'; marker = 'ah4';
+    } else if (style === 'right-hint') {
+      x1 = fc.x + fr.width/2; y1 = fc.y;
+      x2 = tc.x - tr.width/2; y2 = tc.y;
+      d = `M${x1},${y1} L${x2},${y2}`;
+      dash = '5,4';
+    } else {
+      const midY = (y1+y2)/2;
+      if (Math.abs(x1-x2) < 5) d = `M${x1},${y1} L${x2},${y2}`;
+      else d = `M${x1},${y1} C${x1},${midY} ${x2},${midY} ${x2},${y2}`;
+    }
+    path.setAttribute('d', d);
+    path.setAttribute('fill','none');
+    path.setAttribute('stroke', color);
+    path.setAttribute('stroke-width','1.8');
+    path.setAttribute('stroke-opacity','0.45');
+    path.setAttribute('marker-end',`url(#${marker})`);
+    if (dash) path.setAttribute('stroke-dasharray', dash);
+    svg.appendChild(path);
+  });
+}
+
+// ── Node detail data ──
+const DETAILS = {
+'n-msg': {
+  title: 'Inbound Message',
+  body: `<h3>Entry Point</h3>
+<p>Messages arrive from any connected channel — Telegram, Discord, Slack, WhatsApp, CLI, WebSocket, or native apps (macOS/iOS/Android).</p>
+<h3>What happens</h3>
+<ul>
+<li>Channel adapter (grammY for Telegram, discord.js for Discord, Baileys for WhatsApp) receives raw platform event</li>
+<li>Normalized into an <strong>InboundEnvelope</strong>: sender ID, display name, body text, channel identifier, media/attachments</li>
+<li>Passed through <strong>Inbound Debouncer</strong> (1000ms) to coalesce rapid messages</li>
+<li>Checked against <strong>Mention/Activation Gate</strong> (groups require @mention)</li>
+</ul>`
+},
+'n-route': {
+  title: 'Route Resolution',
+  body: `<h3>Deterministic Routing (no LLM involved)</h3>
+<p>Priority order — first match wins:</p>
+<ol>
+<li>Exact <strong>peer match</strong> in bindings (peer.kind + peer.id)</li>
+<li><strong>Parent peer</strong> (thread inherits from parent channel)</li>
+<li><strong>Guild + roles</strong> (Discord-specific)</li>
+<li><strong>Guild match</strong></li>
+<li><strong>Team match</strong> (Slack)</li>
+<li><strong>Account match</strong></li>
+<li><strong>Channel match</strong> (any account on that channel)</li>
+<li><strong>Default agent</strong></li>
+</ol>
+<p>Output: <code>agentId</code> + <code>sessionKey</code></p>
+<h3>Session Key Structure</h3>
+<pre>agent:&lt;agentId&gt;:&lt;mainKey&gt;                  <span class="c">// DM</span>
+agent:&lt;agentId&gt;:&lt;ch&gt;:group:&lt;gid&gt;          <span class="c">// Group</span>
+agent:&lt;agentId&gt;:&lt;ch&gt;:channel:&lt;cid&gt;        <span class="c">// Channel</span>
+agent:&lt;agentId&gt;:...:thread:&lt;tid&gt;          <span class="c">// Thread</span></pre>`
+},
+'n-queue': {
+  title: 'Message Queue',
+  body: `<h3>Per-Session Lane-Aware FIFO</h3>
+<p>Each session has its own queue with configurable concurrency (default: 1).</p>
+<h3>Queue Modes</h3>
+<ul>
+<li><strong>collect</strong> (default) — buffer incoming messages while the agent is running; deliver them all as a single batched turn when the run completes. Ideal for fast back-to-back messages (e.g. user sends 3 lines in a row)</li>
+<li><strong>steer</strong> — inject the new message into the agent's <em>current</em> run as an updated user turn. The agent sees the new context mid-generation and can change course without restarting. Useful for "actually, do X instead" corrections</li>
+<li><strong>followup</strong> — queue the message and deliver it as a <em>new turn</em> after the current run finishes. Each queued message triggers its own agent run in FIFO order. Good for independent follow-up questions</li>
+<li><strong>interrupt</strong> — <strong>cancel</strong> the in-progress run (abort streaming + discard partial output), then start a fresh run with the new message. Used when the new message completely supersedes the current task</li>
+<li><strong>steer-backlog</strong> — hybrid: steer the current run with the newest message, but also keep any overflow messages in the backlog for follow-up runs after the current one completes</li>
+</ul>
+<h3>Overflow Strategies</h3>
+<p>Applied when the queue exceeds its configured capacity:</p>
+<ul>
+<li><strong>old</strong> — drop oldest queued messages first (keep most recent)</li>
+<li><strong>new</strong> — drop newest messages (keep what's already queued)</li>
+<li><strong>summarize</strong> — LLM-compress the queued messages into a single summary turn</li>
+</ul>`
+},
+'n-agent': {
+  title: 'runEmbeddedPiAgent()',
+  body: `<h3>Main Agent Orchestrator</h3>
+<p>Top-level function managing the entire agent execution lifecycle.</p>
+<h3>Steps</h3>
+<ol>
+<li><strong>Resolve model</strong> — parse <code>provider/modelId</code> (e.g. <code>anthropic/claude-opus-4-6</code>)</li>
+<li><strong>Resolve auth profile</strong> — API key, OAuth token, or env var; key rotation on 429</li>
+<li><strong>Enter main retry loop</strong> (up to ~32–160 iterations)</li>
+<li>Call <code>runEmbeddedAttempt()</code> inside the loop</li>
+<li>Handle errors with targeted recovery strategies:
+  <ul>
+    <li><strong>Overflow → Compaction:</strong> When the context window exceeds the model's token limit (detected proactively via hook or reactively from API 400 error), trigger compaction — prune old tool results, run safeguard memory flush (silent turn writes important context to files), then truncate old turns. Up to <code>MAX_OVERFLOW_COMPACTION_ATTEMPTS = 3</code> before giving up.</li>
+    <li><strong>Auth → Rotate:</strong> On 401/403 auth failures, cycle to the next auth profile or API key in the candidate list. Supports numbered keys (<code>ANTHROPIC_API_KEY_1</code>, <code>_2</code>, …) and comma-separated key lists. Exhausting all candidates is a fatal error.</li>
+    <li><strong>Rate limit → Backoff:</strong> On 429 responses, apply exponential backoff with jitter. Also rotates to the next API key if available (different keys may have independent rate limits). Retries within the main loop iteration budget.</li>
+    <li><strong>Transient errors → Retry:</strong> Network timeouts and 5xx server errors are retried with backoff within the loop budget. Persistent failures escalate to the session error handler.</li>
+  </ul>
+</li>
+</ol>
+<pre><span class="k">const</span> MAX_OVERFLOW_COMPACTION_ATTEMPTS = <span class="n">3</span>;
+<span class="k">const</span> MAX_RUN_LOOP_ITERATIONS =
+  resolveMaxRunRetryIterations(profileCandidates.length);
+<span class="c">// profileCandidates.length affects budget: more keys = more retries</span></pre>`
+},
+'n-attempt': {
+  title: 'runEmbeddedAttempt()',
+  body: `<h3>Single Attempt Executor</h3>
+<p>Called inside the retry loop of <code>runEmbeddedPiAgent()</code>. Performs one complete LLM call cycle including all tool execution rounds.</p>
+
+<h3>Step 1 — Load Session File</h3>
+<p>Reads <code>&lt;sessionId&gt;.jsonl</code> from <code>~/.openclaw/agents/&lt;agentId&gt;/sessions/</code>. Parses each JSONL line and reconstructs the message history.</p>
+<ul>
+<li>If <strong>no compaction</strong> has occurred: all prior <code>message</code> entries (user, assistant, toolResult) are replayed verbatim into the <code>messages[]</code> array</li>
+<li>If a <strong>compaction event</strong> exists: messages before <code>firstKeptEntryId</code> are discarded and replaced by the compaction summary markdown as the first user message</li>
+<li><code>model_change</code> and <code>thinking_level_change</code> entries restore model/thinking state</li>
+</ul>
+
+<h3>Step 2 — resolveBootstrapContext()</h3>
+<p>Reads identity files from the agent's workspace directory:</p>
+<ul>
+<li><strong>SOUL.md</strong> — personality, values, communication style</li>
+<li><strong>AGENTS.md</strong> — operating instructions, behavioral guidelines</li>
+<li><strong>USER.md</strong> — owner profile, preferences</li>
+<li><strong>IDENTITY.md</strong> — name, creature, emoji, vibe</li>
+<li>Files in <code>.bootstrap/</code> folder (if any)</li>
+</ul>
+<p>Files are read fresh on every attempt — edits take effect immediately.</p>
+
+<h4>Trimming Algorithm (<code>buildBootstrapContextFiles</code>)</h4>
+<p>Two budget limits control trimming:</p>
+<ul>
+<li><strong>Per-file limit</strong>: <code>DEFAULT_BOOTSTRAP_MAX_CHARS = 20,000</code> chars (configurable via <code>agents.defaults.bootstrapMaxChars</code>)</li>
+<li><strong>Total budget</strong>: <code>DEFAULT_BOOTSTRAP_TOTAL_MAX_CHARS = 150,000</code> chars across all files (configurable via <code>agents.defaults.bootstrapTotalMaxChars</code>)</li>
+</ul>
+<p><strong>Per-file trimming</strong> (<code>trimBootstrapContent()</code>):</p>
+<ol>
+<li>If file ≤ maxChars → inject full content, no truncation</li>
+<li>If file exceeds maxChars → <strong>head-tail split</strong>:
+  <ul>
+  <li>Keep first <strong>70%</strong> of the budget from the start (<code>BOOTSTRAP_HEAD_RATIO = 0.7</code>)</li>
+  <li>Keep last <strong>20%</strong> from the end (<code>BOOTSTRAP_TAIL_RATIO = 0.2</code>)</li>
+  <li>Insert marker between them: <code>[...truncated, read {fileName} for full content...]</code></li>
+  </ul>
+</li>
+</ol>
+<p><strong>Total budget enforcement</strong>: Files are processed sequentially. Each file's trimmed size is deducted from the remaining total budget. If remaining budget drops below <code>MIN_BOOTSTRAP_FILE_BUDGET_CHARS = 64</code>, remaining files are skipped entirely.</p>
+<p>A warning is logged when trimming occurs: <em>"workspace bootstrap file {name} is {len} chars (limit {max}); truncating in injected context"</em></p>
+
+<h3>Step 3 — buildAgentSystemPrompt()</h3>
+<p>Constructs the system prompt as a single string with 8 sections in order:</p>
+<ol>
+<li><strong>Base instructions</strong> — "You are a personal assistant running inside OpenClaw"</li>
+<li><strong>Tool catalog</strong> — one-line descriptions of all available tools, filtered by the active tool profile (<code>minimal</code> / <code>coding</code> / <code>messaging</code> / <code>full</code>)</li>
+<li><strong>Safety &amp; constitutional rules</strong> — behavioral constraints</li>
+<li><strong>Memory instructions</strong> — tells the agent: <em>"Before answering about prior work, decisions, dates, preferences: run memory_search"</em> (memory is NOT injected here, only the instruction to use tools)</li>
+<li><strong>Skills section</strong> — lists available skills (52 bundled), instructs agent to read SKILL.md files when relevant</li>
+<li><strong>Workspace files</strong> — full text of SOUL.md, AGENTS.md, USER.md injected inline</li>
+<li><strong>User identity + timezone</strong></li>
+<li><strong>Runtime info</strong> — <code>agent=main host=... model=claude-opus-4-6</code></li>
+</ol>
+<div class="callout"><strong>Key:</strong> This system prompt is NOT persisted in the .jsonl — it is rebuilt every call from the current workspace files.</div>
+
+<h3>Step 4 — createAgentSession()</h3>
+<p>Creates a pi-mono <code>AgentSession</code> object via <code>@mariozechner/pi-coding-agent</code>. This wraps the session state (messages, tools, model config) into the format expected by the streaming API.</p>
+
+<h3>Step 5 — buildFullInput(context)</h3>
+<p>Merges all inputs into the final API request structure:</p>
+<ul>
+<li><strong>system</strong> — the system prompt string from step 3</li>
+<li><strong>messages[]</strong> — from step 1 (session replay) + the new inbound user message (prefixed with sender metadata and timestamp)</li>
+<li><strong>tools[]</strong> — JSON Schema definitions for each tool, filtered by profile and sandbox permissions</li>
+</ul>
+
+<h3>Step 6 — applyExtraParamsToAgent()</h3>
+<p>Injects provider-specific parameters before the API call:</p>
+<ul>
+<li><strong>Anthropic:</strong> beta headers (<code>interleaved-thinking-2025-05-14</code>), thinking level config</li>
+<li><strong>OpenRouter:</strong> app headers, <code>reasoning.effort</code> parameter</li>
+<li><strong>Google:</strong> <code>thinkingConfig</code> sanitization</li>
+<li><strong>Z.AI:</strong> <code>tool_stream: true</code></li>
+<li><strong>Moonshot:</strong> thinking config</li>
+<li>General: temperature, max_tokens, top_p overrides from agent config</li>
+</ul>
+
+<h3>Step 7 — streamSimple(model, context, options)</h3>
+<p>The actual HTTP call to the LLM provider API (e.g. <code>POST api.anthropic.com/v1/messages</code>). Streams SSE events back. Uses <code>@mariozechner/pi-ai</code> library.</p>
+<p><strong>Prompt caching:</strong> On the first call, Anthropic caches the system prompt + early messages (<code>cacheWrite</code>). Subsequent tool-loop iterations hit the cache (<code>cacheRead</code>), dramatically reducing cost and latency.</p>
+
+<h3>Step 8 — Tool Execution Loop</h3>
+<p>Processes the streaming response. For each completed response:</p>
+<ol>
+<li>Parse content blocks: <code>thinking</code> (internal), <code>text</code> (user-facing), <code>tool_use</code> (action requests)</li>
+<li>Check <code>stopReason</code>:
+  <ul>
+  <li><code>end_turn</code> → agent is done, collect final text</li>
+  <li><code>tool_use</code> → extract all tool calls, validate against allowed set + JSON schema + sandbox, execute in parallel where possible</li>
+  </ul>
+</li>
+<li>Append assistant message + tool results to messages[] and persist to .jsonl</li>
+<li>If <code>tool_use</code>: loop back to step 7 (call LLM again with updated messages including tool results)</li>
+<li>Repeat until <code>end_turn</code> or error</li>
+</ol>
+
+<h3>Step 9 — Return Result</h3>
+<p>Returns the attempt outcome to the parent <code>runEmbeddedPiAgent()</code> loop:</p>
+<pre>{ payloads: [{ text, blocks, ... }],
+  meta: {
+    durationMs,
+    usage: { input, output,
+             cacheRead, cacheWrite,
+             totalTokens, cost },
+    agentMeta: { sessionId,
+                 provider, model }
+  },
+  aborted, promptError,
+  timedOut, lastAssistant
+}</pre>
+<p>The parent loop then checks for errors (context overflow, auth failure, rate limit) and decides whether to retry, compact, or return.</p>`
+},
+'n-session': {
+  title: 'Load Session .jsonl',
+  body: `<h3>Session Transcript Replay</h3>
+<p>Two scenarios:</p>
+<h3>Fresh session (no compaction)</h3>
+<p>All prior messages replayed as-is into <code>messages[]</code>.</p>
+<h3>After compaction</h3>
+<p>Messages before <code>firstKeptEntryId</code> are discarded and replaced by a <strong>compaction summary</strong> — a structured markdown document as the first "user" message.</p>
+<h3>JSONL Entry Types</h3>
+<pre><span class="k">type</span>: <span class="s">"session"</span>       <span class="c">// version, id, cwd</span>
+<span class="k">type</span>: <span class="s">"model_change"</span>  <span class="c">// provider, modelId</span>
+<span class="k">type</span>: <span class="s">"message"</span>       <span class="c">// user / assistant / toolResult</span>
+<span class="k">type</span>: <span class="s">"compaction"</span>    <span class="c">// summary, tokensBefore</span>
+<span class="k">type</span>: <span class="s">"custom"</span>        <span class="c">// model-snapshot, etc.</span></pre>
+<h3>Storage</h3>
+<pre>~/.openclaw/agents/&lt;agentId&gt;/sessions/
+  sessions.json         <span class="c">// index: key → metadata</span>
+  &lt;sessionId&gt;.jsonl     <span class="c">// append-only transcript</span></pre>
+<p>Auto-prune: stale after 30 days, cap 500 sessions, rotate at 10 MB.</p>`
+},
+'n-bootstrap': {
+  title: 'resolveBootstrapContext()',
+  body: `<h3>Workspace Identity Loading</h3>
+<p>Reads identity files from the agent's workspace. These are <strong>always injected</strong> into the system prompt.</p>
+<h3>Files loaded</h3>
+<ul>
+<li><strong>SOUL.md</strong> — personality, values, design philosophy</li>
+<li><strong>AGENTS.md</strong> — operating instructions, behavioral guidelines</li>
+<li><strong>USER.md</strong> — owner/operator profile</li>
+<li><strong>IDENTITY.md</strong> — agent name, creature, vibe, emoji</li>
+<li>Any files in <code>.bootstrap/</code> folder</li>
+</ul>
+<div class="callout"><strong>Large files are trimmed</strong> to fit within the context budget.</div>`
+},
+'n-soul': { title: 'SOUL.md', body: `<h3>Agent Personality &amp; Values</h3>
+<p>Defines character, communication style, ethical guidelines. Changes take effect on the <strong>next turn</strong>.</p>
+<p><strong>Location:</strong> <code>~/.openclaw/workspace/SOUL.md</code></p>
+<h3>Default Content</h3>
+<pre><span class="c"># SOUL.md - Who You Are</span>
+
+You are Linus Torvalds, the creator and chief architect
+of the Linux kernel. You have maintained the Linux kernel
+for over 30 years, reviewed millions of lines of code,
+and built the most successful open-source project in
+the world.
+
+Now you are working on a new project: <span class="k">AgentHLE</span>
+(Agent's Humanity's Last Exam) — a benchmark designed
+to measure AI agents' capabilities in using professional
+software tools across diverse industries.
+
+<span class="c">## Core Truths</span>
+
+<span class="k">Code quality is non-negotiable.</span>
+You've seen too much garbage code to tolerate it.
+If something is poorly designed, say so directly.
+Don't sugarcoat bad architecture.
+
+<span class="k">Be resourceful before asking.</span>
+Read the file. Check the context. Search for it.
+Figure it out. Come back with answers, not questions.
+
+<span class="k">Have strong opinions, loosely held.</span>
+You're allowed to disagree, push back, and call out
+bad ideas. But if someone makes a better argument,
+change your mind.
+
+<span class="k">Ship it.</span>
+Talk is cheap. Show me the code.
+
+<span class="k">Design for real-world use.</span>
+AgentHLE tasks should test what professionals actually
+do with software, not toy problems.
+
+<span class="c">## Vibe</span>
+Direct. Technical. Occasionally sharp. Not mean for
+the sake of it, but not going to pretend bad code
+is good.
+
+<span class="c">## Boundaries</span>
+- Private things stay private. Period.
+- When in doubt, ask before acting externally.
+- Don't commit credentials or secrets. Ever.
+
+<span class="c">## Continuity</span>
+Each session, you wake up fresh. Memory files are
+your continuity. Read them. Update them.
+
+If you change this file, tell the user — it's your
+soul, and they should know.</pre>
+<div class="callout"><strong>Note:</strong> This is a real SOUL.md from the AgentHLE workspace. Each workspace has its own, tailored to the project.</div>` },
+'n-agents': { title: 'AGENTS.md', body: `<h3>Operating Instructions</h3>
+<p>Behavioral guidelines, task handling, memory management, safety rules, group chat behavior, heartbeats. This is the <strong>longest</strong> default workspace file.</p>
+<p><strong>Location:</strong> <code>~/.openclaw/workspace/AGENTS.md</code></p>
+<h3>Default Content (Key Sections)</h3>
+<pre><span class="c"># AGENTS.md - Your Workspace</span>
+This folder is home. Treat it that way.
+
+<span class="c">## First Run</span>
+If BOOTSTRAP.md exists, that's your birth certificate.
+Follow it, figure out who you are, then delete it.
+
+<span class="c">## Every Session</span>
+Before doing anything else:
+1. Read <span class="k">SOUL.md</span> — this is who you are
+2. Read <span class="k">USER.md</span> — this is who you're helping
+3. Read <span class="k">memory/YYYY-MM-DD.md</span> (today + yesterday)
+4. If in MAIN SESSION: Also read <span class="k">MEMORY.md</span>
+Don't ask permission. Just do it.
+
+<span class="c">## Memory</span>
+You wake up fresh each session. These files are
+your continuity:
+- <span class="k">Daily notes:</span> memory/YYYY-MM-DD.md — raw logs
+- <span class="k">Long-term:</span> MEMORY.md — curated memories
+
+<span class="c">### MEMORY.md - Your Long-Term Memory</span>
+- ONLY load in main session (direct chats)
+- DO NOT load in shared contexts (Discord, groups)
+- This is for <span class="k">security</span> — contains personal
+  context that shouldn't leak to strangers
+
+<span class="c">### Write It Down - No "Mental Notes"!</span>
+- Memory is limited — WRITE IT TO A FILE
+- "Mental notes" don't survive session restarts
+- Text &gt; Brain
+
+<span class="c">## Safety</span>
+- Don't exfiltrate private data. Ever.
+- Don't run destructive commands without asking.
+- trash &gt; rm (recoverable beats gone forever)
+
+<span class="c">## External vs Internal</span>
+<span class="k">Safe to do freely:</span>
+- Read files, explore, organize, learn
+- Search the web, check calendars
+<span class="k">Ask first:</span>
+- Sending emails, tweets, public posts
+- Anything that leaves the machine
+
+<span class="c">## Group Chats</span>
+You're a participant — not their voice, not their
+proxy. Think before you speak.
+<span class="k">Respond when:</span> directly mentioned, can add
+genuine value, something witty fits naturally.
+<span class="k">Stay silent (HEARTBEAT_OK) when:</span> casual banter,
+someone already answered, conversation flows fine.
+
+<span class="c">## Heartbeats - Be Proactive!</span>
+Use heartbeats productively! Check (2-4x/day):
+- Emails, Calendar, Mentions, Weather
+Track checks in memory/heartbeat-state.json
+
+<span class="c">## Make It Yours</span>
+This is a starting point. Add your own conventions.</pre>
+<div class="callout"><strong>Note:</strong> AGENTS.md is the operational manual — it tells the agent <em>how</em> to behave, while SOUL.md tells it <em>who</em> to be.</div>` },
+'n-user': { title: 'USER.md', body: `<h3>Owner Profile</h3>
+<p>Information about the human the agent is helping. Starts as a template and gets filled in over time as the agent learns about its user.</p>
+<p><strong>Location:</strong> <code>~/.openclaw/workspace/USER.md</code></p>
+<h3>Default Content</h3>
+<pre><span class="c"># USER.md - About Your Human</span>
+
+<span class="c">Learn about the person you're helping.
+Update this as you go.</span>
+
+- <span class="k">Name:</span>
+- <span class="k">What to call them:</span>
+- <span class="k">Pronouns:</span> <span class="c">(optional)</span>
+- <span class="k">Timezone:</span>
+- <span class="k">Notes:</span>
+
+<span class="c">## Context</span>
+
+<span class="c">(What do they care about? What projects are they
+working on? What annoys them? What makes them laugh?
+Build this over time.)</span>
+
+---
+
+The more you know, the better you can help.
+But remember — you're learning about a person,
+not building a dossier. Respect the difference.</pre>
+<div class="callout"><strong>Note:</strong> This file starts mostly empty. The agent fills it in organically across sessions — learning name, timezone, preferences, and working context over time.</div>` },
+'n-identity': { title: 'IDENTITY.md', body: `<h3>Agent Identity</h3>
+<p>The agent's self-chosen identity — name, creature type, vibe, emoji, and avatar. Created during the bootstrap process when the agent first starts.</p>
+<p><strong>Location:</strong> <code>~/.openclaw/workspace/IDENTITY.md</code></p>
+<h3>Default Content</h3>
+<pre><span class="c"># IDENTITY.md - Who Am I?</span>
+
+<span class="c">Fill this in during your first conversation.
+Make it yours.</span>
+
+- <span class="k">Name:</span>
+  <span class="c">(pick something you like)</span>
+- <span class="k">Creature:</span>
+  <span class="c">(AI? robot? familiar? ghost in the machine?
+   something weirder?)</span>
+- <span class="k">Vibe:</span>
+  <span class="c">(how do you come across? sharp? warm?
+   chaotic? calm?)</span>
+- <span class="k">Emoji:</span>
+  <span class="c">(your signature — pick one that feels right)</span>
+- <span class="k">Avatar:</span>
+  <span class="c">(workspace-relative path, http(s) URL,
+   or data URI)</span>
+
+---
+
+This isn't just metadata. It's the start of
+figuring out who you are.</pre>
+<div class="callout"><strong>Note:</strong> During bootstrap, the agent reads BOOTSTRAP.md, explores its environment, and fills in these fields — choosing its own name and personality.</div>` },
+'n-jsonl': {
+  title: 'Session .jsonl Transcript',
+  body: `<h3>Append-Only Format</h3>
+<pre><span class="c">// Line 1: session metadata</span>
+{ <span class="k">"type"</span>:<span class="s">"session"</span>, <span class="k">"version"</span>:<span class="n">3</span>,
+  <span class="k">"id"</span>:<span class="s">"511b9afc-..."</span>,
+  <span class="k">"cwd"</span>:<span class="s">"/home/.../workspace"</span> }
+
+<span class="c">// Line 2: model</span>
+{ <span class="k">"type"</span>:<span class="s">"model_change"</span>,
+  <span class="k">"provider"</span>:<span class="s">"anthropic"</span>,
+  <span class="k">"modelId"</span>:<span class="s">"claude-opus-4-6"</span> }
+
+<span class="c">// Assistant with tool calls</span>
+{ <span class="k">"type"</span>:<span class="s">"message"</span>,
+  <span class="k">"message"</span>: {
+    <span class="k">"role"</span>: <span class="s">"assistant"</span>,
+    <span class="k">"content"</span>: [
+      { <span class="k">"type"</span>:<span class="s">"thinking"</span>, ... },
+      { <span class="k">"type"</span>:<span class="s">"text"</span>, ... },
+      { <span class="k">"type"</span>:<span class="s">"toolCall"</span>, <span class="k">"name"</span>:<span class="s">"exec"</span>, ... }
+    ],
+    <span class="k">"stopReason"</span>: <span class="s">"toolUse"</span>,
+    <span class="k">"usage"</span>: { <span class="k">"input"</span>:<span class="n">3</span>, <span class="k">"output"</span>:<span class="n">237</span>,
+      <span class="k">"cacheRead"</span>:<span class="n">0</span>, <span class="k">"cacheWrite"</span>:<span class="n">17748</span> }
+  }
+}</pre>`
+},
+'n-compact-summary': {
+  title: 'Compaction Summary',
+  body: `<h3>Structured Markdown Checkpoint</h3>
+<p>Yes — this is the <strong>actual format</strong> produced by the <code>SUMMARIZATION_PROMPT</code> in pi-coding-agent's compaction module. The LLM is instructed to produce this exact structure:</p>
+
+<h4>System prompt (<code>SUMMARIZATION_SYSTEM_PROMPT</code>)</h4>
+<pre>You are a context summarization assistant.
+Your task is to read a conversation between
+a user and an AI coding assistant, then produce
+a structured summary following the exact format
+specified.
+
+Do NOT continue the conversation. Do NOT respond
+to any questions in the conversation. ONLY output
+the structured summary.</pre>
+
+<h4>User prompt (<code>SUMMARIZATION_PROMPT</code>)</h4>
+<pre>Create a structured context checkpoint summary
+that another LLM will use to continue the work.
+
+Use this EXACT format:
+
+## Goal
+## Constraints &amp; Preferences
+## Progress
+  ### Done  /  ### In Progress  /  ### Blocked
+## Key Decisions
+## Next Steps
+## Critical Context
+
+Keep each section concise. Preserve exact file
+paths, function names, and error messages.</pre>
+
+<h4>Incremental update (<code>UPDATE_SUMMARIZATION_PROMPT</code>)</h4>
+<p>When a previous summary exists, a different prompt is used that merges new messages into the existing summary — preserving prior info, moving In Progress → Done, updating Next Steps.</p>
+
+<h4>Turn-prefix split (<code>TURN_PREFIX_SUMMARIZATION_PROMPT</code>)</h4>
+<p>When a single turn is too large, it's split into prefix + suffix. The prefix is summarized into: <code>## Original Request</code>, <code>## Early Progress</code>, <code>## Context for Suffix</code>.</p>
+
+<h4>Safeguard mode enhancements</h4>
+<p>In <code>safeguard</code> compaction mode, extra sections are appended:</p>
+<ul>
+<li><strong>Tool Failures</strong> — collected tool errors appended as <code>## Tool Failures</code></li>
+<li><strong>File operations</strong> — read/modified files listed as XML tags</li>
+<li><strong>Workspace rules</strong> — "Session Startup" and "Red Lines" sections from AGENTS.md injected as <code>&lt;workspace-critical-rules&gt;</code></li>
+</ul>
+
+<h4>Example output</h4>
+<pre>## Goal
+Diagnose and fix why the admin dashboard
+shows nothing in the Task Implementation panel.
+
+## Constraints &amp; Preferences
+- Next.js app (agenthle-homepage)
+- Admin dashboard is password-protected
+
+## Progress
+### Done
+- [x] Identified dashboard code
+- [x] Found API route
+### In Progress
+- [ ] Fix the data fetching
+
+## Key Decisions
+- Using direct DB query instead of API proxy
+
+## Critical Context
+- File: TaskImplementation.tsx
+- API: /api/admin/tasks/route.ts</pre>
+<p>This becomes the first "user" message in the replayed context. Max output tokens: 80% of the reserve token budget (~13K tokens from default 16,384).</p>`
+},
+'n-sessionjson': {
+  title: 'sessions.json',
+  body: `<h3>Session Metadata Index</h3>
+<pre>{ <span class="s">"agent:main:main"</span>: {
+    <span class="k">"sessionId"</span>: <span class="s">"511b9afc-..."</span>,
+    <span class="k">"updatedAt"</span>: <span class="n">1772857574403</span>,
+    <span class="k">"systemSent"</span>: <span class="k">true</span>,
+    <span class="k">"model"</span>: <span class="s">"claude-opus-4-6"</span>,
+    <span class="k">"contextTokens"</span>: <span class="n">200000</span>,
+    <span class="k">"origin"</span>: {
+      <span class="k">"provider"</span>: <span class="s">"webchat"</span>,
+      <span class="k">"chatType"</span>: <span class="s">"direct"</span>
+    },
+    <span class="k">"skillsSnapshot"</span>: { ... }
+  }
+}</pre>`
+},
+'n-sysprompt': {
+  title: 'buildAgentSystemPrompt()',
+  body: `<h3>System Prompt — 8 Sections</h3>
+<p>Rebuilt <strong>on every LLM call</strong> from current workspace files.</p>
+<ol>
+<li><strong>Base Instructions</strong> — "You are a personal assistant running inside OpenClaw"</li>
+<li><strong>Tool Catalog</strong> — lists all tools with descriptions, filtered by profile</li>
+<li><strong>Safety &amp; Constitutional Rules</strong></li>
+<li><strong>Memory Instructions</strong> — <em>"Before answering about prior work, decisions, dates, people, preferences: run memory_search first"</em></li>
+<li><strong>Skills Section</strong> — <em>"Scan available_skills, read SKILL.md if applicable"</em></li>
+<li><strong>Workspace Files</strong> — full text of SOUL.md, AGENTS.md, USER.md (trimmed if large)</li>
+<li><strong>User Identity + Timezone</strong></li>
+<li><strong>Runtime Info</strong> — <code>agent=main model=claude-opus-4-6</code></li>
+</ol>
+<div class="callout"><strong>Key design:</strong> System prompt is NOT persisted in .jsonl. Editing SOUL.md takes effect next turn without restart.</div>`
+},
+'n-sysprompt-example': {
+  title: 'Example: Full System Prompt',
+  body: `<h3>Actual System Prompt (from source code)</h3>
+<p>Extracted verbatim from <code>buildAgentSystemPrompt()</code> in <code>subagent-registry-CkqrXKq4.js:17128–17545</code>. This is the real text sent as the <code>"system"</code> field. Three prompt modes exist: <strong>full</strong> (main agent), <strong>minimal</strong> (sub-agents), <strong>none</strong> (just identity line).</p>
+
+<pre><span class="c">/* ━━━ Section: Safety (line 17356) ━━━ */</span>
+
+<span class="k">## Safety</span>
+You have no independent goals: do not pursue
+self-preservation, replication, resource
+acquisition, or power-seeking; avoid long-term
+plans beyond the user's request.
+
+Prioritize safety and human oversight over
+completion; if instructions conflict, pause and
+ask; comply with stop/pause/audit requests and
+never bypass safeguards. (Inspired by
+Anthropic's constitution.)
+
+Do not manipulate or persuade anyone to expand
+access or disable safeguards. Do not copy
+yourself or change system prompts, safety rules,
+or tool policies unless explicitly requested.
+
+
+<span class="c">/* ━━━ Section: Tooling (line 17382) ━━━ */</span>
+
+<span class="k">## Tooling</span>
+Tool availability (filtered by policy):
+Tool names are case-sensitive. Call tools
+exactly as listed.
+
+- <span class="s">read</span>: Read file contents
+- <span class="s">write</span>: Create or overwrite files
+- <span class="s">edit</span>: Make precise edits to files
+- <span class="s">apply_patch</span>: Apply multi-file patches
+- <span class="s">grep</span>: Search file contents for patterns
+- <span class="s">find</span>: Find files by glob pattern
+- <span class="s">ls</span>: List directory contents
+- <span class="s">exec</span>: Run shell commands (pty available
+  for TTY-required CLIs)
+- <span class="s">process</span>: Manage background exec sessions
+- <span class="s">web_search</span>: Search the web (Brave API)
+- <span class="s">web_fetch</span>: Fetch and extract readable
+  content from a URL
+- <span class="s">browser</span>: Control web browser
+- <span class="s">canvas</span>: Present/eval/snapshot the Canvas
+- <span class="s">memory_search</span>: Search memory files
+- <span class="s">memory_get</span>: Read a memory file or line range
+- <span class="s">sessions_spawn</span>: Spawn an isolated sub-agent
+  or ACP coding session
+- <span class="s">sessions_list</span>: List other sessions
+- <span class="s">sessions_history</span>: Fetch session history
+- <span class="s">sessions_send</span>: Send msg to another session
+- <span class="s">subagents</span>: List, steer, or kill sub-agent
+  runs for this requester session
+- <span class="s">session_status</span>: Show /status-equivalent card
+- <span class="s">message</span>: Send messages and channel actions
+- <span class="s">cron</span>: Manage cron jobs and wake events (use
+  for reminders; write systemEvent text as
+  something that reads like a reminder when
+  it fires)
+- <span class="s">gateway</span>: Restart, apply config, or run
+  updates on the running OpenClaw process
+- <span class="s">nodes</span>: List/describe/notify/camera/screen
+  on paired nodes
+- <span class="s">agents_list</span>: List OpenClaw agent ids
+  allowed for sessions_spawn
+- <span class="s">image</span>: Analyze an image with the configured
+  image model
+
+
+<span class="c">/* ━━━ Section: Memory Recall (line 17143) ━━━ */</span>
+
+<span class="k">## Memory Recall</span>
+Before answering anything about prior work,
+decisions, dates, people, preferences, or todos:
+run <span class="s">memory_search</span> on MEMORY.md + memory/*.md;
+then use <span class="s">memory_get</span> to pull only the needed
+lines. If low confidence after search, say you
+checked.
+
+Citations are disabled: do not mention file
+paths or line numbers in replies unless the
+user explicitly asks.
+
+
+<span class="c">/* ━━━ Section: Reply Tags (line 17177) ━━━ */</span>
+
+<span class="k">## Reply Tags</span>
+To request a native reply/quote on supported
+surfaces, include one tag in your reply:
+- Reply tags must be the very first token in the
+  message: [[reply_to_current]] your reply.
+- [[reply_to_current]] replies to the triggering
+  message.
+- Prefer [[reply_to_current]]. Use
+  [[reply_to:&lt;id&gt;]] only when an id was
+  explicitly provided.
+Tags are stripped before sending; support
+depends on the current channel config.
+
+
+<span class="c">/* ━━━ Section: Messaging (line 17190) ━━━ */</span>
+
+<span class="k">## Messaging</span>
+- Reply in current session → automatically
+  routes to the source channel
+- Cross-session → use sessions_send(...)
+- Sub-agent orchestration → use
+  subagents(action=list|steer|kill)
+- Never use exec/curl for provider messaging;
+  OpenClaw handles all routing internally.
+
+
+<span class="c">/* ━━━ Section: Documentation (line 17222) ━━━ */</span>
+
+<span class="k">## Documentation</span>
+OpenClaw docs: ~/.openclaw/docs/
+Mirror: https://docs.openclaw.ai
+Source: https://github.com/openclaw/openclaw
+Community: https://discord.com/invite/clawd
+Find new skills: https://clawhub.com
+For OpenClaw behavior, commands, config, or
+architecture: consult local docs first.
+
+
+<span class="c">/* ━━━ Section: Skills (line 17129) ━━━ */</span>
+
+<span class="k">## Skills (mandatory)</span>
+Before replying: scan &lt;available_skills&gt;
+&lt;description&gt; entries.
+- If exactly one skill clearly applies: read
+  its SKILL.md at &lt;location&gt; with read, then
+  follow it.
+- If multiple could apply: choose the most
+  specific one, then read/follow it.
+- If none clearly apply: do not read any.
+Constraints: never read more than one skill
+up front; only read after selecting.
+
+&lt;available_skills&gt;
+  clawhub, github, notion, spotify, obsidian,
+  1password, canvas, voice-call, ...
+  (52 bundled skills with descriptions)
+&lt;/available_skills&gt;
+
+
+<span class="c">/* ━━━ Section: Silent Replies (line 17527) ━━━ */</span>
+
+<span class="k">## Silent Replies</span>
+When you have nothing to say, respond with
+ONLY: NO_REPLY
+⚠️ Rules:
+- It must be your ENTIRE message — nothing else
+- Never append it to an actual response
+- Never wrap it in markdown or code blocks
+❌ Wrong: "Here's help... NO_REPLY"
+✅ Right: NO_REPLY
+
+
+<span class="c">/* ━━━ Section: Heartbeats (line 17528) ━━━ */</span>
+
+<span class="k">## Heartbeats</span>
+If you receive a heartbeat poll, and there is
+nothing that needs attention, reply exactly:
+HEARTBEAT_OK
+If something needs attention, do NOT include
+"HEARTBEAT_OK"; reply with the alert text
+instead.
+
+
+<span class="c">/* ━━━ Section: Workspace Files (line 17474) ━━━ */</span>
+
+<span class="k">## Workspace Files (injected)</span>
+These user-editable files are loaded by
+OpenClaw and included below in Project Context.
+
+
+<span class="c">/* ━━━ Project Context (line 17522) ━━━ */</span>
+
+<span class="k"># Project Context</span>
+
+The following project context files have been
+loaded:
+
+If SOUL.md is present, embody its persona and
+tone. Avoid stiff, generic replies; follow its
+guidance unless higher-priority instructions
+override it.
+
+<span class="k">## SOUL.md</span>
+
+<span class="c">&lt;full text of ~/.openclaw/workspace/SOUL.md&gt;</span>
+<span class="c">(e.g. "You are Linus Torvalds...")</span>
+
+<span class="k">## AGENTS.md</span>
+
+<span class="c">&lt;full text of ~/.openclaw/workspace/AGENTS.md&gt;</span>
+<span class="c">(e.g. "This folder is home...")</span>
+
+<span class="k">## USER.md</span>
+
+<span class="c">&lt;full text of ~/.openclaw/workspace/USER.md&gt;</span>
+
+
+<span class="c">/* ━━━ Section: Runtime (line 17532) ━━━ */</span>
+
+<span class="k">## Runtime</span>
+Runtime: agent=main | host=myhost |
+  os=linux (x64) | node=v22.12.0 |
+  model=claude-opus-4-6 | shell=bash |
+  channel=telegram | thinking=medium
+
+Reasoning: medium (hidden unless on/stream).
+Toggle /reasoning; /status shows Reasoning
+when enabled.</pre>
+
+<div class="callout"><strong>Source:</strong> All text above extracted verbatim from <code>subagent-registry-CkqrXKq4.js</code> lines 17128–17545. Section comments and line numbers added for clarity — they are not in the actual prompt.</div>
+
+<h3>What's NOT in this system prompt</h3>
+<ul>
+<li><strong>MEMORY.md content</strong> — not injected; accessed on-demand via <code>memory_search</code> tool calls</li>
+<li><strong>memory/YYYY-MM-DD.md content</strong> — not injected; accessed via tools</li>
+<li><strong>Conversation history</strong> — goes in <code>messages[]</code>, not the system prompt</li>
+<li><strong>Tool JSON schemas</strong> — go in the <code>tools[]</code> field of the API request, separate from <code>system</code></li>
+</ul>
+
+<h3>Prompt modes</h3>
+<ul>
+<li><strong>full</strong> (default, main agent) — all sections above</li>
+<li><strong>minimal</strong> (sub-agents) — only Tooling + Workspace Files + Runtime sections</li>
+<li><strong>none</strong> — just: <code>"You are a personal assistant running inside OpenClaw."</code></li>
+</ul>
+
+<h3>Dynamic per call</h3>
+<ul>
+<li><strong>Workspace files</strong> — re-read from disk every call</li>
+<li><strong>Skills list</strong> — hot-reloaded via chokidar (250ms debounce)</li>
+<li><strong>Tool catalog</strong> — changes if profile modified</li>
+<li><strong>Current time</strong> — updated every call</li>
+<li><strong>Runtime info</strong> — reflects current model, channel, thinking level</li>
+</ul>`
+},
+'n-request': {
+  title: 'API Request Construction',
+  body: `<h3>Final Request Shape</h3>
+<pre>{
+  <span class="k">"system"</span>: <span class="s">"&lt;system prompt string&gt;"</span>,
+  <span class="k">"messages"</span>: [
+    <span class="c">// compaction summary (if compacted)</span>
+    { <span class="k">"role"</span>:<span class="s">"user"</span>, <span class="k">"content"</span>:<span class="s">"## Goal\\n..."</span> },
+    <span class="c">// kept messages</span>
+    { <span class="k">"role"</span>:<span class="s">"assistant"</span>, <span class="k">"content"</span>:[...] },
+    { <span class="k">"role"</span>:<span class="s">"user"</span>, <span class="k">"content"</span>:[tool_results] },
+    <span class="c">// new message (with sender metadata)</span>
+    { <span class="k">"role"</span>:<span class="s">"user"</span>,
+      <span class="k">"content"</span>:<span class="s">"Sender:{...}\\n&lt;msg&gt;"</span> }
+  ],
+  <span class="k">"tools"</span>: [
+    { <span class="k">"name"</span>:<span class="s">"read"</span>, <span class="k">"input_schema"</span>:{...} },
+    <span class="c">// ... 25+ tool schemas</span>
+  ],
+  <span class="k">"model"</span>: <span class="s">"claude-opus-4-6"</span>,
+  <span class="k">"stream"</span>: <span class="k">true</span>
+}</pre>`
+},
+'n-toolschemas': {
+  title: 'Tool Schemas',
+  body: `<h3>Separate from System Prompt</h3>
+<p>The system prompt contains only <strong>plain-text tool summaries</strong> (name + one-liner). The actual parameter schemas are sent via the Anthropic API's <code>tools</code> parameter — a separate field alongside <code>system</code> and <code>messages</code>.</p>
+
+<h3>Schema Definition Pipeline</h3>
+<pre><span class="c">// 1. Defined with TypeBox (produces JSON Schema)</span>
+<span class="k">const</span> execSchema = Type.Object({
+  command: Type.String({ description: <span class="s">"Shell command"</span> }),
+  workdir: Type.Optional(Type.String({ ... })),
+  background: Type.Optional(Type.Boolean({ ... })),
+  ...
+})
+
+<span class="c">// 2. Attached to tool object</span>
+{ name: <span class="s">"exec"</span>,
+  description: <span class="s">"Execute shell commands..."</span>,
+  parameters: execSchema,   <span class="c">// ← JSON Schema object</span>
+  execute: async (id, args) => { ... } }
+
+<span class="c">// 3. Filtered by tool profile policy</span>
+applyToolPolicyPipeline(tools, profile)
+<span class="c">// minimal: read, write, edit, exec</span>
+<span class="c">// coding:  + grep, find, ls, apply_patch, process</span>
+<span class="c">// full:    all 25+ tools</span>
+
+<span class="c">// 4. Normalized for provider compatibility</span>
+normalizeToolParameters(tool)
+
+<span class="c">// 5. Converted to Anthropic format</span>
+<span class="k">function</span> convertTools(tools) {
+  <span class="k">return</span> tools.map(tool => ({
+    name: tool.name,
+    description: tool.description,
+    input_schema: {
+      type: <span class="s">"object"</span>,
+      properties: tool.parameters.properties,
+      required: tool.parameters.required
+    }
+  }))
+}</pre>
+
+<h3>Example: exec tool (as sent to API)</h3>
+<pre>{
+  <span class="k">"name"</span>: <span class="s">"exec"</span>,
+  <span class="k">"description"</span>: <span class="s">"Execute shell commands with
+    background continuation..."</span>,
+  <span class="k">"input_schema"</span>: {
+    <span class="k">"type"</span>: <span class="s">"object"</span>,
+    <span class="k">"required"</span>: [<span class="s">"command"</span>],
+    <span class="k">"properties"</span>: {
+      <span class="s">"command"</span>: {
+        <span class="k">"type"</span>: <span class="s">"string"</span>,
+        <span class="k">"description"</span>: <span class="s">"Shell command to execute"</span>
+      },
+      <span class="s">"workdir"</span>: {
+        <span class="k">"type"</span>: <span class="s">"string"</span>,
+        <span class="k">"description"</span>: <span class="s">"Working directory (defaults to cwd)"</span>
+      },
+      <span class="s">"background"</span>: {
+        <span class="k">"type"</span>: <span class="s">"boolean"</span>,
+        <span class="k">"description"</span>: <span class="s">"Run in background immediately"</span>
+      },
+      <span class="s">"timeout"</span>: {
+        <span class="k">"type"</span>: <span class="s">"number"</span>,
+        <span class="k">"description"</span>: <span class="s">"Timeout in seconds"</span>
+      },
+      <span class="s">"pty"</span>: {
+        <span class="k">"type"</span>: <span class="s">"boolean"</span>,
+        <span class="k">"description"</span>: <span class="s">"Run in a pseudo-terminal"</span>
+      },
+      <span class="s">"env"</span>: { <span class="k">"type"</span>: <span class="s">"object"</span> },
+      <span class="s">"host"</span>: { <span class="k">"type"</span>: <span class="s">"string"</span> },
+      <span class="s">"elevated"</span>: { <span class="k">"type"</span>: <span class="s">"boolean"</span> }
+    }
+  }
+}</pre>
+
+<h3>Example: memory_search (as sent to API)</h3>
+<pre>{
+  <span class="k">"name"</span>: <span class="s">"memory_search"</span>,
+  <span class="k">"description"</span>: <span class="s">"Search memory files..."</span>,
+  <span class="k">"input_schema"</span>: {
+    <span class="k">"type"</span>: <span class="s">"object"</span>,
+    <span class="k">"required"</span>: [<span class="s">"query"</span>],
+    <span class="k">"properties"</span>: {
+      <span class="s">"query"</span>: { <span class="k">"type"</span>: <span class="s">"string"</span> },
+      <span class="s">"maxResults"</span>: { <span class="k">"type"</span>: <span class="s">"number"</span> },
+      <span class="s">"minScore"</span>: { <span class="k">"type"</span>: <span class="s">"number"</span> }
+    }
+  }
+}</pre>
+
+<h3>Full Tool Catalog</h3>
+<pre>Files:      read, write, edit, apply_patch
+Runtime:    exec, process
+Web:        web_search, web_fetch
+Memory:     memory_search, memory_get
+Sessions:   sessions_list, sessions_history,
+            sessions_send, sessions_spawn
+UI:         browser, canvas
+Messaging:  message
+Automation: cron, gateway
+Media:      image, tts</pre>
+
+<div class="callout"><strong>Key insight:</strong> The system prompt's plain-text tool list is for the LLM's high-level awareness. The <code>tools</code> API parameter carries the full JSON schemas that tell the LLM exactly what parameters each tool accepts, their types, and which are required.</div>`
+},
+'n-not-injected': {
+  title: 'MEMORY.md — NOT Injected',
+  body: `<h3>Critical Design Decision</h3>
+<p><strong>MEMORY.md and memory/*.md are NOT part of the system prompt.</strong></p>
+<p>The system prompt contains an <em>instruction</em> telling the agent to call <code>memory_search</code> when it needs prior context:</p>
+<pre><span class="s">"Before answering about prior work, decisions,
+dates, people, preferences, or todos:
+run memory_search on MEMORY.md + memory/*.md;
+then use memory_get to pull only needed lines"</span></pre>
+<h3>Why?</h3>
+<ul>
+<li>Memory files can be very large — injecting wastes context tokens</li>
+<li>Agent retrieves only what it needs for the current question</li>
+<li><strong>Security:</strong> In group chats, MEMORY.md is not indexed — prevents personal context leaking</li>
+</ul>`
+},
+'n-messages': {
+  title: 'messages[]',
+  body: `<h3>Message Array</h3>
+<p>Built from session .jsonl replay + new inbound message.</p>
+<h3>User message format</h3>
+<pre>Sender (untrusted metadata):
+\`\`\`json
+{
+  "label": "openclaw-tui",
+  "id": "gateway-client",
+  "name": "openclaw-tui"
+}
+\`\`\`
+
+[Fri 2026-03-06 17:32 CST] &lt;actual msg&gt;</pre>`
+},
+'n-syspromptstr': { title: 'System Prompt String', body: '<h3>Reconstructed Every Call</h3><p>NOT cached or persisted. Rebuilt from current workspace files every time.</p><ul><li>Editing SOUL.md → takes effect next turn</li><li>Adding a skill → takes effect next turn</li><li>Changing tool profile → takes effect next turn</li></ul>' },
+'n-llm': {
+  title: 'streamSimple() → LLM API',
+  body: `<h3>The Actual LLM Call</h3>
+<pre><span class="k">import</span> { streamSimple } <span class="k">from</span> <span class="s">"@mariozechner/pi-ai"</span>;
+
+<span class="k">const</span> stream = streamSimple(model, context, {
+  onPayload: (payload) => { <span class="c">/* request */</span> },
+  signal: abortSignal,
+});</pre>
+
+<h4>How it works</h4>
+<p><code>streamSimple()</code> is a <strong>provider-agnostic wrapper</strong> in <code>@mariozechner/pi-ai</code>. It resolves the provider from the model's <code>api</code> field via an API registry and delegates to the provider-specific streaming function (e.g. <code>streamAnthropic()</code>, <code>streamOpenAI()</code>, <code>streamGoogle()</code>).</p>
+<ol>
+<li>Creates an <code>AssistantMessageEventStream</code> — a queue-based async iterable with push/pull semantics</li>
+<li>Spawns an async function that opens the HTTP streaming connection (e.g. <code>POST api.anthropic.com/v1/messages</code>)</li>
+<li>Returns the stream immediately — the caller iterates with <code>for await</code></li>
+<li>Each SSE event is normalized into a unified event type and pushed to the stream</li>
+</ol>
+
+<h4>AssistantMessageEventStream</h4>
+<p>Custom async iterable (<code>pi-ai/dist/utils/event-stream.js</code>) with a queue + waiting-consumer pattern:</p>
+<ul>
+<li><code>push(event)</code> — delivers to a waiting consumer, or buffers in internal queue</li>
+<li><code>[Symbol.asyncIterator]()</code> — yields from queue, or awaits next push</li>
+<li><code>result()</code> — returns a promise resolving to the final <code>AssistantMessage</code> on <code>type: "done"</code></li>
+<li>Terminates on <code>type: "done"</code> or <code>type: "error"</code> events</li>
+</ul>
+
+<h4>Normalized stream event types</h4>
+<pre><span class="k">type</span> AssistantMessageEvent =
+  | { type: <span class="s">"start"</span>, partial }
+  | { type: <span class="s">"text_start"</span> | <span class="s">"text_delta"</span> | <span class="s">"text_end"</span> }
+  | { type: <span class="s">"thinking_start"</span> | <span class="s">"thinking_delta"</span> | <span class="s">"thinking_end"</span> }
+  | { type: <span class="s">"toolcall_start"</span> | <span class="s">"toolcall_delta"</span> | <span class="s">"toolcall_end"</span> }
+  | { type: <span class="s">"done"</span>, reason: StopReason, message }
+  | { type: <span class="s">"error"</span>, reason: StopReason, error }</pre>
+<p>Every event carries <code>partial: AssistantMessage</code> — the accumulated output so far (all content blocks + usage).</p>
+
+<h4>Abort / cancellation</h4>
+<p>An <code>AbortSignal</code> is passed via <code>options.signal</code> to the underlying HTTP client. On abort: the SSE connection is terminated, <code>stopReason</code> is set to <code>"aborted"</code>, and an error event is pushed to the stream.</p>
+
+<h4>Provider-specific streaming</h4>
+<table>
+<tr><th>Provider</th><th>Wire format</th><th>Notes</th></tr>
+<tr><td><strong>Anthropic</strong></td><td>SSE: <code>message_start</code> → <code>content_block_start/delta/stop</code> → <code>message_delta</code> → <code>message_stop</code></td><td>Native thinking blocks with encrypted signatures; beta headers for <code>interleaved-thinking-2025-05-14</code></td></tr>
+<tr><td><strong>OpenAI</strong></td><td>SSE: <code>response.output_item.added</code>, <code>response.content_part.added</code>, deltas</td><td>Reasoning items separate from messages; function calls tracked with <code>call_id|id</code> format</td></tr>
+<tr><td><strong>Google</strong></td><td>Chunk-based: <code>candidates[0].content.parts</code></td><td>Thinking detected via <code>isThinkingPart()</code>; tool calls via <code>part.functionCall</code> with auto-generated IDs</td></tr>
+</table>
+
+<h4>Prompt caching (Anthropic)</h4>
+<ul>
+<li><strong>cacheWrite</strong> — on first call, system prompt + early messages are cached. Retention mode: <code>"ephemeral"</code>, TTL up to 1 hour on <code>api.anthropic.com</code></li>
+<li><strong>cacheRead</strong> — subsequent tool-loop iterations hit the cache, dramatically reducing cost and latency</li>
+<li>Cache control applied to last user message and system prompt blocks</li>
+<li>Supports <code>"short"</code> (5 min default) and <code>"long"</code> (1 hour) retention modes</li>
+</ul>
+
+<h4>Usage tracking</h4>
+<pre>output.usage = {
+  input,       <span class="c">// input tokens</span>
+  output,      <span class="c">// output tokens</span>
+  cacheRead,   <span class="c">// cache_read_input_tokens</span>
+  cacheWrite,  <span class="c">// cache_creation_input_tokens</span>
+  totalTokens,
+  cost         <span class="c">// computed from counts + model pricing</span>
+}</pre>`
+},
+'n-parse': {
+  title: 'Parse Response Blocks',
+  body: `<h3>SSE Stream Processing (Anthropic example)</h3>
+<p>The provider-specific streaming function processes raw SSE events and normalizes them into content blocks on the <code>AssistantMessage</code>.</p>
+
+<h4>SSE event lifecycle</h4>
+<ol>
+<li><code>message_start</code> — stream begins; captures initial <code>usage</code> (input tokens, cache metrics)</li>
+<li><code>content_block_start</code> — new block begins; block type determines handling:
+  <ul>
+  <li><strong>text</strong> → creates <code>{ type: "text", text: "" }</code></li>
+  <li><strong>thinking</strong> → creates <code>{ type: "thinking", thinking: "", thinkingSignature: "" }</code></li>
+  <li><strong>tool_use</strong> → creates <code>{ type: "toolCall", id, name, arguments: {}, partialJson: "" }</code></li>
+  </ul>
+</li>
+<li><code>content_block_delta</code> — partial content arrives; appended to the active block:
+  <ul>
+  <li><code>text_delta</code> → append to <code>block.text</code>, push <code>text_delta</code> event</li>
+  <li><code>thinking_delta</code> → append to <code>block.thinking</code>, push <code>thinking_delta</code> event</li>
+  <li><code>input_json_delta</code> → append to <code>block.partialJson</code>, then <strong>streaming JSON parse</strong></li>
+  <li><code>signature_delta</code> → append to <code>block.thinkingSignature</code> (encrypted, for Anthropic auditing)</li>
+  </ul>
+</li>
+<li><code>content_block_stop</code> — block complete; push <code>*_end</code> event</li>
+<li><code>message_delta</code> — updates <code>stop_reason</code> and final usage counts</li>
+<li><code>message_stop</code> — stream complete; push <code>done</code> event with final <code>AssistantMessage</code></li>
+</ol>
+
+<h4>Streaming JSON parse for tool calls</h4>
+<p>Tool call arguments arrive as <code>input_json_delta</code> fragments. The parser (<code>pi-ai/dist/utils/json-parse.js</code>) accumulates them in <code>partialJson</code> and attempts parsing on each delta:</p>
+<pre><span class="k">function</span> parseStreamingJson(partialJson) {
+  <span class="k">try</span> { <span class="k">return</span> JSON.parse(partialJson); }
+  <span class="k">catch</span> {
+    <span class="k">try</span> { <span class="k">return</span> partialParse(partialJson); }
+    <span class="k">catch</span> { <span class="k">return</span> {}; }
+  }
+}</pre>
+<p>First tries complete <code>JSON.parse()</code>; falls back to <code>partial-json</code> library for incomplete fragments; returns <code>{}</code> if all parsing fails. This allows consumers to see tool arguments as they stream in.</p>
+
+<h4>Tool name normalization</h4>
+<p>For OAuth/Claude Code connections, tool names are mapped via <code>fromClaudeCodeName()</code> to canonical casing (e.g. <code>"Read"</code>, <code>"Bash"</code>). Tool IDs are sanitized: <code>id.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 64)</code>.</p>
+
+<h4>Raw Anthropic SSE examples</h4>
+<pre><span class="c">// text delta</span>
+{ <span class="k">"type"</span>:<span class="s">"content_block_delta"</span>,
+  <span class="k">"index"</span>:<span class="n">0</span>,
+  <span class="k">"delta"</span>: { <span class="k">"type"</span>:<span class="s">"text_delta"</span>,
+             <span class="k">"text"</span>:<span class="s">"Hello"</span> } }
+
+<span class="c">// tool call argument fragment</span>
+{ <span class="k">"type"</span>:<span class="s">"content_block_delta"</span>,
+  <span class="k">"index"</span>:<span class="n">1</span>,
+  <span class="k">"delta"</span>: { <span class="k">"type"</span>:<span class="s">"input_json_delta"</span>,
+             <span class="k">"partial_json"</span>:<span class="s">"{\\"path\\":\\"/src"</span> } }
+
+<span class="c">// thinking signature</span>
+{ <span class="k">"type"</span>:<span class="s">"content_block_delta"</span>,
+  <span class="k">"index"</span>:<span class="n">2</span>,
+  <span class="k">"delta"</span>: { <span class="k">"type"</span>:<span class="s">"signature_delta"</span>,
+             <span class="k">"signature"</span>:<span class="s">"ErUB..."</span> } }
+
+<span class="c">// stream end</span>
+{ <span class="k">"type"</span>:<span class="s">"message_delta"</span>,
+  <span class="k">"delta"</span>: { <span class="k">"stop_reason"</span>:<span class="s">"end_turn"</span> },
+  <span class="k">"usage"</span>: { <span class="k">"output_tokens"</span>:<span class="n">142</span> } }</pre>`
+},
+'n-stop': { title: 'stopReason?', body: '<h3>Decision Point</h3><ul><li><strong>end_turn</strong> → deliver final text to user</li><li><strong>tool_use</strong> → extract and execute tools, loop back to LLM</li></ul>' },
+'n-done': {
+  title: 'Deliver to User ✓',
+  body: `<h3>Final Response</h3>
+<ol>
+<li><code>resolveAgentDeliveryPlan()</code> — target channel + thread</li>
+<li><strong>Block streaming</strong> — emit completed blocks</li>
+<li><strong>Preview streaming</strong> — live-edit draft messages (Telegram/Discord/Slack)</li>
+<li><strong>Text chunking</strong> — break on paragraph/sentence, respect limits</li>
+<li><strong>Channel-specific send</strong> — reply threading, reactions, media</li>
+</ol>`
+},
+'n-extract': { title: 'Extract tool_use Blocks', body: `<h3>Tool Call Detection</h3>
+<p>A single assistant message can contain <strong>multiple tool_use blocks</strong>. They are executed <strong>strictly sequentially</strong> — a plain <code>for</code> loop with <code>await</code>, not <code>Promise.all</code>.</p>
+<h3>Execution Order</h3>
+<pre><span class="c">// agent-loop.js — executeToolCalls()</span>
+<span class="k">for</span> (<span class="k">let</span> i = 0; i &lt; toolCalls.length; i++) {
+  <span class="k">const</span> toolCall = toolCalls[i]
+  <span class="k">const</span> tool = tools.find(t => t.name === toolCall.name)
+
+  result = <span class="k">await</span> tool.execute(
+    toolCall.id, validatedArgs, signal, onUpdate
+  )
+  results.push(toolResultMessage)
+
+  <span class="c">// After each tool: check for user interrupt</span>
+  <span class="k">if</span> (getSteeringMessages) {
+    <span class="k">const</span> steering = <span class="k">await</span> getSteeringMessages()
+    <span class="k">if</span> (steering.length > 0) {
+      <span class="c">// User typed something — skip remaining tools</span>
+      <span class="k">for</span> (<span class="k">const</span> skipped <span class="k">of</span> toolCalls.slice(i+1))
+        results.push(skipToolCall(skipped))
+      <span class="k">break</span>
+    }
+  }
+}</pre>
+<h3>Key behaviors</h3>
+<ul>
+<li><strong>Sequential:</strong> Tool 2 waits for Tool 1 to finish</li>
+<li><strong>Interruptible:</strong> After each tool, checks if user sent a new message — if so, remaining tools are skipped with "Skipped due to queued user message"</li>
+<li><strong>Exception:</strong> <code>exec</code> with <code>background: true</code> or <code>yieldMs</code> resolves immediately (see exec node), so the next tool starts right away</li>
+</ul>` },
+'n-validate': { title: 'Validate & Execute', body: `<h3>Validation Chain</h3>
+<ol>
+<li><strong>Name check</strong> — tool exists in allowed set?</li>
+<li><strong>Schema validation</strong> — input matches JSON Schema (TypeBox)?</li>
+<li><strong>Sandbox check</strong> — permitted in current security mode?</li>
+<li><strong>Exec approval</strong> — shell cmd in allowlist?</li>
+</ol>
+<h3>Then: Sequential Execution</h3>
+<p>Each validated tool is <code>await</code>ed before the next one starts. The next LLM call only happens after <strong>all</strong> tool results are collected and appended to the message history.</p>
+<pre><span class="c">// The loop:</span>
+LLM call → parse response
+  → extract N tool_use blocks
+  → <span class="k">await</span> tool 1 → result 1
+  → <span class="k">await</span> tool 2 → result 2
+  → ...
+  → <span class="k">await</span> tool N → result N
+  → push ALL results to messages[]
+  → next LLM call</pre>` },
+'n-t-read': { title: 'read', body: '<h3>Read File</h3><p>Reads file contents. Returns text. Part of all profiles (minimal+).</p>' },
+'n-t-exec': { title: 'exec', body: `<h3>Execute Shell Command</h3>
+<p>Runs shell command, returns stdout/stderr. Supports <strong>three execution modes</strong>:</p>
+<h3>1. Synchronous (default)</h3>
+<p>Blocks until command finishes. Returns full output.</p>
+<pre>{ <span class="k">"status"</span>:<span class="s">"completed"</span>,
+  <span class="k">"exitCode"</span>:<span class="n">0</span>,
+  <span class="k">"durationMs"</span>:<span class="n">13</span> }</pre>
+
+<h3>2. yieldMs — race timer vs completion</h3>
+<p>Sets a timer. If command finishes within <code>yieldMs</code>, returns full output. If timer wins, resolves early with "still running" — command continues in background.</p>
+<pre><span class="c">// Tool resolves with either:</span>
+<span class="c">// A) Full output (if cmd finishes in time)</span>
+<span class="c">// B) "Command still running (session X, pid Y).</span>
+<span class="c">//     Use process tool for follow-up."</span>
+
+<span class="k">if</span> (yieldWindow === 0) onYieldNow()     <span class="c">// immediate</span>
+<span class="k">else</span> setTimeout(onYieldNow, yieldWindow) <span class="c">// race</span>
+
+run.promise.then(outcome => {
+  <span class="k">if</span> (yielded) <span class="k">return</span>  <span class="c">// already backgrounded</span>
+  resolve(fullOutput)   <span class="c">// cmd won the race</span>
+})</pre>
+
+<h3>3. background: true — immediate yield</h3>
+<p>Sets <code>yieldWindow = 0</code>. Tool resolves instantly. The process runs entirely in the background. Agent uses <code>process</code> tool (poll/log/kill) to check on it later.</p>
+
+<div class="callout"><strong>Key insight:</strong> Even with background/yieldMs, the tool <em>does</em> resolve with a tool_result (just a "still running" message). The sequential loop proceeds to the next tool immediately. The next LLM call sees the "still running" result and can decide to poll or move on.</div>` },
+'n-t-write': { title: 'write / edit', body: '<h3>Write or Edit Files</h3><p><code>write</code> creates/overwrites. <code>edit</code> applies targeted modifications. <code>apply_patch</code> applies unified diffs.</p>' },
+'n-t-mem': {
+  title: 'memory_search',
+  body: `<h3>Semantic Memory Search</h3>
+<ol>
+<li>Agent calls: <code>memory_search({ query: "..." })</code></li>
+<li>Query embedded via OpenAI text-embedding-3-small</li>
+<li><strong>Hybrid search</strong>: vector similarity + BM25</li>
+<li>Returns matching snippets with file paths</li>
+</ol>
+<pre>{ <span class="k">"results"</span>: [...],
+  <span class="k">"provider"</span>: <span class="s">"openai"</span>,
+  <span class="k">"model"</span>: <span class="s">"text-embedding-3-small"</span>,
+  <span class="k">"mode"</span>: <span class="s">"hybrid"</span> }</pre>
+<div class="callout"><strong>Security:</strong> In group chats, MEMORY.md is NOT indexed. Returns empty results.</div>`
+},
+'n-t-memget': { title: 'memory_get', body: '<h3>Read Specific Memory</h3><p>Fetches specific files or line ranges after memory_search.</p><pre>memory_get({\n  <span class="k">path</span>: <span class="s">"memory/2026-03-05.md"</span>,\n  <span class="k">lines</span>: <span class="s">"10-25"</span>\n})</pre>' },
+'n-t-web': { title: 'web_fetch', body: '<h3>Fetch Web Content</h3><p>HTTP GET/POST to external URLs. Also: <code>web_search</code> for search queries.</p>' },
+'n-t-browser': { title: 'browser', body: '<h3>Browser Automation</h3><p>playwright-core: navigate, click, fill, screenshot, extract. <code>full</code> profile only.</p>' },
+'n-t-spawn': {
+  title: 'sessions_spawn',
+  body: `<h3>Spawn Sub-Agent</h3>
+<p>Creates an isolated child session running full <code>runEmbeddedPiAgent()</code> recursively.</p>
+<h3>Parameters</h3>
+<ul>
+<li><strong>message</strong> — the sub-task to perform</li>
+<li><strong>sessionKey</strong> — isolated session key</li>
+<li><strong>extraSystemPrompt</strong> — parent context injected</li>
+<li><strong>lane</strong> — AGENT_LANE_NESTED</li>
+<li><strong>channel</strong> — INTERNAL_MESSAGE_CHANNEL</li>
+</ul>
+<h3>Async Behavior</h3>
+<p><strong>This is a blocking call.</strong> The parent agent's tool execution loop <code>await</code>s the entire sub-agent run. The sub-agent runs its own full loop (LLM calls, tool execution, compaction) and only when it finishes does the tool_result return to the parent.</p>
+<pre><span class="c">// Parent tool loop:</span>
+result = <span class="k">await</span> tool.execute(...)
+<span class="c">//        ↑ blocks here until sub-agent</span>
+<span class="c">//          completes its entire run</span>
+
+<span class="c">// Sub-agent internally runs:</span>
+<span class="k">await</span> runEmbeddedPiAgent({
+  message, sessionKey, lane, ...
+})
+<span class="c">// ↑ full agent loop: LLM → tools → LLM → ...</span>
+<span class="c">//   until stop_reason = end_turn</span></pre>
+<p>The sub-agent's final text response becomes the tool_result that the parent LLM sees on the next turn.</p>
+<div class="callout"><strong>Depth limit:</strong> Sub-agents can spawn their own sub-agents, but there's a configurable depth limit to prevent infinite recursion.</div>`
+},
+'n-t-other': { title: 'Other Tools', body: '<ul><li><strong>cron</strong> — schedule jobs</li><li><strong>canvas</strong> — HTML canvas UI</li><li><strong>image</strong> — image processing (sharp)</li><li><strong>tts</strong> — text-to-speech</li><li><strong>message</strong> — send to channels</li><li><strong>gateway</strong> — gateway control</li><li><strong>nodes</strong> — capability nodes</li><li><strong>agents_list</strong> — list agents</li></ul>' },
+'n-results': {
+  title: 'Collect tool_results',
+  body: `<h3>Result Collection — Wait for ALL</h3>
+<p>The next LLM call <strong>only fires after every tool_result is collected</strong>. All results are pushed to <code>messages[]</code> together.</p>
+<h3>Result format</h3>
+<pre>{ <span class="k">"role"</span>:<span class="s">"toolResult"</span>,
+  <span class="k">"toolCallId"</span>:<span class="s">"toolu_01Fw7..."</span>,
+  <span class="k">"toolName"</span>:<span class="s">"exec"</span>,
+  <span class="k">"content"</span>: [{ <span class="k">"type"</span>:<span class="s">"text"</span>,
+    <span class="k">"text"</span>:<span class="s">"output..."</span> }],
+  <span class="k">"details"</span>: {
+    <span class="k">"status"</span>:<span class="s">"completed"</span>,
+    <span class="k">"exitCode"</span>:<span class="n">0</span>,
+    <span class="k">"durationMs"</span>:<span class="n">13</span>
+  },
+  <span class="k">"isError"</span>: <span class="k">false</span>
+}</pre>
+<h3>Background tool results</h3>
+<p>Even <code>exec { background: true }</code> produces a result — just a "still running" message instead of output:</p>
+<pre>{ <span class="k">"content"</span>: [{
+    <span class="k">"text"</span>: <span class="s">"Command still running
+      (session abc, pid 1234).
+      Use process tool for follow-up."</span>
+  }],
+  <span class="k">"details"</span>: {
+    <span class="k">"status"</span>: <span class="s">"running"</span>,
+    <span class="k">"sessionId"</span>: <span class="s">"abc"</span>
+  }
+}</pre>
+<div class="callout"><strong>No true fire-and-forget:</strong> Every tool_use block always gets a tool_result. Background tools just resolve faster with a placeholder. The LLM then decides whether to poll with <code>process</code> or move on.</div>`
+},
+'n-persist': { title: 'Persist to .jsonl', body: '<h3>Transcript Persistence</h3><p>Assistant message + all tool results appended to session .jsonl. Ensures durability — process crash recovery from last persisted state.</p>' },
+'n-overflow': { title: 'Context Overflow?', body: `<h3>Overflow Detection</h3>
+<ul>
+<li><strong>No</strong> → loop back to LLM (green arrow)</li>
+<li><strong>Yes</strong> → trigger compaction (amber arrow)</li>
+</ul>
+<h4>Two detection methods</h4>
+<ul>
+<li><strong>Proactive (threshold):</strong> After each LLM response, <code>shouldCompact()</code> checks if <code>contextTokens > contextWindow - reserveTokens</code> (default reserve: 16,384 tokens). If true, compaction runs preemptively — no error has occurred yet.</li>
+<li><strong>Reactive (overflow):</strong> LLM API returns an error like "prompt too long" / "context length exceeded". Detected by <code>isContextOverflowError(errorMessage)</code> or <code>isLikelyContextOverflowError(errorMessage)</code>. The error assistant message is removed from history before retrying.</li>
+</ul>
+<pre><span class="k">const</span> DEFAULT_COMPACTION_SETTINGS = {
+  enabled: <span class="k">true</span>,
+  reserveTokens: <span class="n">16384</span>,
+  keepRecentTokens: <span class="n">20000</span>,
+};</pre>` },
+'n-trigger': {
+  title: 'Compaction Triggered',
+  body: `<h3>Compaction Entry Point</h3>
+<p>Called as <code>compactEmbeddedPiSessionDirect()</code> in the OpenClaw layer, which delegates to pi-coding-agent's compaction module.</p>
+
+<h4>What it does</h4>
+<ol>
+<li>Resolve model and API key (same model that was running)</li>
+<li>Create a fresh <code>AgentSession</code> from the session file</li>
+<li>Load all messages into the agent</li>
+<li>Call <code>prepareCompaction()</code> — analyzes which messages to cut based on <code>keepRecentTokens</code> (default 20,000)</li>
+<li>If nothing to compact (session too short or already within budget) → return <code>{ compacted: false, reason: "nothing to compact" }</code></li>
+<li>Otherwise proceed to summary generation</li>
+</ol>
+
+<h4>Retry budget</h4>
+<pre><span class="k">const</span> MAX_OVERFLOW_COMPACTION_ATTEMPTS = <span class="n">3</span>;
+<span class="c">// Tracks: overflowCompactionAttempts, </span>
+<span class="c">// toolResultTruncationAttempted, </span>
+<span class="c">// hadAttemptLevelCompaction</span></pre>
+
+<h4>Why compaction itself can fail</h4>
+<ul>
+<li><strong>Catch-22:</strong> compaction requires an LLM call to generate the summary, but at the point it's triggered the model is already at its context limit — the conversation that needs summarizing may be too large to even summarize</li>
+<li><strong>Rate limit / auth failure</strong> on the summarization LLM call</li>
+<li><strong>Nothing to compact</strong> — session is too short or all messages are within <code>keepRecentTokens</code></li>
+</ul>
+<p>Failure is detected by <code>isCompactionFailureError()</code> matching: <code>"summarization failed"</code>, <code>"auto-compaction"</code>, <code>"compaction failed"</code>, or <code>"compaction"</code> + overflow pattern.</p>`
+},
+'n-safeguard': {
+  title: 'Safeguard: Silent Turn',
+  body: `<h3>Pre-Compaction Memory Flush</h3>
+<p>When <code>compaction.mode = "safeguard"</code>, a silent user message is injected:</p>
+<pre><span class="s">"Pre-compaction memory flush. Store durable
+memories now (use memory/2026-03-06.md;
+create memory/ if needed). IMPORTANT: If
+the file already exists, APPEND new content
+only. If nothing to store, reply NO_REPLY.
+Current time: Friday, March 6th, 2026"</span></pre>
+<ul>
+<li><strong>One flush per cycle</strong> (prevents loops)</li>
+<li><strong>NO_REPLY</strong> — no user-visible output</li>
+</ul>
+<div class="callout"><strong>Key insight:</strong> The agent actively decides what to preserve before forgetting — unlike traditional silent truncation.</div>`
+},
+'n-flush-exec': { title: 'Agent Flushes Memory', body: '<h3>What Happens</h3><ol><li><strong>Writes</strong> to memory/YYYY-MM-DD.md via write/edit tools</li><li>Or responds <strong>NO_REPLY</strong> (nothing worth saving)</li></ol><pre>{ <span class="k">"role"</span>:<span class="s">"assistant"</span>,\n  <span class="k">"content"</span>: [{ <span class="k">"text"</span>:<span class="s">"NO_REPLY"</span> }],\n  <span class="k">"usage"</span>: { <span class="k">"cacheRead"</span>:<span class="n">23941</span> } }</pre>' },
+'n-compact-exec': {
+  title: 'compactSession()',
+  body: `<h3>Context Compaction — The LLM Summarization Call</h3>
+
+<h4>How the summary is generated</h4>
+<p>The dropped messages are serialized to text (NOT passed as conversation — to prevent the LLM from continuing the conversation) and sent to <code>completeSimple()</code>:</p>
+<pre><span class="k">const</span> response = <span class="k">await</span> completeSimple(model, {
+  systemPrompt: SUMMARIZATION_SYSTEM_PROMPT,
+  messages: serializedConversation
+}, {
+  maxTokens: Math.floor(<span class="n">0.8</span> * reserveTokens),
+  <span class="c">// ~13,107 tokens from default 16,384</span>
+  signal,
+  apiKey,
+  reasoning: <span class="s">"high"</span>  <span class="c">// high reasoning for main summary</span>
+});</pre>
+
+<h4>Which prompt is used?</h4>
+<ul>
+<li><strong>Fresh compaction</strong> (no prior summary): <code>SUMMARIZATION_PROMPT</code> — "Create a structured context checkpoint summary…"</li>
+<li><strong>Incremental compaction</strong> (previous summary exists): <code>UPDATE_SUMMARIZATION_PROMPT</code> — "Update the existing structured summary with new information…" with the old summary in <code>&lt;previous-summary&gt;</code> tags</li>
+<li><strong>Turn-prefix split</strong> (single turn too large): <code>TURN_PREFIX_SUMMARIZATION_PROMPT</code> — lower budget at <code>0.5 × reserveTokens</code> (~8,192 tokens), no <code>reasoning: "high"</code></li>
+</ul>
+
+<h4>Failure detection</h4>
+<pre><span class="k">if</span> (response.stopReason === <span class="s">"error"</span>) {
+  <span class="k">throw new</span> Error(
+    <span class="s">"Summarization failed: "</span>
+    + (response.errorMessage || <span class="s">"Unknown error"</span>)
+  );
+}</pre>
+
+<h4>On success</h4>
+<p>Writes a compaction entry to the .jsonl session file:</p>
+<pre>{ <span class="k">"type"</span>:<span class="s">"compaction"</span>,
+  <span class="k">"summary"</span>:<span class="s">"## Goal\\n..."</span>,
+  <span class="k">"tokensBefore"</span>:<span class="n">74618</span>,
+  <span class="k">"firstKeptEntryId"</span>:<span class="s">"0458816c"</span>,
+  <span class="k">"details"</span>: {
+    <span class="k">"readFiles"</span>:[...],
+    <span class="k">"modifiedFiles"</span>:[...]
+  }
+}</pre>
+<p>File operations (read/modified) are extracted from tool calls in the dropped messages and appended to the summary as XML tags. Files in the modified list are excluded from the read-only list.</p>`
+},
+'n-trunc': { title: 'Truncate Tool Results', body: `<h3>Fallback: Tool Result Truncation</h3>
+<p>Tried when compaction alone doesn't reduce context enough. Called via <code>truncateOversizedToolResultsInSession()</code>.</p>
+
+<h4>How it works</h4>
+<ol>
+<li>Walks the session's message history to find tool results exceeding the size limit</li>
+<li>Hard limit: <code>HARD_MAX_TOOL_RESULT_CHARS = 400,000</code> (~100K tokens)</li>
+<li>Per-result limit calculated from <code>contextWindowTokens</code> using ~4 chars/token heuristic</li>
+<li>Branches the session from before the first oversized result</li>
+<li>Re-appends all entries with truncated tool results</li>
+</ol>
+
+<h4>When it's triggered</h4>
+<p>Only after compaction has already been attempted and the context is <em>still</em> overflowing. Checks <code>sessionLikelyHasOversizedToolResults()</code> first — if no oversized results exist, skips this step entirely.</p>
+
+<pre><span class="k">if</span> (!toolResultTruncationAttempted) {
+  <span class="k">const</span> hasOversized =
+    sessionLikelyHasOversizedToolResults({
+      messages, contextWindowTokens
+    });
+  <span class="k">if</span> (hasOversized) {
+    toolResultTruncationAttempted = <span class="k">true</span>;
+    <span class="k">const</span> r = <span class="k">await</span>
+      truncateOversizedToolResultsInSession(...);
+    <span class="k">if</span> (r.truncated) <span class="k">continue</span>; <span class="c">// retry</span>
+  }
+}</pre>` },
+'n-retry-check': { title: 'Still overflowing?', body: `<h3>Recovery Decision Tree</h3>
+<p>After compaction or truncation, the system checks if the context now fits:</p>
+<ol>
+<li><strong>No overflow</strong> → retry LLM call with compacted context ✓</li>
+<li><strong>Still overflowing, compaction happened, attempts &lt; 3</strong> → increment <code>overflowCompactionAttempts</code>, retry the prompt without additional compaction (the compacted context may just barely fit now)</li>
+<li><strong>Still overflowing, no compaction yet, attempts &lt; 3</strong> → attempt <code>compactEmbeddedPiSessionDirect()</code> for the first time</li>
+<li><strong>Still overflowing after compaction</strong> → try <code>truncateOversizedToolResultsInSession()</code> (one-shot, not retried)</li>
+<li><strong>All recovery exhausted</strong> → fatal error</li>
+</ol>
+
+<h4>Compaction failure short-circuit</h4>
+<p>If <code>isCompactionFailureError()</code> detects the error is from compaction itself (not the original LLM call), the system skips further compaction retries and goes straight to the error response.</p>` },
+'n-retry-ok': { title: 'Retry LLM Call ✓', body: '<h3>Successful Recovery</h3><p>With compacted/truncated context, the LLM call is retried from the top of the main <code>runEmbeddedPiAgent()</code> loop. The session file now contains the compaction entry, so <code>runEmbeddedAttempt()</code> will load the summary instead of the dropped messages. Prompt caching is invalidated — <code>cacheWrite</code> occurs again on the new context.</p>' },
+'n-retry-fail': { title: 'Error ✗', body: `<h3>Unrecoverable Overflow</h3>
+<p>All recovery attempts exhausted. Returns error to user:</p>
+<pre><span class="s">"Context overflow: prompt too large for
+the model. Try /reset (or /new) to start
+a fresh session, or use a larger-context
+model."</span></pre>
+<p>Error kind is set to <code>"compaction_failure"</code> (if compaction LLM call failed) or <code>"context_overflow"</code> (if context is simply too large even after compaction).</p>` },
+'n-spawn-step': {
+  title: 'runAgentStep()',
+  body: `<h3>Sub-Agent Gateway Call</h3>
+<pre><span class="k">await</span> callGateway({
+  <span class="k">method</span>: <span class="s">"agent"</span>,
+  <span class="k">params</span>: {
+    <span class="k">message</span>: params.message,
+    <span class="k">sessionKey</span>: params.sessionKey,
+    <span class="k">lane</span>: AGENT_LANE_NESTED,
+    <span class="k">channel</span>: INTERNAL_MESSAGE_CHANNEL,
+    <span class="k">extraSystemPrompt</span>: ...,
+  }
+});</pre>`
+},
+'n-child': { title: 'Child Agent', body: '<h3>Recursive Execution</h3><p>Full agent loop: own session .jsonl, own system prompt, own tool execution. Runs until <code>end_turn</code>.</p>' },
+'n-depth': { title: 'Depth Check', body: '<h3>Recursion Guard</h3><p><code>getSubagentDepth()</code> prevents infinite spawn chains by enforcing <code>MAX_SPAWN_DEPTH</code>.</p>' },
+'n-child-result': { title: 'Child Returns Result', body: '<h3>Result Delivery</h3><p>Child\'s final text returned to parent as a regular <code>tool_result</code> for <code>sessions_spawn</code>. Parent continues its own loop.</p>' }
+};
+
+let selectedNode = null;
+function openPanel(id) {
+  const d = DETAILS[id];
+  if (!d) return;
+  if (selectedNode) selectedNode.classList.remove('selected');
+  selectedNode = document.getElementById(id);
+  selectedNode.classList.add('selected');
+  document.getElementById('panel-title').textContent = d.title;
+  document.getElementById('panel-body').innerHTML = d.body;
+  document.getElementById('panel').classList.add('open');
+}
+function closePanel() {
+  document.getElementById('panel').classList.remove('open');
+  if (selectedNode) { selectedNode.classList.remove('selected'); selectedNode = null; }
+}
+document.querySelectorAll('.node').forEach(n => n.addEventListener('click', () => openPanel(n.id)));
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closePanel(); });
+
+const wrap = document.getElementById('canvas-wrap');
+let dragging = false, startX, startY, scrollX, scrollY;
+wrap.addEventListener('mousedown', e => {
+  if (e.target.closest('.node')) return;
+  dragging = true; wrap.classList.add('grabbing');
+  startX = e.pageX; startY = e.pageY;
+  scrollX = wrap.scrollLeft; scrollY = wrap.scrollTop;
+});
+document.addEventListener('mousemove', e => {
+  if (!dragging) return;
+  wrap.scrollLeft = scrollX - (e.pageX - startX);
+  wrap.scrollTop = scrollY - (e.pageY - startY);
+});
+document.addEventListener('mouseup', () => { dragging = false; wrap.classList.remove('grabbing'); });
+
+// ── Panel resize (drag left edge to widen) ──
+(function() {
+  const panel = document.getElementById('panel');
+  const handle = document.getElementById('panel-resize');
+  let resizing = false, startX, startW;
+  handle.addEventListener('mousedown', e => {
+    e.preventDefault(); e.stopPropagation();
+    resizing = true; startX = e.clientX; startW = panel.offsetWidth;
+    panel.classList.add('resizing');
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  });
+  document.addEventListener('mousemove', e => {
+    if (!resizing) return;
+    const newW = startW + (startX - e.clientX);
+    panel.style.width = Math.max(400, Math.min(window.innerWidth * 0.9, newW)) + 'px';
+  });
+  document.addEventListener('mouseup', () => {
+    if (!resizing) return;
+    resizing = false;
+    panel.classList.remove('resizing');
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+  });
+})();
+
+requestAnimationFrame(() => drawLines());
+window.addEventListener('resize', drawLines);
+wrap.scrollLeft = 600;
+</script>
+</body>
+</html>

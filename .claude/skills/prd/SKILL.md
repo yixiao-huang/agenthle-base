@@ -152,7 +152,7 @@ Each story should include a `context` object to help the implementing agent:
 - **depends**: Which stories must be done first and why
 - **designDoc**: Relevant design docs with section references
 - **pattern**: Existing code patterns to follow (e.g., "Follow MemorySearchTool pattern in same file")
-- **reference**: Golden reference — a mature, working implementation of similar functionality that sets the quality bar. Can be code in the codebase, an upstream module, or a design doc section. The implementing agent should read it to understand expected behavior and edge cases. The evaluator (`/eval`) uses it to critique acceptance criteria.
+- **reference**: Golden reference — a mature, working implementation of similar functionality that sets the quality bar. Can be code in the codebase, an upstream module, or a design doc section. The implementing agent should read it to understand expected behavior and edge cases. The `/judge` skill uses it to critique acceptance criteria and compare implementations.
 
 **Golden references** are the single most useful piece of context you can give to both the implementer and the evaluator. A good reference answers "what does good look like?" without being a rigid spec.
 
