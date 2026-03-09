@@ -222,7 +222,7 @@
         "trajectoryFormat": "CUA trajectories are at trajectory_dir/turn_NNN/NNNN_agent_response.json — each contains response.output[].summary[].text with reasoning summaries like 'Entering game, selecting start option'",
         "depends": "US-MEM-AGT must be done first (agent has memory_write tool wired in)",
         "designDoc": "docs/memory-system.md (MemoryFlushCallback section)",
-        "reference": "openclaw/src/agents/embedded.ts (pre-compaction memory flush — silent user msg, agent-driven/system-triggered) | docs/openclaw-context-flow.md § Safeguard: Pre-Compaction Memory Flush (verbatim prompt) + docs/memory-system.md § MemoryFlushCallback"
+        "reference": "openclaw/src/agents/pi-embedded.ts (pre-compaction memory flush — silent user msg, agent-driven/system-triggered) | docs/openclaw-context-flow.md § Safeguard: Pre-Compaction Memory Flush (verbatim prompt) + docs/memory-system.md § MemoryFlushCallback"
       },
       "acceptanceCriteria": [
         "memory/callback.py exists with MemoryFlushCallback class",
@@ -300,7 +300,7 @@
         "existingFiles": ["memory/store.py (MemoryStore.search — current substring scanning implementation)", "tests/test_memory_store.py (existing search tests to keep passing)"],
         "depends": "US-MEM-E2E must pass first (want working e2e before migrating search backend)",
         "designDoc": "docs/memory-system.md § OpenClaw Storage + § Search Modes (FTS5+BM25 keyword search)",
-        "reference": "openclaw/src/memory/manager.ts (SQLite storage, file tracking, content hash sync) + openclaw/src/memory/chunking.ts (400 tokens/chunk, 80 overlap, start_line/end_line) + openclaw/src/memory/search.ts (FTS5+BM25 keyword search) | docs/memory-system.md § OpenClaw Chunking"
+        "reference": "openclaw/src/memory/manager.ts (SQLite storage, file tracking, content hash sync) + openclaw/src/memory/embedding-chunk-limits.ts (400 tokens/chunk, 80 overlap, start_line/end_line) + openclaw/src/memory/search-manager.ts (FTS5+BM25 keyword search) | docs/memory-system.md § OpenClaw Chunking"
       },
       "acceptanceCriteria": [
         "memory/db.py exists with MemoryDB class wrapping SQLite3",
@@ -330,7 +330,7 @@
         "existingFiles": ["memory/db.py (MemoryDB with FTS5 search + embedding_cache table from US-MEM-SQL)", "memory/chunking.py (chunk_markdown from US-MEM-SQL)", "memory/store.py (MemoryStore.search delegating to MemoryDB)", "memory/tools.py (MemorySearchTool)"],
         "depends": "US-MEM-SQL must be done first (provides SQLite backend, chunking, and embedding_cache table)",
         "designDoc": "docs/memory-system.md (Search Modes section)",
-        "reference": "openclaw/src/memory/search.ts (hybrid: 0.7 vector + 0.3 keyword, embedding cache, cosine similarity) | docs/memory-system.md § Search Modes"
+        "reference": "openclaw/src/memory/search-manager.ts (hybrid: 0.7 vector + 0.3 keyword, embedding cache, cosine similarity) | docs/memory-system.md § Search Modes"
       },
       "acceptanceCriteria": [
         "memory/hybrid.py exists: merge_results(vector_results, keyword_results, vector_weight=0.7, text_weight=0.3) combines and deduplicates",
