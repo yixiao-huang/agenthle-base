@@ -3,7 +3,6 @@ name: review-judge
 description: "Review the two most recent /judge reports for a story (or overall), diff what changed, and produce a prioritized action plan. Use after /judge has run at least once."
 user-invocable: true
 context: fork
-agent: general-purpose
 ---
 
 # Judge Review

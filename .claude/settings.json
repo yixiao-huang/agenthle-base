@@ -4,7 +4,8 @@
       "Bash(find:*)",
       "Bash(ls:*)",
       "Read:*",
-      "Bash(uv run pytest*)"
+      "Bash(uv run pytest:*)",
+      "Bash(uv run ruff:*)"
     ]
   }
 }

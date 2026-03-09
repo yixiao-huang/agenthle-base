@@ -285,6 +285,7 @@
         "Uses call_planner from memory/planner.py (US-MEM-PLN) — model and API config handled there",
         "Both functions return the rewritten content as string; graceful failure on LLM errors (caller handles)",
         "agenthle_agent.py post-run block replaced: calls compact_task_memory first, then compact_global_memory with the compacted task memory",
+        "Post-run naive append block in agenthle_agent.py is fully replaced by LLM compaction calls — no raw session log content is appended to TASK_MEMORY.md or MEMORY.md",
         "If compaction fails, falls back to the existing naive append consolidation (don't lose data)",
         "uv run pytest tests/test_memory_compaction.py passes (unit: mock OpenAI calls, verify prompts contain correct inputs, verify task-specific vs cross-task separation in outputs)",
         "Level 1: Lint passes (uv run ruff check .)",
@@ -295,7 +296,7 @@
       ],
       "priority": 3,
       "passes": false,
-      "notes": "Uses the same planner model (gpt-4.1-mini) that the nudge (US-MEM-004) will eventually use when upgraded. See docs/memory-system.md for compaction design.\n\nTwo-phase compaction:\n1. compact_task_memory: session-NNN.md + existing TASK_MEMORY.md → compacted TASK_MEMORY.md (task-specific)\n2. compact_global_memory: compacted TASK_MEMORY.md + existing MEMORY.md → compacted MEMORY.md (cross-task patterns)\n\nThe naive append consolidation in agenthle_agent.py (lines 188-222) serves as the interim mechanism and becomes the fallback if LLM compaction fails. This ensures data is never lost even if the compaction model is unavailable."
+      "notes": "Uses the same planner model (gpt-4.1-mini) that the nudge (US-MEM-004) will eventually use when upgraded. See docs/memory-system.md for compaction design.\n\nTwo-phase compaction:\n1. compact_task_memory: session-NNN.md + existing TASK_MEMORY.md → compacted TASK_MEMORY.md (task-specific)\n2. compact_global_memory: compacted TASK_MEMORY.md + existing MEMORY.md → compacted MEMORY.md (cross-task patterns)\n\nThe naive append consolidation in agenthle_agent.py (post-run block, lines ~203-237) serves as the interim mechanism and becomes the fallback if LLM compaction fails. This ensures data is never lost even if the compaction model is unavailable.\n\nWARNING — Naive append causes unbounded growth: The current post-run block appends the FULL session log verbatim to both TASK_MEMORY.md and MEMORY.md after every run. After 5+ runs, both files become bloated with redundant observations, wasting context tokens when injected into instructions. LLM compaction MUST deduplicate, compress, and resolve contradictions — not just summarize. Each compacted output should be strictly shorter than (existing content + new session log)."
     },
     {
       "id": "US-MEM-E2E",
