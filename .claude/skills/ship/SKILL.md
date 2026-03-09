@@ -42,6 +42,9 @@ If any check fails, fix it before proceeding. Report what you fixed.
 Run the acceptance criteria from the current story's PRD entry. At minimum:
 - `uv run ruff check .` (lint)
 - Any unit tests relevant to changed files
+- `run_magic_tower.sh --max-steps 5` smoke test
+
+If the smoke test cannot be run (e.g., no VM connection), you MUST explain why and ask the user to decide the next step — do NOT silently skip it.
 
 If checks fail, fix and re-review (go back to step 1).
 

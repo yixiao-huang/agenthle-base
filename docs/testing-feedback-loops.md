@@ -81,7 +81,7 @@ Every memory-related story should include verification at **all applicable level
 ### Level 1 (Mechanical) — automated
 - [ ] Unit tests pass (uv run pytest)
 - [ ] Lint passes (uv run ruff check .)
-- [ ] Smoke test: run_magic_tower.sh --max-steps 5 doesn't crash
+- [ ] Smoke test: run_magic_tower.sh --max-steps 5 doesn't crash (requires remote VM — if unavailable, ask the user before skipping)
 
 ### Level 2 (Behavioral) — after real run
 - [ ] Run: run_magic_tower.sh N (step count at your discretion)

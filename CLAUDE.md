@@ -43,7 +43,7 @@ Run `/onboard` to read all key files, check git state, and identify the current 
 
 See `docs/testing-feedback-loops.md` for full details.
 
-- **Level 1 (Mechanical)**: Lint passes, unit tests pass, smoke test (`run_magic_tower.sh --max-steps 5`) doesn't crash. Required for all stories.
+- **Level 1 (Mechanical)**: Lint passes, unit tests pass, smoke test (`run_magic_tower.sh --max-steps 5`) doesn't crash. Required for all stories. **If you cannot run the smoke test** (e.g., no VM connection), you MUST explain why and ask the user to decide the next step — do NOT silently skip it.
 - **Level 2 (Behavioral)**: Agent actually invokes the feature, content is task-relevant, reasoning references retrieved memory. Required for agent/tool stories.
 - **Level 3 (Outcome)**: Multi-session knowledge transfer. Required only for cross-session stories.
 
