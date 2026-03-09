@@ -1,9 +1,9 @@
-"""Tests for memory tools (MemorySearchTool, MemoryGetTool)."""
+"""Tests for memory tools (MemorySearchTool, MemoryGetTool, MemoryWriteTool)."""
 
 import pytest
 
 from memory.store import MemoryStore
-from memory.tools import MemoryGetTool, MemorySearchTool
+from memory.tools import MemoryGetTool, MemorySearchTool, MemoryWriteTool
 
 
 @pytest.fixture
@@ -27,7 +27,8 @@ class TestMemorySearchTool:
         params = tool.parameters
         assert params["type"] == "object"
         assert "keywords" in params["properties"]
-        assert params["required"] == ["keywords"]
+        assert params["required"] == []
+        assert "query" in params["properties"]
 
     def test_search_basic(self, store, tool):
         store.write_memory("The agent got stuck on floor 1\nFloor 2 was reached\n")
@@ -63,7 +64,7 @@ class TestMemorySearchTool:
             tool.call({"not_keywords": ["x"]})
 
     def test_search_empty_keywords_raises(self, tool):
-        with pytest.raises(ValueError, match="non-empty"):
+        with pytest.raises(ValueError, match="keywords.*query"):
             tool.call({"keywords": []})
 
     def test_result_includes_line_number(self, store, tool):
@@ -76,6 +77,36 @@ class TestMemorySearchTool:
         (store.logs_dir / "2026-03-05.md").write_text("found the key\n", encoding="utf-8")
         result = tool.call({"keywords": ["key"]})
         assert "memory_logs/2026-03-05.md" in result
+
+    def test_query_string_splits_to_keywords(self, store, tool):
+        store.write_memory("arrow keys stuck floor\nclick worked\n")
+        result = tool.call({"query": "arrow stuck"})
+        assert "arrow keys stuck floor" in result
+
+    def test_query_single_word(self, store, tool):
+        store.write_memory("important observation here\n")
+        result = tool.call({"query": "important"})
+        assert "important" in result
+
+    def test_keywords_takes_precedence_over_query(self, store, tool):
+        store.write_memory("alpha line\nbeta line\n")
+        # keywords provided — query should be ignored
+        result = tool.call({"keywords": ["alpha"], "query": "beta"})
+        assert "alpha" in result
+
+    def test_empty_query_and_no_keywords_raises(self, tool):
+        with pytest.raises(ValueError, match="keywords.*query"):
+            tool.call({"query": ""})
+
+    def test_no_query_no_keywords_raises(self, tool):
+        with pytest.raises(ValueError, match="keywords.*query"):
+            tool.call({})
+
+    def test_store_error_returns_friendly_message(self, store, tool, monkeypatch):
+        monkeypatch.setattr(store, "search", lambda *a, **kw: (_ for _ in ()).throw(IOError("disk error")))
+        result = tool.call({"keywords": ["test"]})
+        assert "Error searching memory" in result
+        assert "disk error" in result
 
 
 @pytest.fixture
@@ -135,3 +166,72 @@ class TestMemoryGetTool:
         store.write_memory("test content\n")
         result = get_tool.call('{"path": "MEMORY.md"}')
         assert "test content" in result
+
+
+@pytest.fixture
+def task_store(tmp_path):
+    return MemoryStore(tmp_path, task_id="test_task")
+
+
+@pytest.fixture
+def write_tool(task_store):
+    return MemoryWriteTool(task_store)
+
+
+class TestMemoryWriteTool:
+    def test_name_registered(self, write_tool):
+        assert write_tool.name == "memory_write"
+
+    def test_parameters_schema(self, write_tool):
+        params = write_tool.parameters
+        assert params["type"] == "object"
+        assert "content" in params["properties"]
+        assert "target" in params["properties"]
+        assert params["required"] == ["content"]
+
+    def test_write_session(self, task_store, write_tool):
+        task_store.init_session()
+        result = write_tool.call({"content": "session observation", "target": "session"})
+        assert "Wrote" in result
+        assert "bytes" in result
+        # Verify file content
+        session_files = list(task_store.task_dir.glob("session-*.md"))
+        assert len(session_files) == 1
+        assert "session observation" in session_files[0].read_text(encoding="utf-8")
+
+    def test_write_memory(self, task_store, write_tool):
+        result = write_tool.call({"content": "long-term insight", "target": "memory"})
+        assert "Wrote" in result
+        assert "MEMORY.md" in result
+        assert task_store.memory_path.read_text(encoding="utf-8") == "long-term insight"
+
+    def test_write_task_memory(self, task_store, write_tool):
+        result = write_tool.call({"content": "task-specific note", "target": "task_memory"})
+        assert "Wrote" in result
+        assert "TASK_MEMORY.md" in result
+        assert "task-specific note" in (task_store.task_dir / "TASK_MEMORY.md").read_text(encoding="utf-8")
+
+    def test_empty_content_rejected(self, write_tool):
+        result = write_tool.call({"content": ""})
+        assert "Error" in result
+
+    def test_whitespace_content_rejected(self, write_tool):
+        result = write_tool.call({"content": "   \n\t  "})
+        assert "Error" in result
+
+    def test_default_target_is_session(self, task_store, write_tool):
+        task_store.init_session()
+        result = write_tool.call({"content": "default target test"})
+        assert "Wrote" in result
+        session_files = list(task_store.task_dir.glob("session-*.md"))
+        assert any("default target test" in f.read_text(encoding="utf-8") for f in session_files)
+
+    def test_no_session_init_error(self, task_store, write_tool):
+        result = write_tool.call({"content": "should fail", "target": "session"})
+        assert "Error" in result
+        assert "session" in result.lower()
+
+    def test_json_string_params(self, task_store, write_tool):
+        result = write_tool.call('{"content": "json test", "target": "memory"}')
+        assert "Wrote" in result
+        assert task_store.memory_path.read_text(encoding="utf-8") == "json test"

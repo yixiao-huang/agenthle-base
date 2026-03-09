@@ -198,3 +198,16 @@
   - openclaw pi-embedded.ts is a barrel file — actual logic is in pi-embedded-runner/run/attempt.ts
   - openclaw search is split: manager-search.ts (FTS5 low-level), hybrid.ts (ranking), agents/memory-search.ts (defaults/config)
 ---
+
+## 2026-03-09 - US-MEM-002 polish (judge action items)
+- Added `query` string alias to MemorySearchTool — accepts single string, splits on whitespace. Forward-compatible with US-MEM-006 hybrid search. `keywords` still works and takes precedence.
+- Added reference attribution docstring citing openclaw/src/agents/tools/memory-tool.ts with 3 documented intentional deviations.
+- Added try/except around `store.search()` — returns friendly error string. Matches MemoryGetTool/WriteTool pattern.
+- Updated tool description to include TASK_MEMORY.md and session logs (stale after US-MEM-TSK-S).
+- Added `minScore` as acceptance criterion to US-MEM-SQL in prd.json.
+- 7 new tests: query splits, query single word, keywords precedence, empty query raises, no params raises, store error handling.
+- Files changed: memory/tools.py, tests/test_memory_tools.py, prd.json, progress.txt
+- **Learnings for future iterations:**
+  - Adding a `query` alias early (before hybrid search) avoids API breaks — agents learn parameter shapes and re-prompting is costly
+  - When a judge report flags deviations from a golden reference, document intentional deviations in docstrings so future reviewers don't re-raise the same issues
+---

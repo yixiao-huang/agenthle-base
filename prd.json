@@ -316,7 +316,8 @@
         "uv run pytest tests/test_memory_chunking.py passes (new tests: overlap correctness, line number tracking, small file single chunk, empty input)",
         "Level 1: Lint passes (uv run ruff check .)",
         "Level 1: Smoke test run_magic_tower.sh 5 doesn't crash",
-        "Level 2: After a real run, memory_search results show BM25-ranked ordering (not simple count-based)"
+        "Level 2: After a real run, memory_search results show BM25-ranked ordering (not simple count-based)",
+        "MemorySearchTool gains optional minScore parameter (float) that filters results below the threshold (default: no filtering for backward compat)"
       ],
       "priority": 4,
       "passes": false,
