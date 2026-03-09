@@ -20,6 +20,60 @@ Target: $ARGUMENTS (if empty, audit everything done so far).
 
 ---
 
+## Raw Audit Log
+
+All Level 1+ verification commands (unit tests, lint, smoke tests, VM runs, trajectory analysis) MUST be logged to a single file for traceability.
+
+**Log file path**: `logs/judge_YYYY-MM-DD_HHMM.log` (same timestamp as the final report)
+
+**Before running any tests**, initialize the log:
+```bash
+mkdir -p logs
+TIMESTAMP=$(date +%Y-%m-%d_%H%M)
+LOG_FILE="logs/judge_${TIMESTAMP}.log"
+echo "=== AgentHLE Judge Audit Log ===" > "$LOG_FILE"
+echo "Started: $(date -Iseconds)" >> "$LOG_FILE"
+echo "Target: [story ID or 'full project']" >> "$LOG_FILE"
+echo "========================================" >> "$LOG_FILE"
+```
+
+Store `$LOG_FILE` and `$TIMESTAMP` for use throughout the audit.
+
+**What to log** (Level 1+ verification only):
+
+```bash
+# Unit tests
+echo -e "\n--- Unit Tests ---" >> "$LOG_FILE"
+uv run pytest tests/ -v 2>&1 | tee -a "$LOG_FILE"
+
+# Lint
+echo -e "\n--- Lint ---" >> "$LOG_FILE"
+uv run ruff check . 2>&1 | tee -a "$LOG_FILE"
+
+# Smoke test / VM runs
+echo -e "\n--- VM Run (N steps) ---" >> "$LOG_FILE"
+source .envrc 2>/dev/null; bash run_magic_tower.sh N 2>&1 | tee -a "$LOG_FILE"
+
+# Trajectory analysis (memory tool calls, search queries, etc.)
+echo -e "\n--- Trajectory Analysis: memory tool calls ---" >> "$LOG_FILE"
+grep -r '"memory_search"\|"memory_get"\|"memory_write"' <trajectory_dir>/ 2>&1 | tee -a "$LOG_FILE"
+
+# Memory file content checks
+echo -e "\n--- Memory File: session log ---" >> "$LOG_FILE"
+cat memory_data/tasks/*/session-*.md 2>&1 >> "$LOG_FILE"
+```
+
+**Do NOT log**: file reads for context gathering (CLAUDE.md, architecture.md, prd.json, source code), git state checks, or golden reference comparisons. Only actual test/verification command output.
+
+**At the end**, finalize:
+```bash
+echo -e "\n========================================" >> "$LOG_FILE"
+echo "Completed: $(date -Iseconds)" >> "$LOG_FILE"
+echo "Report: docs/judges/judge_${TIMESTAMP}.md" >> "$LOG_FILE"
+```
+
+---
+
 ## Grading Rubric
 
 The work will be graded on four equally-weighted axes. Your audit must evaluate progress on ALL of them and flag deficiencies:
@@ -43,6 +97,22 @@ Every suggestion in your report should be tagged with which rubric axis it addre
 ---
 
 ## Steps
+
+### 0. Initialize audit log
+
+Create the raw log file BEFORE running any tests. All Level 1+ verification outputs go here.
+
+```bash
+mkdir -p logs
+TIMESTAMP=$(date +%Y-%m-%d_%H%M)
+LOG_FILE="logs/judge_${TIMESTAMP}.log"
+echo "=== AgentHLE Judge Audit Log ===" > "$LOG_FILE"
+echo "Started: $(date -Iseconds)" >> "$LOG_FILE"
+echo "Target: [story ID or 'full project']" >> "$LOG_FILE"
+echo "========================================" >> "$LOG_FILE"
+```
+
+Store `$LOG_FILE` and `$TIMESTAMP` — you'll use them throughout.
 
 ### 1. Gather the full picture (parallel reads)
 
@@ -136,19 +206,24 @@ Step back and question whether the design holds up when integrated into the full
 
 ### 6. Real VM verification (the real test)
 
-This is the most important audit step. Run a real VM test and analyze behavioral evidence.
+This is the most important audit step. Run a real VM test and analyze behavioral evidence. **All commands in this step MUST be logged to `$LOG_FILE`.**
 
 **If the VM is unavailable, the run fails to connect, or the run crashes before producing trajectory data, STOP here and use the AskUserQuestion tool to ask the user for help.** Do NOT skip the VM test or substitute it with unit tests — the real VM run is the core of this audit. Wait for the user to resolve the issue before continuing.
 
-1. **Run the agent**: Execute `run_magic_tower.sh` (choose `--max-steps` appropriate for the audit — at least 20 for behavioral checks, more for deeper analysis).
+1. **Run the agent** (log full output):
+   ```bash
+   echo -e "\n--- VM Run ---" >> "$LOG_FILE"
+   source .envrc 2>/dev/null; bash run_magic_tower.sh N 2>&1 | tee -a "$LOG_FILE"
+   ```
+   Choose step count appropriate for the audit — at least 20 for behavioral checks, more for deeper analysis.
 
-2. **Analyze trajectory logs** for Level 2 (Behavioral) evidence:
-   - Did the agent invoke memory tools autonomously? Search trajectory files: `grep -r '"memory_search"\|"memory_get"\|"memory_write"' <trajectory_dir>/`
+2. **Analyze trajectory logs** for Level 2 (Behavioral) evidence — **log all analysis output**:
+   - Did the agent invoke memory tools autonomously?
    - Were search queries task-relevant (not empty or random)?
    - Did reasoning summaries (`response.output[].summary[].text`) reference retrieved memory content?
    - Were memory writes meaningful observations (floor numbers, strategies, enemy stats) vs. just step counters?
 
-3. **Analyze memory files** for content quality:
+3. **Analyze memory files** for content quality — **log file contents**:
    - Does session log contain task-relevant observations?
    - Does TASK_MEMORY.md (if compaction is implemented) contain useful distilled knowledge?
    - Are nudge-appended entries visible in the session log (if callback is implemented)?
@@ -160,7 +235,17 @@ This is the most important audit step. Run a real VM test and analyze behavioral
 
 5. **Check function_call_output retention**: In trajectory `api_start.json` files, verify how many turns memory tool results survive before being truncated.
 
-### 7. Generate suggestions
+### 7. Run Level 1 checks (log all output)
+
+```bash
+echo -e "\n--- Unit Tests ---" >> "$LOG_FILE"
+uv run pytest tests/ -v 2>&1 | tee -a "$LOG_FILE"
+
+echo -e "\n--- Lint ---" >> "$LOG_FILE"
+uv run ruff check . 2>&1 | tee -a "$LOG_FILE"
+```
+
+### 8. Generate suggestions
 
 Produce concrete, prioritized suggestions in these categories:
 
@@ -185,10 +270,22 @@ Produce concrete, prioritized suggestions in these categories:
 - Criteria to add, modify, or remove — with exact wording
 - Prefer real VM run checks over unit tests
 
-### 8. Return the audit report
+### 9. Finalize log and write the report
+
+**First**, close out the raw log file:
+```bash
+echo -e "\n========================================" >> "$LOG_FILE"
+echo "Completed: $(date -Iseconds)" >> "$LOG_FILE"
+echo "Report: docs/judges/judge_${TIMESTAMP}.md" >> "$LOG_FILE"
+```
+
+**Then**, write the audit report. The report MUST include the raw log path near the top.
 
 ```markdown
 ## AgentHLE Audit Report
+
+**Raw audit log**: `logs/judge_YYYY-MM-DD_HHMM.log`
+**Report**: `docs/judges/judge_YYYY-MM-DD_HHMM.md`
 
 ### Overall Assessment
 [1-2 sentence summary: How sound is the current work? What's the biggest gap?]
@@ -252,19 +349,11 @@ Produce concrete, prioritized suggestions in these categories:
 **[PASS / FAIL / NEEDS WORK]** — [one-sentence summary of what's good and what must change]
 ```
 
-### 9. Write the report to `docs/`
+Save as `docs/judges/judge_${TIMESTAMP}.md` (same timestamp as the log). If a previous report exists, do NOT overwrite it — each run creates a new timestamped file.
 
-Save the full audit report as a timestamped markdown file:
-
+After writing, print a one-line summary:
 ```
-docs/judge_YYYY-MM-DD_HHMM.md
-```
-
-The file must contain the complete report from Step 8 above. If a previous report exists, do NOT overwrite it — each run creates a new timestamped file so the history of audits is preserved.
-
-After writing, print a one-line summary to the console:
-```
-Judge report written to docs/judge_YYYY-MM-DD_HHMM.md — [1-sentence summary of top finding]
+Judge report written to docs/judges/judge_YYYY-MM-DD_HHMM.md (log: logs/judge_YYYY-MM-DD_HHMM.log) — [1-sentence summary]
 ```
 
 ---
@@ -278,6 +367,6 @@ Judge report written to docs/judge_YYYY-MM-DD_HHMM.md — [1-sentence summary of
 - **Quote specific code.** "`store.py:115` — search() doesn't handle task-scoped files" is useful. "Search might have issues" is not.
 - **Reference the design docs.** "This contradicts docs/memory-system.md which specifies session-NNN.md as append-only" is useful. "This doesn't match the design" is not.
 - **Prioritize ruthlessly.** Flag the highest-impact issues first. A behavioral failure on real VM > a code style nit.
-- **Only write to `docs/`.** Do not modify code, architecture.md, progress.txt, or prd.json — the user decides what to act on. The only file you create is the timestamped report in `docs/`.
+- **Only write to `docs/judges/` and `logs/`.** Do not modify code, architecture.md, progress.txt, or prd.json — the user decides what to act on. The only files you create are the report in `docs/` and the raw log in `logs/`. Both must share the same timestamp.
 - **Be specific about fixes.** Don't say "improve testing." Say "Add test for MemoryStore.search() with task_id set — verify it searches tasks/<task_id>/ before global MEMORY.md."
 - **Prefer real tests over synthetic ones.** A 20-step `run_magic_tower.sh` run that checks trajectory logs is worth more than 10 mock-based unit tests.
