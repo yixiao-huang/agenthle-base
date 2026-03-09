@@ -5,6 +5,5 @@
       "Bash(ls:*)",
       "Read:*"
     ]
-  },
-  "apiKeyHelper": "~/.claude/anthropic_key.sh"
+  }
 }

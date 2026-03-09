@@ -28,13 +28,24 @@ Also read these if relevant to the current work area:
 - `docs/cua-context-management.md` — how CUA agent context works (for agent/context work)
 - `docs/openclaw-context-flow.md` — OpenClaw reference: system prompt, compaction prompts, memory recall, tool loop (for memory/compaction/recall stories)
 
-### 2. Check git state
+### 2. Sync repo
+
+Pull latest changes for both the base repo and submodule:
+
+```bash
+git pull private tinyclaw
+cd submodules/cua && git pull fork tinyclaw-memory && cd ../..
+```
+
+If this fails (submodule not initialized, missing remotes, etc.), run `/first-onboard` for full setup.
+
+### 3. Check git state
 
 - Run `git branch --show-current` to confirm which branch you're on
 - Run `git log --oneline -10` for recent commit history
 - If the PRD exists, verify you're on the correct `branchName` from the PRD. If not, check it out or create it from main.
 
-### 3. Identify current work
+### 4. Identify current work
 
 From the PRD, find all stories where `passes: false`. Do NOT simply select the next one in the list. Instead, determine which story to implement first by carefully considering:
 - **Dependencies**: Which stories are blocked vs. ready to start? Check each story's `context.depends` field and verify prerequisite stories have `passes: true`.
@@ -47,7 +58,7 @@ Summarize the chosen story:
 - **Dependencies**: Any prerequisite stories and their status
 - **Acceptance criteria**: What needs to pass
 
-### 4. Report to user
+### 5. Report to user
 
 Present a concise summary:
 
@@ -65,7 +76,7 @@ Present a concise summary:
 - [What to work on, based on PRD priority]
 ```
 
-### 5. Enter planning mode
+### 6. Enter planning mode
 
 After reporting, enter planning mode to draft the plan for the current story.
 

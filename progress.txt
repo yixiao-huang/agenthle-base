@@ -180,3 +180,11 @@
   - Reference format convention: `openclaw/src/... (description) | docs/... § Section Name` — pipe separates primary from secondary
   - Setup stories (env config, file rewrites, analysis) don't need golden references — they have no external design inspiration
 ---
+
+## 2026-03-08 - Skills refactor: /first-onboard, /onboard sync, /judge consolidation
+- Created `/first-onboard` skill: one-time server setup (remotes, submodule init, branch checkout)
+- Simplified `/onboard` sync step: just `git pull` for base + submodule, with fallback to `/first-onboard`
+- Files changed: .claude/skills/first-onboard/SKILL.md (created), .claude/skills/onboard/SKILL.md (simplified), .claude/settings.json (removed apiKeyHelper)
+- **Learnings for future iterations:**
+  - Split one-time setup from per-session sync — keeps /onboard fast and avoids redundant checks every session
+---
