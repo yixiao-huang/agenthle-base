@@ -1,0 +1,1 @@
+echo $ANTHROPIC_TOKEN
