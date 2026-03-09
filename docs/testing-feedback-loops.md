@@ -75,13 +75,15 @@ The `/judge` skill spawns a subagent that operationalizes this framework. It rea
 
 ## Verification Checklist (Per Story)
 
-Every memory-related story should include verification at **all applicable levels**:
+Every memory-related story should include verification at **all applicable levels**.
+
+**VM test rule**: Any verification step that requires a remote VM (smoke test, real runs, trajectory analysis) is mandatory. If you cannot run it (e.g., no VM connection), you MUST explain why and ask the user to decide the next step — do NOT silently skip it or declare it impractical.
 
 ```
 ### Level 1 (Mechanical) — automated
 - [ ] Unit tests pass (uv run pytest)
 - [ ] Lint passes (uv run ruff check .)
-- [ ] Smoke test: run_magic_tower.sh --max-steps 5 doesn't crash (requires remote VM — if unavailable, ask the user before skipping)
+- [ ] Smoke test: run_magic_tower.sh --max-steps 5 doesn't crash
 
 ### Level 2 (Behavioral) — after real run
 - [ ] Run: run_magic_tower.sh N (step count at your discretion)

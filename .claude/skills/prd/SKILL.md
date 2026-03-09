@@ -110,7 +110,7 @@ Automated checks that verify the code runs without errors.
 "Level 1: Smoke test run_magic_tower.sh --max-steps 5 doesn't crash"
 ```
 
-The smoke test requires a remote VM. **If you cannot run it**, you MUST explain why and ask the user to decide the next step — do NOT silently skip it or declare it impractical on your own.
+**VM test rule**: Any verification step that requires a remote VM (smoke test, real runs, trajectory analysis) is mandatory. If you cannot run it (e.g., no VM connection), you MUST explain why and ask the user to decide the next step — do NOT silently skip it or declare it impractical.
 
 ### Level 2 — Behavioral (required for agent/tool stories)
 After a real run (step count at the implementing agent's discretion), verify the agent actually uses the feature.
