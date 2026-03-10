@@ -1,12 +1,12 @@
 ---
 name: onboard
-description: "Familiarize yourself with the AgentHLE codebase at the start of a new session. Reads CLAUDE.md, architecture, progress, PRD, and key files to build context. Currently focused on Phase 2: faithful reproduction of OpenClaw's agent-side architecture for CUA. Use at the beginning of every new conversation."
+description: "Session startup for the AgentHLE agent harness. Builds layered context per CLAUDE.md's progressive exposure layers, syncs repo, identifies the current story, and enters planning mode. Use at the beginning of every new conversation."
 user-invocable: true
 ---
 
 # Codebase Onboarding
 
-Quickly build context on the AgentHLE codebase so you can start working effectively. This skill executes the "Before you start" checklist from CLAUDE.md.
+Build context and identify work for the current session. Follows the **progressive exposure** layers defined in CLAUDE.md — load only what the current story requires.
 
 ---
 
@@ -14,20 +14,9 @@ Quickly build context on the AgentHLE codebase so you can start working effectiv
 
 Execute all reads in parallel where possible.
 
-### 1. Read core project files (parallel)
+### 1. Read Layer 0 files (parallel)
 
-Read ALL of these files to understand the project and current state:
-
-- `CLAUDE.md` — project instructions, workflow rules, quality requirements, and git conventions. **This is the most important file — it governs how you work in this repo.**
-- `architecture.md` — system architecture, directory structure, data flow
-- `progress.txt` — **start with the Codebase Patterns section at the top**, then skim recent story entries for context on what's been done
-- `prd.json` — current PRD with user stories, priorities, and acceptance criteria
-
-Also read these based on the current work area:
-- `docs/memory-system.md` — memory system design: Phase 1 (TinyClaw) + Phase 2 (OpenClaw reproduction)
-- `docs/cua-context-management.md` — CUA-side constraints (truncation, callback chain, what survives at turn 100)
-- `docs/openclaw-context-flow.md` — pointer doc linking to golden references
-- `openclaw/docs/concepts/` — **read the specific concept doc(s) relevant to your story** (e.g., `memory.md` for memory stories, `compaction.md` for compaction stories, `system-prompt.md` for system prompt stories). Do NOT load all concept docs — pick only what's needed.
+Read all files listed under **Layer 0** in CLAUDE.md's "Key Files (Progressive Exposure)" section. For `progress.txt`, start with the Codebase Patterns section at the top, then skim recent story entries.
 
 ### 2. Sync repo
 
@@ -44,6 +33,7 @@ If this fails (submodule not initialized, missing remotes, etc.), run `/first-on
 
 - Run `git branch --show-current` to confirm which branch you're on
 - Run `git log --oneline -10` for recent commit history
+- Run `git status` to see uncommitted changes
 - If the PRD exists, verify you're on the correct `branchName` from the PRD. If not, check it out or create it from main.
 
 ### 4. Identify current work
@@ -59,16 +49,22 @@ Summarize the chosen story:
 - **Dependencies**: Any prerequisite stories and their status
 - **Acceptance criteria**: What needs to pass
 
-### 5. Write story lock
+### 5. Read Layer 1 and Layer 2 (based on story)
 
-Write the chosen story ID to `.current-story` in the project root. This signals to other agents and skills which story is active.
+Now that you know the story, consult CLAUDE.md's **Layer 1** and **Layer 2** tables. Read only what's relevant:
+- **Layer 1**: Reference docs matching the story's domain (context pipeline, specific OpenClaw concept, etc.)
+- **Layer 2**: Source code the story will modify or reproduce. Read the OpenClaw source first (target behavior), then the corresponding AgentHLE/CUA file (current state).
+
+**Rule**: Don't read CUA internals unless the story requires changing how we interact with the framework.
+
+### 6. Write story lock
+
+Write the chosen story ID to `.current-story` in the project root.
 
 - If `.current-story` is empty or matches the chosen story, write the story ID.
-- If `.current-story` contains a **different** story ID, warn the user that another agent may be working on that story and ask before overwriting.
+- If `.current-story` contains a **different** story ID, warn the user and ask before overwriting.
 
-### 6. Report to user
-
-Present a concise summary:
+### 7. Report to user
 
 ```
 ## Onboarding Summary
@@ -80,11 +76,14 @@ Present a concise summary:
 ### Key context
 - [2-3 bullet points of critical codebase patterns from progress.txt]
 
+### Reference files loaded
+- [List which Layer 1/2 files you read and why]
+
 ### Next steps
 - [What to work on, based on PRD priority]
 ```
 
-### 7. Enter planning mode
+### 8. Enter planning mode
 
 After reporting, enter planning mode to draft the plan for the current story.
 
@@ -93,6 +92,7 @@ After reporting, enter planning mode to draft the plan for the current story.
 ## Important Notes
 
 - Do NOT start implementing anything — just build context and report
+- **Progressive exposure**: Resist the urge to read everything. Each layer adds context cost. Only go deeper when the story justifies it.
 - If `architecture.md` doesn't exist, flag this to the user
 - If `prd.json` doesn't exist, let the user know they can use `/prd` to create one
 - If all stories in the PRD pass, report that the feature is complete

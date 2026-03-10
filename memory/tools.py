@@ -161,9 +161,9 @@ class MemoryGetTool(BaseTool):
 class MemoryWriteTool(BaseTool):
     """Tool for writing content to memory files.
 
-    TinyClaw-specific: no direct OpenClaw equivalent. OpenClaw agents write
-    memory via filesystem access; this explicit tool enables the same capability
-    for CUA agents that lack direct file I/O.
+    No direct OpenClaw equivalent. OpenClaw agents write memory via filesystem
+    access; this explicit tool enables the same capability for CUA agents that
+    lack direct file I/O.
     """
 
     def __init__(self, store: MemoryStore, cfg=None):

@@ -1,4 +1,4 @@
-# Testing & Feedback Loops: Designing Meaningful Verification for TinyClaw
+# Testing & Feedback Loops: Designing Meaningful Verification for AgentHLE
 
 ## Problem
 
@@ -10,12 +10,11 @@ This tells us the code works mechanically but says nothing about whether the mem
 
 ## Three Levels of Testing
 
-### Level 1: Mechanical (current)
+### Level 1: Mechanical (baseline)
 **Question**: Does the code run without errors?
 
-- Unit tests with `tmp_path` and seeded data
-- `run_magic_tower.sh 5` smoke test
-- Tool appears in trajectory JSON
+- Unit tests with `tmp_path` and seeded data (`uv run pytest`)
+- Lint passes (`uv run ruff check .`)
 
 **What it catches**: Import errors, type mismatches, missing files, API contract violations.
 
@@ -24,7 +23,7 @@ This tells us the code works mechanically but says nothing about whether the mem
 ### Level 2: Behavioral
 **Question**: Does the agent interact with memory in a meaningful way?
 
-After a real run (`run_magic_tower.sh` — step count at the testing agent's discretion based on what's needed to verify the feature), verify:
+After a real VM run (`run_magic_tower.sh 50` — at least 50 steps to observe meaningful agent behavior), verify:
 
 1. **Tool invocation** — Did the agent call memory tools?
    - Parse trajectory JSONs (`turn_NNN/NNNN_agent_response.json`) for `memory_search`, `memory_get`, `memory_write` function calls
@@ -77,16 +76,15 @@ The `/judge` skill spawns a subagent that operationalizes this framework. It rea
 
 Every memory-related story should include verification at **all applicable levels**.
 
-**VM test rule**: Any verification step that requires a remote VM (smoke test, real runs, trajectory analysis) is mandatory. You MUST actually run the command (e.g., `bash run_magic_tower.sh 5`) and observe the output — do NOT assume the VM is unavailable without trying. If the command fails with a connection error, show the error output and ask the user to decide the next step — do NOT silently skip it or declare it impractical.
+**VM test rule**: VM runs are mandatory, not optional. You MUST run the command and observe output. If the run fails for any reason (connection error, import error, timeout, etc.), show the full error output and ask the user for next steps — do NOT silently skip, declare it impractical, or mark the story as passing.
 
 ```
 ### Level 1 (Mechanical) — automated
 - [ ] Unit tests pass (uv run pytest)
 - [ ] Lint passes (uv run ruff check .)
-- [ ] Smoke test: run_magic_tower.sh 5 doesn't crash
 
-### Level 2 (Behavioral) — after real run
-- [ ] Run: run_magic_tower.sh N (step count at your discretion)
+### Level 2 (Behavioral) — after real VM run
+- [ ] Run: run_magic_tower.sh 50 (minimum 50 steps)
 - [ ] Check trajectory JSONs: agent invoked the new tool at least once
 - [ ] Check memory files: content is task-relevant (not boilerplate)
 - [ ] Check agent reasoning: tool results influenced subsequent actions
@@ -131,7 +129,7 @@ Current pattern (insufficient):
 
 Better pattern:
 ```
-"After run_magic_tower.sh (step count at discretion):
+"After run_magic_tower.sh (at least 50 steps):
  1. Trajectory logs show at least 1 memory_get invocation
  2. Memory files contain task-specific observations (not just step counters)
  3. Agent reasoning after memory retrieval references the retrieved content"
@@ -149,7 +147,7 @@ Best pattern (for cross-session stories):
 
 1. **Logging as memory** — Writing "Step 42: tokens=15000" to the daily log is instrumentation, not memory. Real memory contains observations like "Floor 2 monster requires ATK > 50".
 
-2. **Self-verification code in agent** — The current `agenthle_agent.py` has ~20 lines of post-run verification code (lines 154-171) that calls `memory_search` and logs results. This is test scaffolding embedded in production code. Verification should happen outside the agent, by reading trajectories and memory files after the run.
+2. **Self-verification code in agent** — Post-run verification code that calls `memory_search` and logs results is test scaffolding embedded in production code. Verification should happen outside the agent, by reading trajectories and memory files after the run.
 
 3. **Testing the tool, not the system** — Unit tests verify `MemorySearchTool.call()` returns formatted strings. But the real question is: when the LLM receives those strings, does it use them? This requires Level 2 behavioral checks.
 

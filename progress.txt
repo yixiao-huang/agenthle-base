@@ -11,15 +11,24 @@
 ---
 
 ## 2026-03-10 - Prepare harness for OpenClaw reproduction
-- Archived TinyClaw-era files: `progress-tinyclaw.txt`, `prd-tinyclaw.json`
-- Fresh `progress.txt` (this file) inherits only Codebase Patterns
+- Set up `progress.txt` (this file) with Codebase Patterns
 - Fresh `prd.json` ready for OpenClaw reproduction stories
 - Updated CLAUDE.md Key Files table with OpenClaw golden references
-- Replaced `docs/openclaw-context-flow.md` with pointer to HTML + concept docs
-- Updated `docs/memory-system.md` with Phase 2 (OpenClaw reproduction) section
-- Updated `/onboard` skill for openclaw-harness branch and OpenClaw references
+- Replaced `docs/openclaw-context-flow.md` with interactive HTML version
+- Created `docs/openclaw-source-analysis.md` as detailed OpenClaw source reference
+- Updated skills for openclaw-harness branch and OpenClaw references
+- Removed all TinyClaw naming — project now framed as OpenClaw reproduction for CUA
 - **Learnings for future iterations:**
   - OpenClaw concept docs (`openclaw/docs/concepts/`) are the authoritative component-level references
   - `docs/openclaw-context-flow.html` is the primary interactive reference for the full pipeline
-  - TinyClaw names kept to distinguish updated vs. original components
+---
+
+## 2026-03-10 - OpenClaw Reproduction Guideline
+- Created `docs/reproduction-guideline.md` — strategic reference for PRD authors and implementing agents
+- Covers: reproduction philosophy (3 adaptation categories), full component mapping table (system prompt, memory, compaction, agent loop, session, out-of-scope), 5 workstreams (WS1-WS5) with dependency graph, 7 adaptation principles
+- Added pointer in CLAUDE.md Key Files table
+- **Learnings for future iterations:**
+  - OpenClaw constants to match: chunk 400 tokens / 80 overlap, hybrid 0.7 vector / 0.3 keyword, softThresholdTokens 4000, reserveTokensFloor 20000, bootstrapMaxChars 20000
+  - WS3 (Search Quality) and WS4 (Cross-Session) are independent — can be parallelized
+  - WS5 (Integration) is the terminal workstream — depends on WS1+WS2, consumes WS3+WS4
 ---

@@ -15,28 +15,43 @@ Run `/onboard` to read all key files, check git state, and identify the current 
 1. Update `progress.txt` if you discover reusable patterns (see Progress Tracking below).
 2. Propose new checks for the story if appropriate — the project is in early development.
 3. Use `/prd` to create or update `prd.json`. Do NOT write it by hand.
-4. Check `skills/` for available skills (read SKILL.md files).
+4. Check `.claude/skills/` for available skills (read SKILL.md files).
 
 ### After you finish
 1. Run `/judge` to audit acceptance criteria, compare against golden references, run a real VM test, and get a critical review.
 2. Run `/ship` to self-review, update PRD + progress, and commit+push.
 
-## Key Files
+## Key Files (Progressive Exposure)
+
+Use **progressive exposure** — load only what the current story requires. `/onboard` follows these layers automatically.
+
+### Layer 0 — Always read (every session)
 
 | File | Purpose |
 |------|---------|
-| `architecture.md` | System architecture, directory structure, data flow (single source of truth) |
-| `prd.json` | Current PRD with stories, priorities, acceptance criteria |
+| `CLAUDE.md` | This file — workflow, quality rules, git conventions |
+| `architecture.md` | System architecture, directory structure, data flow |
 | `progress.txt` | Codebase Patterns (top) + per-story progress entries |
-| `docs/openclaw-context-flow.html` | Interactive visual: full OpenClaw context pipeline (system prompt, compaction, tool loop, session persistence) — **primary reproduction reference** (open in browser) |
-| `openclaw/docs/concepts/` | Official OpenClaw docs — component references for memory, compaction, system-prompt, agent-loop, context, session, multi-agent, etc. |
-| `docs/cua-context-management.md` | CUA-side constraints (truncation, callback chain, what survives at turn 100) |
-| `docs/memory-system.md` | Memory system design — Phase 1 (TinyClaw) and Phase 2 (OpenClaw reproduction) |
-| `docs/openclaw-context-flow.md` | Pointer doc — links to HTML reference, OpenClaw concept docs, and CUA constraints |
-| `docs/testing-feedback-loops.md` | Three-level verification guidelines |
-| `progress-tinyclaw.txt` | Archived TinyClaw progress — patterns discovered and stories completed (legacy reference) |
-| `prd-tinyclaw.json` | Archived TinyClaw PRD — stories implemented during Phase 1 (legacy reference) |
-| `.current-story` | Story lock file — contains the active story ID (e.g., `US-MEM-003`). Written by `/onboard`, read by `/judge` and `/review-judge`, cleared by `/ship`. Agents must check it before starting — if non-empty with a different story, ask the user before overwriting. |
+| `prd.json` | Current PRD with stories, priorities, acceptance criteria |
+| `.current-story` | Story lock file — active story ID |
+
+### Layer 1 — Read when your story needs it (reference docs)
+
+| File | When to read |
+|------|-------------|
+| `docs/openclaw-context-flow.html` | Stories involving the context pipeline (open in browser) |
+| `docs/openclaw-source-analysis.md` | Stories reproducing specific OpenClaw components |
+| `openclaw/docs/concepts/<topic>.md` | The specific concept your story targets — pick 1-2, not all |
+| `docs/testing-feedback-loops.md` | Writing acceptance criteria (`/prd`) or reviewing (`/judge`) |
+
+### Layer 2 — Read when modifying (source code)
+
+| File | When to read |
+|------|-------------|
+| `openclaw/src/` | The OpenClaw module your story reproduces — read first to understand target behavior |
+| `memory/` | Stories touching the memory system |
+| `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw_agent.py` | Agent harness changes |
+| `submodules/cua/libs/python/agent/` | CUA SDK internals — only when changing framework interaction |
 
 ## Quality Requirements
 
@@ -46,15 +61,9 @@ Run `/onboard` to read all key files, check git state, and identify the current 
 
 ### Three-Level Verification
 
-See `docs/testing-feedback-loops.md` for full details.
+See `docs/testing-feedback-loops.md` for full details. The `/prd` skill embeds these guidelines into acceptance criteria; `/judge` enforces them.
 
-- **Level 1 (Mechanical)**: Lint passes, unit tests pass, smoke test (`run_magic_tower.sh 5`) doesn't crash. Required for all stories.
-- **Level 2 (Behavioral)**: Agent actually invokes the feature, content is task-relevant, reasoning references retrieved memory. Required for agent/tool stories.
-- **Level 3 (Outcome)**: Multi-session knowledge transfer. Required only for cross-session stories.
-
-**VM test rule**: Any verification step that requires a remote VM (smoke test, real runs, trajectory analysis) is mandatory. You MUST actually run the command (e.g., `bash run_magic_tower.sh 5`) and observe the output — do NOT assume the VM is unavailable without trying. If the command fails with a connection error, show the error output and ask the user to decide the next step — do NOT silently skip it or declare it impractical.
-
-Anti-patterns: logging step counters as "memory", test scaffolding in production code, "doesn't crash" as sufficient for tool stories.
+**Key rule**: Level 2+ VM tests (at least 50 steps) are mandatory for agent/tool stories. If a VM run fails for any reason, show the error and ask the user — do NOT skip it.
 
 ## Progress Tracking
 
@@ -119,10 +128,10 @@ The CUA framework lives at `submodules/cua/` as a git submodule tracking a **sep
 - **origin** (fetch): `git@github.com:cua-verse/cua.git` (upstream, read-only)
 - **origin** (push): `git@github.com:yixiao-huang/cua.git` (fork, push URL override)
 - **fork**: `git@github.com:yixiao-huang/cua.git` (same fork, explicit remote)
-- **Branch**: `tinyclaw-memory`
+- **Branch**: `openclaw-cua`
 
 Key rules:
-- Agent code (`agenthle_agent.py`) lives inside the submodule at `libs/cua-bench/cua_bench/agents/`
+- Agent harness (`openclaw_agent.py`) lives inside the submodule at `submodules/cua/libs/cua-bench/cua_bench/agents/`
 - Commit inside the submodule first, then commit the updated submodule pointer in the parent repo
 - Push submodule commits before pushing the parent repo
 - Push goes to the fork, not upstream

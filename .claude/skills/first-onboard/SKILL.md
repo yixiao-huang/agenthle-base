@@ -36,12 +36,12 @@ git remote add private git@github.com:yixiao-huang/agenthle-private.git 2>/dev/n
 git remote add upstream git@github.com:cua-verse/agenthle-base.git 2>/dev/null || true
 ```
 
-### 2. Checkout tinyclaw branch
+### 2. Checkout openclaw-harness branch
 
 ```bash
 git fetch private
-git checkout tinyclaw
-git pull private tinyclaw
+git checkout openclaw-harness
+git pull private openclaw-harness
 ```
 
 ### 3. Initialize CUA submodule
@@ -82,8 +82,8 @@ cd ../..
 ```bash
 cd submodules/cua
 git fetch fork
-git checkout tinyclaw-memory
-git pull fork tinyclaw-memory
+git checkout openclaw-cua
+git pull fork openclaw-cua
 cd ../..
 ```
 

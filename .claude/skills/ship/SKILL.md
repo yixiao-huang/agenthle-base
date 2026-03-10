@@ -37,14 +37,14 @@ Run `git diff` and `git diff --cached` to see all changes. Then review every cha
 
 If any check fails, fix it before proceeding. Report what you fixed.
 
-### 2. Run Level 1 checks
+### 2. Run Level 1 checks (lint + unit tests only)
 
-Run the acceptance criteria from the current story's PRD entry. At minimum:
+Run quick mechanical checks — do NOT re-run VM tests here. VM-based verification (Level 2+) should already have been done via `/judge` before shipping.
+
 - `uv run ruff check .` (lint)
-- Any unit tests relevant to changed files
-- `run_magic_tower.sh 5` smoke test
+- `uv run pytest` for any unit tests relevant to changed files
 
-**VM test rule**: Any verification step that requires a remote VM (smoke test, real runs, trajectory analysis) is mandatory. You MUST actually run the command (e.g., `bash run_magic_tower.sh 5`) and observe the output — do NOT assume the VM is unavailable without trying. If the command fails with a connection error, show the error output and ask the user to decide the next step — do NOT silently skip it.
+If `/judge` has NOT been run for this story yet, stop and tell the user to run `/judge` first. Do not ship without Level 2 verification.
 
 If checks fail, fix and re-review (go back to step 1).
 

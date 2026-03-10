@@ -30,8 +30,8 @@ MAX_STEPS="${1:-500}"
 
 uv run python -m cua_bench.batch.solver ./tasks/game/${task} \
     --eval \
-    --agent agenthle-agent \
-    --model openai/computer-use-preview \
+    --agent openclaw-agent \
+    --model anthropic/claude-sonnet-4-20250514 \
     --max-steps "$MAX_STEPS" \
     --output-dir $EVALUATION_OUTPUT_DIR
 

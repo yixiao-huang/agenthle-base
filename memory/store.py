@@ -1,5 +1,5 @@
 """
-MemoryStore - Markdown file storage layer for TinyClaw memory system.
+MemoryStore - Markdown file storage layer for AgentHLE memory system.
 Manages MEMORY.md (curated long-term), memory_logs/YYYY-MM-DD.md (daily append-only logs),
 and task-scoped storage: tasks/<task_id>/TASK_MEMORY.md + session-NNN.md files.
 """

@@ -1,6 +1,6 @@
 ---
 name: prd
-description: "Create or update prd.json for the AgentHLE autonomous agent system. Use when planning a feature, adding stories, or converting a PRD to JSON. Triggers on: create a prd, write prd for, plan this feature, requirements for, spec out, convert this prd, agenthle json, add story."
+description: "Create or update prd.json for the AgentHLE agent harness — focused on reproducing OpenClaw's agent-side architecture for CUA. Use when planning a feature, adding stories, or converting a PRD to JSON. Triggers on: create a prd, write prd for, plan this feature, requirements for, spec out, convert this prd, agenthle json, add story."
 user-invocable: true
 ---
 
@@ -99,51 +99,58 @@ Stories execute in priority order. Earlier stories must not depend on later ones
 
 ## Acceptance Criteria: Three-Level Verification
 
-**MANDATORY**: Read `docs/testing-feedback-loops.md` before writing acceptance criteria. Structure criteria using the three-level model:
+**MANDATORY**: Read `docs/testing-feedback-loops.md` before writing acceptance criteria. Structure criteria using the three-level model. The primary focus is Level 2+ — real VM runs that prove the feature works end-to-end.
 
-### Level 1 — Mechanical (required for ALL stories)
-Automated checks that verify the code runs without errors.
+### Level 1 — Mechanical (baseline, every story)
+Quick automated checks. Necessary but never sufficient on their own.
 
 ```
 "Level 1: Lint passes (uv run ruff check .)"
 "Level 1: Unit tests pass (uv run pytest tests/test_*.py)"
-"Level 1: Smoke test run_magic_tower.sh 5 doesn't crash"
 ```
 
-**VM test rule**: Any verification step that requires a remote VM (smoke test, real runs, trajectory analysis) is mandatory. You MUST actually run the command (e.g., `bash run_magic_tower.sh 5`) and observe the output — do NOT assume the VM is unavailable without trying. If the command fails with a connection error, show the error output and ask the user to decide the next step — do NOT silently skip it or declare it impractical.
+### Level 2 — Behavioral (the real test, required for agent/tool stories)
+Run the agent on a real VM for **at least 50 steps** (`run_magic_tower.sh 50`), then verify the feature was actually used and produced meaningful results.
 
-### Level 2 — Behavioral (required for agent/tool stories)
-After a real run (step count at the implementing agent's discretion), verify the agent actually uses the feature.
+**VM test rule**: VM runs are mandatory, not optional. You MUST run the command and observe output. If the run fails for any reason (connection error, import error, timeout, etc.), show the full error output and ask the user for next steps — do NOT silently skip, declare it impractical, or mark the story as passing.
+
+Check these after the run:
+1. **Tool invocation** — trajectory logs show the agent called the feature's tool(s)
+2. **Content quality** — memory/output files contain task-relevant observations (not step counters or boilerplate)
+3. **Agent reasoning** — the agent's reasoning after tool calls references retrieved content
+4. **Nudge/periodic features** — if applicable, check that periodic behaviors fired at expected intervals over 50+ steps
 
 ```
-"Level 2: Trajectory logs show agent invoked [tool] at least once"
-"Level 2: Memory files contain task-relevant content (not just step counters)"
-"Level 2: Agent reasoning references retrieved content after tool calls"
+"Level 2: run_magic_tower.sh 50 — trajectory logs show agent invoked [tool] at least once"
+"Level 2: Memory files contain task-specific observations (e.g., game state, strategies)"
+"Level 2: Agent reasoning after [tool] calls references the retrieved content"
 ```
 
-Include practical verification commands where possible:
+Include practical verification commands:
 ```
-"grep -r '\"memory_search\"' trajectories/"
+"grep -r '\"memory_search\"' trycua/cua-bench/mota_24_easy/task_0_agent_logs/trajectories/"
 ```
 
-### Level 3 — Outcome (only for cross-session stories)
-Multi-session runs show knowledge transfer. Only required when the story's value proposition is cross-session improvement.
+### Level 3 — Outcome (cross-session stories only)
+Multiple sequential VM runs (each 50+ steps) show knowledge transfer across sessions.
 
 ```
 "Level 3: Session 2's TASK_MEMORY.md contains compacted learnings from session 1"
-"Level 3: Agent in session 2 does not repeat session 1's identified dead ends"
+"Level 3: Agent in session 2 avoids session 1's identified dead ends"
+"Level 3: Floor reached in session 2 >= session 1"
 ```
 
 ### Anti-patterns to avoid in criteria:
 - "Works correctly" (vague)
 - "Agent performs well" (unmeasurable)
 - "Handles edge cases" (which ones?)
-- Treating "doesn't crash" as sufficient for tool/agent stories
+- Treating "doesn't crash" or a 5-step smoke test as sufficient for tool/agent stories
+- Step counts under 50 for Level 2 — too few steps to observe meaningful agent behavior
 
 ### Always include:
 - `"Level 1: Lint passes (uv run ruff check .)"` in every story
 - `"Level 1: Unit tests pass"` for stories with testable logic
-- `"Level 1: Smoke test run_magic_tower.sh 5 doesn't crash"` in every story
+- At least one `"Level 2: run_magic_tower.sh 50 — ..."` criterion for any agent/tool story
 
 ---
 
@@ -153,15 +160,16 @@ Each story should include a `context` object to help the implementing agent:
 
 - **existingFiles**: Files to read before starting, with brief description of what they contain
 - **depends**: Which stories must be done first and why
-- **designDoc**: Relevant design docs with section references
+- **designDoc**: Relevant design docs with section references (e.g., `openclaw/docs/concepts/memory.md`)
 - **pattern**: Existing code patterns to follow (e.g., "Follow MemorySearchTool pattern in same file")
-- **reference**: Golden reference — a mature, working implementation of similar functionality that sets the quality bar. Can be code in the codebase, an upstream module, or a design doc section. The implementing agent should read it to understand expected behavior and edge cases. The `/judge` skill uses it to critique acceptance criteria and compare implementations.
+- **reference**: Golden reference — the OpenClaw source file(s) whose behavior this story reproduces, or a mature working implementation of similar functionality. The implementing agent reads it to understand target behavior; `/judge` uses it to critique the implementation. Prefer `openclaw/src/` paths for reproduction stories.
 
 **Golden references** are the single most useful piece of context you can give to both the implementer and the evaluator. A good reference answers "what does good look like?" without being a rigid spec.
 
 Examples:
 - `"memory/tools.py:MemorySearchTool (same file, follow this pattern for new tools)"`
-- `"docs/memory-system.md § OpenClaw Memory System (reference design for TinyClaw)"`
+- `"openclaw/src/agents/compaction.ts (reference implementation for compaction pipeline)"`
+- `"openclaw/docs/concepts/memory.md (OpenClaw design doc for memory system)"`
 - `"submodules/cua/.../base.py:BaseTool (upstream pattern for all tool classes)"`
 - `"tests/test_memory_store.py (test structure and coverage level to match)"`
 

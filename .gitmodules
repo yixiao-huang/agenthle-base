@@ -1,4 +1,4 @@
 [submodule "submodules/cua"]
 	path = submodules/cua
 	url = git@github.com:yixiao-huang/cua.git
-	branch = tinyclaw-memory
+	branch = openclaw-cua

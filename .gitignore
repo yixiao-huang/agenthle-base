@@ -48,7 +48,7 @@ test_eval.sh
 # Task output
 helloworld/
 
-# TinyClaw runtime memory data
+# Runtime memory data
 memory_data/
 
 # Claude Code local settings

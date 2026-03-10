@@ -1,9 +1,9 @@
-<!-- Last updated: 2026-03-09 (added planner.py) -->
+<!-- Last updated: 2026-03-10 -->
 # AgentHLE Architecture
 
 ## Overview
 
-AgentHLE is a benchmark framework for evaluating AI agents on computer-use tasks running on remote Windows VMs. It builds on the CUA (Computer Use Agent) framework (git submodule) and adds its own agent harness, memory system, and evaluation pipeline.
+AgentHLE is a benchmark framework for evaluating AI agents on computer-use tasks running on remote Windows VMs. It builds on the CUA (Computer Use Agent) framework (git submodule) and adds its own agent harness, memory system, and evaluation pipeline. The agent harness reproduces OpenClaw's agent-side architecture adapted for CUA's constraints.
 
 ## System Architecture
 
@@ -12,7 +12,7 @@ AgentHLE is a benchmark framework for evaluating AI agents on computer-use tasks
 │                     Shell Script Entry                       │
 │   run_magic_tower.sh / run_helloworld.sh                    │
 │   → uv run python -m cua_bench.batch.solver ./tasks/...     │
-│     --agent agenthle-agent --eval --max-steps N             │
+│     --agent openclaw-agent --eval --max-steps N              │
 └─────────────────────┬───────────────────────────────────────┘
                       │
                       ▼
@@ -31,18 +31,16 @@ AgentHLE is a benchmark framework for evaluating AI agents on computer-use tasks
         │                  │
         ▼                  ▼
 ┌───────────────┐  ┌───────────────────────────────────────┐
-│  Remote VM    │  │        AgentHLE Agent                  │
+│  Remote VM    │  │        OpenClaw Agent                  │
 │  (Windows)    │  │  submodules/cua/libs/cua-bench/        │
-│               │  │  cua_bench/agents/agenthle_agent.py    │
+│               │  │  cua_bench/agents/openclaw_agent.py    │
 │  computer-    │  │                                        │
 │  server:5000  │  │  Tools:                                │
 │               │◄─┤   - Computer (mouse/keyboard/screen)   │
 │  Receives     │  │   - MilestoneTool (save screenshots)   │
-│  actions,     │  │   - MemorySearchTool (recall memory)   │
-│  returns      │  │                                        │
-│  screenshots  │  │  Loop: async for result in agent.run() │
-│               │  │   - Track token usage                  │
-│               │  │   - Log steps to daily memory          │
+│  actions,     │  │                                        │
+│  returns      │  │  Loop: async for result in agent.run() │
+│  screenshots  │  │   - Track token usage                  │
 │               │  │   - Check for DONE signal              │
 │               │  │   - Respect max_steps                  │
 └───────────────┘  └───────────────────────────────────────┘
@@ -52,23 +50,23 @@ AgentHLE is a benchmark framework for evaluating AI agents on computer-use tasks
 
 ```
 agenthle-base/
-├── CLAUDE.md                    # Agent coding instructions
-├── prd.json                     # PRD with user stories & status
-├── progress.txt                 # Living knowledge base
+├── CLAUDE.md                    # Agent instructions + progressive exposure layers
+├── architecture.md              # This file — system architecture
+├── prd.json                     # Current PRD with user stories & status
+├── progress.txt                 # Codebase patterns + per-story progress
 ├── pyproject.toml               # Python config (uv workspace)
-├── opencua.py                   # VM connection test utility
+├── .current-story               # Story lock file (active story ID)
 │
-├── memory/                      # TinyClaw memory system
-│   ├── __init__.py              # Exports MemoryStore, tools, call_planner
-│   ├── planner.py               # call_planner() — shared LLM client for memory ops
-│   ├── store.py                 # MemoryStore (MEMORY.md + daily logs)
-│   └── tools.py                 # MemorySearchTool, MemoryGetTool (BaseTool)
+├── memory/                      # Memory system (available, not yet wired into agent)
+│   ├── __init__.py              # Exports: MemoryStore, MemorySearchTool, MemoryGetTool, MemoryWriteTool
+│   ├── store.py                 # MemoryStore — markdown file storage layer
+│   └── tools.py                 # Memory tools (BaseTool subclasses)
 │
 ├── memory_data/                 # Runtime memory storage
 │   └── memory_logs/             # Daily logs (YYYY-MM-DD.md)
 │
 ├── utils/
-│   └── evaluation.py            # VLM judge, EvaluationContext, modes
+│   └── evaluation.py            # VLM judge, EvaluationContext, scoring modes
 │
 ├── tasks/
 │   ├── common_config.py         # GeneralTaskConfig base class
@@ -78,21 +76,36 @@ agenthle-base/
 │       └── mota_24_easy/main.py # Magic Tower easy task
 │
 ├── tests/
-│   ├── test_memory_store.py     # 25 tests for MemoryStore
-│   └── test_memory_tools.py     # 22 tests for MemorySearchTool + MemoryGetTool
+│   ├── test_memory_store.py     # MemoryStore tests
+│   └── test_memory_tools.py     # Memory tool tests
 │
-├── .claude/skills/              # Claude Code skills (SKILL.md files)
-│   ├── onboard/SKILL.md        # /onboard — session startup, reads key files
+├── docs/                        # Reference docs & audit reports
+│   ├── openclaw-context-flow.html    # Interactive OpenClaw pipeline visual
+│   ├── openclaw-source-analysis.md   # OpenClaw TypeScript source analysis
+│   ├── testing-feedback-loops.md     # Three-level verification guidelines
+│   ├── judges/                       # /judge audit reports (timestamped)
+│   └── review-judges/                # /review-judge action plans (timestamped)
+│
+├── openclaw/                    # OpenClaw source (reference implementation)
+│   ├── src/                     # TypeScript source — primary reproduction reference
+│   │   ├── agents/              # Agent loop, tools, compaction, system prompt
+│   │   ├── memory/              # Memory system (SQLite + embeddings)
+│   │   └── sessions/            # Session persistence
+│   └── docs/concepts/           # Component-level docs (memory, compaction, etc.)
+│
+├── logs/                        # Raw audit logs from /judge runs
+│
+├── .claude/skills/              # Claude Code skills
+│   ├── onboard/SKILL.md        # /onboard — session startup
+│   ├── first-onboard/SKILL.md  # /first-onboard — one-time setup
 │   ├── prd/SKILL.md            # /prd — create/update prd.json
-│   ├── judge/SKILL.md          # /judge — peer-review, VM test, golden ref audit
+│   ├── judge/SKILL.md          # /judge — peer-review, VM test, audit
+│   ├── review-judge/SKILL.md   # /review-judge — diff reports, action plan
 │   └── ship/SKILL.md           # /ship — self-review, commit, push
-├── skills/                      # Legacy skills directory
-│   └── prd/SKILL.md
 │
-├── run_helloworld.sh            # Task runners
-├── run_magic_tower.sh
-├── test_eval.sh
-├── test_launch.sh
+├── run_magic_tower.sh           # Main task runner (openclaw-agent)
+├── run_helloworld.sh            # Hello world task runner
+├── opencua.py                   # VM connection test utility
 │
 ├── submodules/cua/              # CUA framework (git submodule)
 │   └── libs/
@@ -101,34 +114,33 @@ agenthle-base/
 │       │   ├── computer/        # Desktop session management
 │       │   ├── computer-server/ # Remote VM server
 │       │   ├── core/            # Base interfaces
-│       │   ├── som/             # Screen Objects Model
-│       │   └── mcp-server/      # MCP integration
+│       │   └── som/             # Screen Objects Model
 │       └── cua-bench/           # Benchmark orchestration
 │           └── cua_bench/
-│               ├── agents/agenthle_agent.py  # Our agent
+│               ├── agents/openclaw_agent.py  # Our agent harness
 │               ├── batch/solver.py           # Batch orchestrator
 │               ├── computers/remote.py       # RemoteDesktopSession
 │               └── decorators.py             # @cb.tasks_config, etc.
 │
-├── helloworld/                  # Test output traces
-├── trycua/                      # Solver output directory
-└── .venv/                       # Virtual environment
+├── trycua/                      # Solver output directory (trajectories)
+└── helloworld/                  # Hello world output traces
 ```
 
 ## Core Components
 
-### 1. Agent Harness (`agenthle_agent.py`)
+### 1. Agent Harness (`openclaw_agent.py`)
 
-The `AgentHLEAgent` class (`@register_agent("agenthle-agent")`):
+`OpenClawAgent` class (`@register_agent("openclaw-agent")`):
 
 - **`perform_task()`** — Main async entry point
-  - Creates `ComputerAgent` from CUA SDK with tools: Computer, MilestoneTool, MemorySearchTool, MemoryGetTool
+  - Creates `ComputerAgent` from CUA SDK with tools: Computer, MilestoneTool
+  - Memory tools (MemorySearchTool, MemoryGetTool, MemoryWriteTool) are implemented but not yet wired in
   - Model: configurable, default `anthropic/claude-sonnet-4-20250514`
   - Only keeps 3 most recent images in context
   - Runs agent loop, tracking tokens and steps
   - Returns `AgentResult` with usage stats and failure mode
 
-For details on how the CUA agent loop manages its conversation context (sliding window, truncation, what survives across turns, and why TinyClaw is needed), see [docs/cua-context-management.md](docs/cua-context-management.md). For the OpenClaw reference implementation (system prompt, compaction prompts, memory recall, tool loop), see [docs/openclaw-context-flow.md](docs/openclaw-context-flow.md).
+For the OpenClaw reference implementation, see [docs/openclaw-context-flow.html](docs/openclaw-context-flow.html) and [docs/openclaw-source-analysis.md](docs/openclaw-source-analysis.md).
 
 ### 2. Task System
 
@@ -152,30 +164,11 @@ Tasks extend `GeneralTaskConfig` (`tasks/common_config.py`) which provides:
 - **`evaluate_milestone_mode()`** — Compares agent milestone screenshots vs. references
 - **`evaluate_deliverable_mode()`** — Replays trajectory, screenshots at action points
 
-### 4. Memory System (TinyClaw)
+### 4. Memory System (stale — to be replaced)
 
-**MemoryStore** (`memory/store.py`):
-- `MEMORY.md` — curated long-term memory (overwritable)
-- `memory_logs/YYYY-MM-DD.md` — daily append-only logs with timestamps
-- Search: case-insensitive substring matching, scored by keyword count
+> **Note**: The current `memory/` module is a legacy prototype from an earlier design iteration. The OpenClaw reproduction work should create a new memory system based on the OpenClaw source at `openclaw/src/memory/` and `openclaw/src/agents/memory-search.ts`. Do not build on the existing code — treat it as reference only.
 
-**MemorySearchTool** (`memory/tools.py`):
-- Registered as `memory_search` via `@register_tool`
-- Accepts: `keywords: list[str]`, `max_results: int`
-- Returns formatted results with file, line, score, content
-
-**MemoryGetTool** (`memory/tools.py`):
-- Registered as `memory_get` via `@register_tool`
-- Accepts: `path: str`, `from: int` (optional), `lines: int` (optional)
-- Reads specific file content with line slicing; .md-only, rejects path traversal
-- Ref: openclaw/src/agents/tools/memory-tool.ts
-
-**call_planner** (`memory/planner.py`):
-- Async function: `call_planner(system_prompt, user_prompt, model="gpt-4.1-mini") → str`
-- Shared LLM client for compaction (US-MEM-CMP) and nudge summarization (US-MEM-004)
-- Uses OpenAI SDK; respects OPENAI_API_KEY and OPENAI_API_BASE env vars
-- Raises on API failure (caller decides fallback)
-- Ref: openclaw/src/agents/compaction.ts (summarizeWithFallback)
+**Current contents** (`memory/`): MemoryStore, MemorySearchTool, MemoryGetTool, MemoryWriteTool — not wired into the agent.
 
 ## Data Flow
 
@@ -189,9 +182,7 @@ Agent.perform_task()
       │       │
       │       ├── Take screenshot (Computer tool)
       │       ├── Perform mouse/keyboard action
-      │       ├── Save milestone screenshot (MilestoneTool)
-      │       ├── Search memory (MemorySearchTool)
-      │       └── Log step to daily memory
+      │       └── Save milestone screenshot (MilestoneTool)
       │
       ▼
 AgentResult (tokens, steps, failure_mode)
@@ -205,4 +196,3 @@ AgentResult (tokens, steps, failure_mode)
       │
       └── Returns list[float] scores
 ```
-
