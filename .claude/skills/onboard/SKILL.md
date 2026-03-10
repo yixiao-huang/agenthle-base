@@ -1,6 +1,6 @@
 ---
 name: onboard
-description: "Familiarize yourself with the AgentHLE codebase at the start of a new session. Reads CLAUDE.md, architecture, progress, PRD, and key files to build context. Use at the beginning of every new conversation."
+description: "Familiarize yourself with the AgentHLE codebase at the start of a new session. Reads CLAUDE.md, architecture, progress, PRD, and key files to build context. Currently focused on Phase 2: faithful reproduction of OpenClaw's agent-side architecture for CUA. Use at the beginning of every new conversation."
 user-invocable: true
 ---
 
@@ -23,18 +23,19 @@ Read ALL of these files to understand the project and current state:
 - `progress.txt` — **start with the Codebase Patterns section at the top**, then skim recent story entries for context on what's been done
 - `prd.json` — current PRD with user stories, priorities, and acceptance criteria
 
-Also read these if relevant to the current work area:
-- `docs/memory-system.md` — memory system design (for memory features)
-- `docs/cua-context-management.md` — how CUA agent context works (for agent/context work)
-- `docs/openclaw-context-flow.md` — OpenClaw reference: system prompt, compaction prompts, memory recall, tool loop (for memory/compaction/recall stories)
+Also read these based on the current work area:
+- `docs/memory-system.md` — memory system design: Phase 1 (TinyClaw) + Phase 2 (OpenClaw reproduction)
+- `docs/cua-context-management.md` — CUA-side constraints (truncation, callback chain, what survives at turn 100)
+- `docs/openclaw-context-flow.md` — pointer doc linking to golden references
+- `openclaw/docs/concepts/` — **read the specific concept doc(s) relevant to your story** (e.g., `memory.md` for memory stories, `compaction.md` for compaction stories, `system-prompt.md` for system prompt stories). Do NOT load all concept docs — pick only what's needed.
 
 ### 2. Sync repo
 
 Pull latest changes for both the base repo and submodule:
 
 ```bash
-git pull private tinyclaw
-cd submodules/cua && git pull fork tinyclaw-memory && cd ../..
+git pull private openclaw-harness
+cd submodules/cua && git pull fork openclaw-cua && cd ../..
 ```
 
 If this fails (submodule not initialized, missing remotes, etc.), run `/first-onboard` for full setup.

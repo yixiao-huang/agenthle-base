@@ -1,0 +1,266 @@
+## Codebase Patterns
+- Source `.envrc` directly (`source "/path/.envrc"`) for reliable env var loading in Bash tool (NOT `direnv export bash`)
+- Use `uv sync --reinstall` if editable CUA packages fail to import (agent, cua_bench, etc.)
+- Solver exits with code 1 on MAX_STEPS_EXCEEDED — expected behavior, not an error
+- BaseTool pattern: constructor takes domain object + optional cfg, calls `super().__init__(cfg)`; `@register_tool` sets `cls.name` and adds to `TOOL_REGISTRY`. `_verify_json_format_args` handles both dict and JSON string params.
+- CUA trajectory reasoning summaries: `turn_NNN/NNNN_agent_response.json → response.output[].summary[].text`
+- Turn count ≠ step count: each turn can contain multiple API calls (~2 steps/turn for openai/computer-use-preview)
+- To inject content the agent sees every turn, use the `instructions` param (PromptInstructionsCallback) — it's the only content never truncated. Use for TASK_MEMORY.md.
+- `function_call_output` items (tool results) are ephemeral — agent must act on them immediately, they get truncated within a few turns
+
+## 2026-03-05 - US-001: Configure git remotes and branches
+- Renamed origin to upstream (cua-verse/agenthle-base)
+- Added origin remote (yixiao-huang/agenthle-base)
+- Added private remote (yixiao-huang/agenthle-private)
+- Created paper-experiments branch tracking private/paper-experiments
+- Stashed local changes to run_helloworld.sh and tasks/game/mota_24_easy/run_magic_tower.sh
+- Removed untracked helloworld/task_0_trace/ files (not needed)
+- Files changed: prd.json (created), progress.txt (created), CLAUDE.md (updated)
+- **Learnings for future iterations:**
+  - The repo was cloned from cua-verse; remotes needed restructuring for private development
+  - git stash was needed before switching branches due to local modifications
+---
+
+## 2026-03-05 - US-002: Rewrite skills SKILL.md files for AgentHLE
+- Rewrote skills/agenthle/SKILL.md: replaced Ralph references with AgentHLE, updated examples to use agent harness scenarios (evaluation modes, task configs, CUA framework)
+- Rewrote skills/prd/SKILL.md: updated for AgentHLE context, examples use milestone evaluation and CUA-relevant features
+- Updated acceptance criteria language in both files to emphasize "something Claude can check" (commands, grep, file reads)
+- Files changed: skills/agenthle/SKILL.md, skills/prd/SKILL.md, prd.json, progress.txt
+- **Learnings for future iterations:**
+  - Acceptance criteria in prd.json should be grep/command-verifiable so Claude can programmatically confirm completion
+  - Skills in skills/ directory are Claude Code user-invocable skills triggered by keywords
+---
+
+## 2026-03-05 - US-003: Understanding Magic Tower - Deep analysis of the task pipeline
+- Created tasks/game/mota_24_easy/understanding_magic_tower.txt — static pipeline analysis covering task config, setup, agent execution, evaluation, shell invocation, env vars, integration points, trajectory file structure
+- Created tasks/game/mota_24_easy/debug_progress.log — live run observations and debug notes (separate from static analysis)
+- Ran full magic tower task: 373 steps / 186 turns, score 0.333 (floor 1 only out of 3)
+- Files changed: tasks/game/mota_24_easy/understanding_magic_tower.txt (created), tasks/game/mota_24_easy/debug_progress.log (created), prd.json (updated), progress.txt (updated), run_magic_tower.sh (removed hardcoded keys), run_helloworld.sh (removed hardcoded keys)
+- **Learnings for future iterations:**
+  - Trajectory files live in turn_XXX/ dirs with sequential NNNN-prefixed files (api_start, api_result, agent_response, screenshot_after, computer_call_result)
+  - Agent reasoning is in agent_response.json → kwargs.messages → last assistant message → content[type="output_text"].text
+  - The agent enters deterministic repeating cycles when it lacks cross-turn memory — strongest motivation for the tinyclaw memory system
+  - The agent can hallucinate progress (claimed floor 2, screenshots show floor 1) — visual grounding checks are needed
+---
+
+## 2026-03-05 - US-MEM-001: MemoryStore - built, integrated, tested with run_magic_tower.sh
+- Created memory/store.py with MemoryStore class (read_file, write_memory, append_to_daily_log, search, list_log_files)
+- Created memory/__init__.py exporting MemoryStore
+- Created tests/test_memory_store.py with 25 unit tests (all passing)
+- Integrated into agenthle_agent.py: imports MemoryStore, creates instance in perform_task with base_dir from MEMORY_BASE_DIR env var (default: memory_data/)
+- Validated with run_magic_tower.sh (5-step run): "TinyClaw MemoryStore initialized at: .../memory_data" printed, no errors
+- Also fixed pre-existing lint issues in agenthle_agent.py (unused imports, trailing whitespace)
+- Files changed: memory/__init__.py (created), memory/store.py (created), tests/__init__.py (created), tests/test_memory_store.py (created), agenthle_agent.py (modified), prd.json (updated), progress.txt (updated)
+- **Learnings for future iterations:**
+  - MemoryStore base_dir resolves via `Path(...).resolve()` so relative paths work from any cwd
+  - self.memory_store on the agent instance makes it available for later stories (tools, callback) without re-instantiation
+  - The `run_magic_tower.sh` validation with --max-steps 5 is a quick smoke test (~20s) for integration
+---
+
+## 2026-03-06 - US-MEM-002: memory_search tool - built, wired into agent, tested
+- Created memory/tools.py with MemorySearchTool class extending BaseTool via @register_tool("memory_search")
+- Constructor takes MemoryStore instance (same pattern as MilestoneTool taking interface)
+- Accepts keywords (list of strings) and optional max_results (int), delegates to MemoryStore.search()
+- Returns formatted results with file path, line number, score, and content; helpful message when empty
+- Updated memory/__init__.py to export MemorySearchTool
+- Updated agenthle_agent.py: imports MemorySearchTool, instantiates with self.memory_store, adds to tools list, updated agent instructions
+- Created tests/test_memory_tools.py with 12 tests (schema, basic search, no results, multi-keyword scoring, max_results, JSON string params, missing/empty keywords, line numbers, log file search)
+- All 37 tests pass (12 new + 25 existing), lint clean
+- Files changed: memory/tools.py (created), memory/__init__.py (modified), agenthle_agent.py (modified), tests/test_memory_tools.py (created), prd.json (updated), progress.txt (updated)
+- **Learnings for future iterations:**
+  - MemoryFlushCallback will need memory_write tool wired in before the nudge prompt is useful — the agent needs tools to actually persist observations
+---
+
+## 2026-03-07 - TinyClaw design finalization and PRD refactor
+- **Design doc**: Created `docs/memory-system.md` — comprehensive comparison of OpenClaw (reference) vs TinyClaw (our design). Covers storage, tools, nudge callback, post-session compaction, CUA trajectory relationship, cross-session flow, search modes, scaling, and intentional omissions.
+- **Testing guideline**: Created `docs/testing-feedback-loops.md` — three-level verification framework (Mechanical → Behavioral → Outcome). Identifies anti-patterns in current code: step-counter logging, self-verification scaffolding, "doesn't crash" as success.
+- **CLAUDE.md updated**: Added three-level testing summary with cross-reference to testing doc.
+- **PRD refactored** for self-contained, single-session-implementable stories:
+  - Restored US-MEM-001/002 to passes:true (tool code is correct; behavioral gaps addressed by downstream stories)
+  - Split US-MEM-TSK (too big) into: US-MEM-TSK-S (storage layer), US-MEM-AGT (agent wiring + cleanup), US-MEM-CMP (LLM compaction)
+  - Added US-MEM-E2E (dedicated Level 2+3 verification, no new code)
+  - Each story now has `context` field with existing files, dependencies, and design doc refs
+  - Updated US-MEM-004 to trajectory-driven nudge (reads agent_response.json reasoning summaries)
+  - Linear dependency chain: MEM-003 → TSK-S → W01 → AGT → 004 → CMP → E2E → 006
+- **Key design decisions finalized**:
+  - Nudge reads CUA trajectory reasoning summaries, currently via computer-use agent, later replaceable by planner LLM
+  - Post-session compaction uses planner LLM (gpt-5-mini, configurable via MEMORY_COMPACTION_MODEL)
+  - Same planner model for both nudge (future) and compaction
+  - TASK_MEMORY.md is read-only during session, compacted only at session end
+  - Session logs (session-NNN.md) are strictly append-only during a run
+- Files changed: docs/memory-system.md (created), docs/testing-feedback-loops.md (created), CLAUDE.md (updated), prd.json (refactored), progress.txt (updated)
+- **Learnings for future iterations:**
+  - OpenClaw's compaction only affects in-memory conversation history, NOT on-disk memory files — daily logs are permanent append-only records
+  - OpenClaw's pre-compaction flush is agent-driven but system-triggered (system decides WHEN, agent decides WHAT)
+---
+
+## 2026-03-07 - CUA context management analysis
+- Investigated how ComputerAgent manages conversation context across turns
+- Created `docs/cua-context-management.md` documenting the two-layer truncation system:
+  - Layer 1: ImageRetentionCallback (client-side) removes old screenshot triplets (reasoning + computer_call + computer_call_output), keeps only last N images
+  - Layer 2: OpenAI `truncation:auto` (server-side) drops oldest items when token budget exceeded
+- Verified from real trajectory data (186-turn Magic Tower run): at turn 100, only 20 items survive — 2 user msgs, 12 message items, 3 computer_call + 3 computer_call_output pairs. Zero reasoning items, zero function_call items.
+- Added cross-reference link in architecture.md (Agent Harness section)
+- Updated prd.json with context management insights:
+  - US-MEM-AGT: TASK_MEMORY.md must go in `instructions` param (only content never truncated)
+  - US-MEM-002/003: Added caveat that function_call_output is ephemeral
+  - US-MEM-004: Noted on_llm_start as correct hook for nudge injection
+  - US-MEM-E2E: Added acceptance criterion to verify function_call_output retention window
+- Files changed: docs/cua-context-management.md (created), architecture.md (updated), prd.json (updated), progress.txt (updated)
+- **Learnings for future iterations:**
+  - `message` items survive ImageRetentionCallback because they aren't adjacent to computer_call_output — but they still get API-truncated eventually
+  - The `input` field in api_start.json (not `messages`) contains the actual items sent to OpenAI Responses API
+  - Reasoning summaries only exist on output items where `type == "reasoning"`, not all output items in agent_response.json
+  - Artifact counter in trajectory files is per-turn (resets each turn), so glob for `*_agent_response.json` not a fixed prefix
+  - ImageRetentionCallback removes triplets: reasoning → computer_call → computer_call_output. It only checks the single item immediately before computer_call, so non-adjacent reasoning items survive by accident
+---
+
+## 2026-03-08 - /eval skill + golden references concept
+- **/eval skill**: Created `.claude/skills/eval/SKILL.md` — subagent evaluator using `context: fork` frontmatter. Reads PRD story, finds golden references, critiques acceptance criteria, runs Level 1 checks, designs Level 2/3 test plans. Returns structured report with PASS/FAIL/NEEDS WORK verdict.
+- **Golden references**: Upgraded `context.reference` in PRD skill from vague "external references" to first-class concept. Added to PRD output format, checklist, and eval skill's critique workflow.
+- Updated CLAUDE.md workflow (eval before ship), architecture.md (skills directory), docs/testing-feedback-loops.md (eval cross-reference)
+- Files changed: .claude/skills/eval/SKILL.md (new), .claude/skills/prd/SKILL.md, CLAUDE.md, architecture.md, docs/testing-feedback-loops.md, progress.txt
+- **Learnings for future iterations:**
+  - Claude Code skills use `context: fork` + `agent: <type>` frontmatter to automatically spawn subagents — no manual Agent tool calls needed
+  - `$ARGUMENTS` in skill body captures the user's input after the slash command (e.g., `/eval US-MEM-003` → `$ARGUMENTS = "US-MEM-003"`)
+  - When creating a skill that produces a report, explicitly state "Your final output is the ONLY thing the user sees" — subagents don't know their output is the deliverable unless told
+---
+
+## 2026-03-08 - US-MEM-003: memory_get tool
+- Created MemoryGetTool in memory/tools.py: `@register_tool("memory_get")`, extends BaseTool
+- API: `path` (string, required), `from` (int, optional), `lines` (int, optional) — matches OpenClaw reference
+- Security: rejects `..` path traversal, absolute paths, non-.md files
+- Delegates to MemoryStore.read_file() with from/lines → start_line/end_line conversion
+- Updated memory/__init__.py to export MemoryGetTool
+- Wired into agenthle_agent.py: imported, instantiated, added to tools list, updated agent instructions
+- 10 new tests in tests/test_memory_tools.py (22 total): schema, full read, line range, path traversal, absolute path, non-.md, missing file, log file, JSON string params
+- Added reference attribution docstring citing openclaw source files
+- Added reference attribution guideline to CLAUDE.md Quality Requirements
+- Updated architecture.md (tool listing, agent tools, test counts)
+- Files changed: memory/tools.py, memory/__init__.py, tests/test_memory_tools.py, agenthle_agent.py, CLAUDE.md, architecture.md, .claude/skills/eval/SKILL.md
+- **Learnings for future iterations:**
+  - OpenClaw uses `from`/`lines` (count-based) not `start_line`/`end_line` (range-based) — count-based is more intuitive for agents pulling N lines of context
+  - OpenClaw enforces .md-only access — important defense-in-depth even when MemoryStore scopes to base_dir
+  - When a golden reference exists, compare API shape early — easier to align upfront than refactor later
+---
+
+## 2026-03-08 - OpenClaw context flow extract + cross-references + US-PRD-REF story
+- Created `docs/openclaw-context-flow.md` — markdown extract of `docs/openclaw-context-flow.html` (interactive visual) for AI agent consumption. Covers system prompt construction, Memory Recall verbatim prompt, compaction pipeline (safeguard flush, 3 summarization prompt variants, constants), tool loop, and TinyClaw relevance map.
+- Added cross-references to `openclaw-context-flow.md` in: CLAUDE.md (Key Files), architecture.md (Agent Harness), docs/memory-system.md (intro), .claude/skills/onboard/SKILL.md (conditional reads)
+- Added US-PRD-REF story to prd.json for adding golden references to all stories
+- Files changed: docs/openclaw-context-flow.md (created), CLAUDE.md, architecture.md, docs/memory-system.md, .claude/skills/onboard/SKILL.md, prd.json
+- **Learnings for future iterations:**
+  - HTML interactive docs are NOT useful for AI agents — they can't render visuals, and content is buried in JS string literals. Always create a markdown companion for agent consumption.
+  - Cross-reference new docs in at least: CLAUDE.md Key Files, architecture.md relevant section, onboard skill, and the design doc it extends
+---
+
+## 2026-03-08 - Merge /eval into /judge skill
+- Created `.claude/skills/judge/SKILL.md` — rewrote from scratch for AgentHLE (was copied from subliminal learning project)
+- Incorporated /eval's unique capabilities: per-criterion acceptance criteria audit (OK/WEAK/WRONG/MISSING verdicts), golden reference comparison via `context.reference`, design challenge questions, verification level classification
+- Key design: two modes — `/judge` for full project audit, `/judge US-MEM-003` for single-story deep dive
+- Focus on real VM tests (Level 2/3), not unit tests/lint (Level 1). If VM unavailable, agent pauses and asks user for help.
+- Removed `.claude/skills/eval/` directory (was never committed to git)
+- Updated all references from `/eval` to `/judge` in: CLAUDE.md, architecture.md, docs/testing-feedback-loops.md, .claude/skills/prd/SKILL.md
+- Files changed: .claude/skills/judge/SKILL.md (created), .claude/skills/eval/ (removed), CLAUDE.md, architecture.md, docs/testing-feedback-loops.md, .claude/skills/prd/SKILL.md
+- **Learnings for future iterations:**
+  - Skills with overlapping scope cause confusion — better to have one comprehensive skill than two partial ones
+  - `context: fork` + `agent: general-purpose` in skill frontmatter spawns a subagent automatically
+---
+
+## 2026-03-08 - US-PRD-REF: Add golden references to all PRD stories
+- Added `context.reference` to 10 stories in prd.json (MEM-001 through MEM-RCL)
+- Created `context` objects for MEM-001 and MEM-002 (previously had none)
+- Each reference uses `primary | secondary` format: OpenClaw source file + our docs/code
+- US-MEM-E2E has no OpenClaw equivalent (verification story) — secondary-only reference
+- US-MEM-RCL already had reference — no change needed
+- US-001/002/003 are setup stories — no external reference needed, skipped
+- Marked US-PRD-REF passes:true
+- Files changed: prd.json, progress.txt
+- **Learnings for future iterations:**
+  - Reference format convention: `openclaw/src/... (description) | docs/... § Section Name` — pipe separates primary from secondary
+  - Setup stories (env config, file rewrites, analysis) don't need golden references — they have no external design inspiration
+---
+
+## 2026-03-08 - Skills refactor: /first-onboard, /onboard sync, /judge consolidation
+- Created `/first-onboard` skill: one-time server setup (remotes, submodule init, branch checkout)
+- Simplified `/onboard` sync step: just `git pull` for base + submodule, with fallback to `/first-onboard`
+- Files changed: .claude/skills/first-onboard/SKILL.md (created), .claude/skills/onboard/SKILL.md (simplified), .claude/settings.json (removed apiKeyHelper)
+- **Learnings for future iterations:**
+  - Split one-time setup from per-session sync — keeps /onboard fast and avoids redundant checks every session
+---
+
+## 2026-03-09 - OpenClaw reference accuracy audit
+- Audited all openclaw file references in prd.json against actual source files
+- Fixed 5 inaccurate references across US-MEM-001, US-MEM-004, US-MEM-CMP, US-MEM-SQL, US-MEM-006
+- Fixes: MemoryManager→MemoryIndexManager, added pi-embedded-runner implementation file, corrected compaction variable names + added safeguard file, split search references to correct files
+- Files changed: prd.json, .claude/settings.json (removed stale apiKeyHelper)
+- **Learnings for future iterations:**
+  - openclaw pi-embedded.ts is a barrel file — actual logic is in pi-embedded-runner/run/attempt.ts
+  - openclaw search is split: manager-search.ts (FTS5 low-level), hybrid.ts (ranking), agents/memory-search.ts (defaults/config)
+---
+
+## 2026-03-09 - US-MEM-002 polish (judge action items)
+- Added `query` string alias to MemorySearchTool — accepts single string, splits on whitespace. Forward-compatible with US-MEM-006 hybrid search. `keywords` still works and takes precedence.
+- Added reference attribution docstring citing openclaw/src/agents/tools/memory-tool.ts with 3 documented intentional deviations.
+- Added try/except around `store.search()` — returns friendly error string. Matches MemoryGetTool/WriteTool pattern.
+- Updated tool description to include TASK_MEMORY.md and session logs (stale after US-MEM-TSK-S).
+- Added `minScore` as acceptance criterion to US-MEM-SQL in prd.json.
+- 7 new tests: query splits, query single word, keywords precedence, empty query raises, no params raises, store error handling.
+- Files changed: memory/tools.py, tests/test_memory_tools.py, prd.json, progress.txt
+- **Learnings for future iterations:**
+  - Adding a `query` alias early (before hybrid search) avoids API breaks — agents learn parameter shapes and re-prompting is costly
+  - When a judge report flags deviations from a golden reference, document intentional deviations in docstrings so future reviewers don't re-raise the same issues
+---
+
+## 2026-03-09 - US-MEM-W01 polish (judge action items)
+- Fixed byte count: `len(content)` → `len(content.encode('utf-8'))` so "Wrote N bytes" message is accurate for multi-byte characters.
+- Added reference attribution docstring to MemoryWriteTool: TinyClaw-specific, no direct OpenClaw equivalent.
+- Added `test_invalid_target_rejected` — covers the `target not in _WRITE_TARGETS` error path (line 203-204).
+- Marked US-MEM-W01 passes:true in prd.json.
+- Files changed: memory/tools.py, tests/test_memory_tools.py, prd.json, progress.txt
+- **Learnings for future iterations:**
+  - `len(str)` returns character count, not byte count — use `len(str.encode('utf-8'))` when the message says "bytes"
+---
+
+## 2026-03-09 - US-MEM-AGT: Wire all memory tools into agent and clean up scaffolding
+- **MemoryWriteTool wired in**: imported + instantiated + added to ComputerAgent tools list
+- **Task-scoped storage**: MEMORY_TASK_ID env var → task_id → MemoryStore, init_session() creates session file
+- **TASK_MEMORY.md injection**: read at startup, prepended as "## Prior Task Knowledge" in instructions
+- **MEMORY.md injection**: read at startup, prepended as "## Global Memory (cross-task)" in instructions — was previously write-only
+- **Agent instructions rewritten**: describes all 3 tools, mandatory Step 1 memory_search, ongoing session writes, periodic task_memory writes every ~10 steps, explains TASK_MEMORY.md is injected word-for-word into future runs
+- **Anti-patterns removed**: step-counter logging (append_to_daily_log "Step N: tokens=X"), post-run self-verification block (18 lines of test scaffolding)
+- **Post-run consolidation**: safety net that appends session observations to both TASK_MEMORY.md and MEMORY.md when agent is cut off at max_steps
+- **Shell scripts**: added `export MEMORY_TASK_ID` to run_magic_tower.sh and run_helloworld.sh
+- **PRD updates**: new US-MEM-PLN (central planner client), US-MEM-EVAL (model comparison), updated US-MEM-CMP (two-phase compaction for both TASK_MEMORY.md and MEMORY.md), updated US-MEM-RCL (search scope parameter), replaced gpt-5-mini → gpt-4.1-mini everywhere
+- Files changed: agenthle_agent.py (major), run_magic_tower.sh, run_helloworld.sh, prd.json
+- **Verified**: Level 1 (lint + 87 tests + 20-step smoke) + Level 2 (50-step run: memory_search on turn 0, memory_write across 9+ turns, session log has 4 task-relevant observations, post-run consolidation to TASK_MEMORY.md confirmed)
+- **Learnings for future iterations:**
+  - openai/computer-use-preview respects the "Step 1 MANDATORY" framing — it called memory_search as its very first action
+  - The model writes to session log frequently when told to, but needs periodic TASK_MEMORY.md write instructions to survive max_steps cutoff
+  - Post-run consolidation is essential — the agent almost never writes to task_memory before being cut off
+  - MEMORY.md was write-only (consolidated to but never read) — now injected into instructions alongside TASK_MEMORY.md
+  - memory_search searches ALL session files + TASK_MEMORY.md + MEMORY.md with no scope filtering — US-MEM-RCL will add a scope parameter
+---
+
+## 2026-03-10 - US-MEM-PLN: Central planner LLM client + agent-planner architecture
+- Implemented `memory/planner.py` with `call_planner(system_prompt, user_prompt, model="gpt-4.1-mini") → str`
+- Exported `call_planner` from `memory/__init__.py`
+- 5 unit tests in `tests/test_memory_planner.py` (default model, explicit model, prompt passthrough, content return, error propagation)
+- Level 2 verification script `scripts/verify_planner.py` — tested with gpt-4.1-mini and gpt-5-mini
+- **Major architecture change**: separated computer-use agent (read-only memory) from planner (handles all writes)
+  - Agent tools: Computer, MilestoneTool, memory_search, memory_get (no memory_write)
+  - Planner flushes reasoning observations every 10 steps → session-NNN.md
+  - Post-run: planner compacts session → TASK_MEMORY.md → MEMORY.md (with naive-append fallback)
+- Updated `docs/memory-system.md` with Agent-Planner Orchestration diagram and planner-driven flow
+- Updated `docs/cua-context-management.md` with full context window composition (item types, token costs, callback chain)
+- Designed 3 new PRD stories to address identified gaps:
+  - US-MEM-COMPACT: within-session context compaction via instruction absorption (Gap 1 + Gap 2)
+  - US-MEM-PLN-CTX: planner memory access — TASK_MEMORY.md context + memory tools (Gap 3)
+- Files changed: memory/planner.py (new), memory/__init__.py, tests/test_memory_planner.py (new), scripts/verify_planner.py (new), agenthle_agent.py (major refactor), architecture.md, docs/memory-system.md, docs/cua-context-management.md, prd.json
+- **Learnings for future iterations:**
+  - The computer-use agent (openai/computer-use-preview) ignores memory_write instructions in short runs — delegating writes to the planner is more reliable
+  - `instructions=` (via PromptInstructionsCallback) is the ONLY content never truncated — use it for all persistent within-session knowledge
+  - The callback chain is provider-agnostic (works for OpenAI, Anthropic, Gemini); only `truncation: "auto"` is OpenAI-specific
+  - `message` items are the unmanaged middle ground — they survive ImageRetentionCallback but get blindly truncated by OpenAI
+  - `function_call/function_call_output` items are all gone by turn 100 — we speculate this doesn't affect read-only memory tools but needs verification
+---

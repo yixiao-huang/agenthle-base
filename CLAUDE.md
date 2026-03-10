@@ -28,10 +28,14 @@ Run `/onboard` to read all key files, check git state, and identify the current 
 | `architecture.md` | System architecture, directory structure, data flow (single source of truth) |
 | `prd.json` | Current PRD with stories, priorities, acceptance criteria |
 | `progress.txt` | Codebase Patterns (top) + per-story progress entries |
-| `docs/cua-context-management.md` | How CUA agent context works (sliding window, truncation) |
-| `docs/memory-system.md` | TinyClaw memory system design |
-| `docs/openclaw-context-flow.md` | OpenClaw context management reference (prompts, compaction, tools) |
+| `docs/openclaw-context-flow.html` | Interactive visual: full OpenClaw context pipeline (system prompt, compaction, tool loop, session persistence) — **primary reproduction reference** (open in browser) |
+| `openclaw/docs/concepts/` | Official OpenClaw docs — component references for memory, compaction, system-prompt, agent-loop, context, session, multi-agent, etc. |
+| `docs/cua-context-management.md` | CUA-side constraints (truncation, callback chain, what survives at turn 100) |
+| `docs/memory-system.md` | Memory system design — Phase 1 (TinyClaw) and Phase 2 (OpenClaw reproduction) |
+| `docs/openclaw-context-flow.md` | Pointer doc — links to HTML reference, OpenClaw concept docs, and CUA constraints |
 | `docs/testing-feedback-loops.md` | Three-level verification guidelines |
+| `progress-tinyclaw.txt` | Archived TinyClaw progress — patterns discovered and stories completed (legacy reference) |
+| `prd-tinyclaw.json` | Archived TinyClaw PRD — stories implemented during Phase 1 (legacy reference) |
 | `.current-story` | Story lock file — contains the active story ID (e.g., `US-MEM-003`). Written by `/onboard`, read by `/judge` and `/review-judge`, cleared by `/ship`. Agents must check it before starting — if non-empty with a different story, ask the user before overwriting. |
 
 ## Quality Requirements

@@ -1,8 +1,14 @@
 # Memory System Design: OpenClaw vs TinyClaw
 
-This document captures the research on OpenClaw's production memory system and the proposed TinyClaw design for AgentHLE. TinyClaw is intentionally simpler — it takes the ideas that matter for a benchmark agent and leaves the rest behind.
+This document covers the memory system for AgentHLE in two phases:
 
-For OpenClaw's full context management pipeline (system prompt construction, compaction prompts, tool loop, sub-agents), see [openclaw-context-flow.md](openclaw-context-flow.md). That doc covers the broader architecture; this doc focuses specifically on the memory subsystem.
+- **Phase 1 (TinyClaw)**: Foundational building blocks — MemoryStore, tools, planner, task-scoped storage. Intentionally simplified from OpenClaw. Completed.
+- **Phase 2 (OpenClaw Reproduction)**: Faithful reproduction of OpenClaw's agent-side architecture, adapted only where CUA constraints require it. In progress.
+
+For OpenClaw's full context management pipeline, see:
+- [`docs/openclaw-context-flow.html`](openclaw-context-flow.html) — interactive visual (primary reproduction reference)
+- [`openclaw/docs/concepts/`](../openclaw/docs/concepts/) — official component docs (memory, compaction, system-prompt, agent-loop, context, session, etc.)
+- [`docs/cua-context-management.md`](cua-context-management.md) — CUA-side constraints (truncation, callback chain, what survives at turn 100)
 
 ## Part 1: OpenClaw Memory System (Reference)
 
@@ -448,3 +454,44 @@ Sync:               File watcher + debounce     Not needed (tool-driven writes)
 Persistence:        SQLite tables               Flat markdown files
 Target use case:    Long-running assistant       Long benchmark runs (up to 10k steps)
 ```
+
+---
+
+## Phase 2: OpenClaw Reproduction
+
+Phase 1 (TinyClaw) built foundational building blocks: MemoryStore, memory tools, planner LLM client, task-scoped storage, agent-planner separation. These are reusable infrastructure.
+
+Phase 2 is a **faithful reproduction** of OpenClaw's agent-side architecture for CUA. The goal is to match OpenClaw's behavior as closely as possible, adapting only where CUA's constraints require it.
+
+### Reproduction Principles
+
+1. **Faithful first**: Match OpenClaw's prompts, constants, algorithms, and control flow before optimizing. Use `openclaw/docs/concepts/` and `docs/openclaw-context-flow.html` as golden references.
+2. **Adapt only for CUA constraints**: OpenClaw runs a text-based assistant with full file access. CUA runs a computer-use agent with screenshot-based interaction. Known required adaptations:
+   - **`instructions=` for persistent context**: CUA truncates everything except `instructions=` (via PromptInstructionsCallback). OpenClaw rebuilds system prompt each call. We must use `instructions=` for any content that must survive across turns.
+   - **Planner-driven writes**: CUA's computer-use agent (`openai/computer-use-preview`) ignores write instructions. OpenClaw's agent writes directly via file tools. We delegate all writes to the planner LLM.
+   - **Trajectory-based observation**: OpenClaw's agent has its own reasoning in conversation history. CUA's reasoning is in trajectory files. We read trajectories for observation extraction.
+3. **Document deviations**: When adapting, note what changed and why in docstrings and progress.txt. Future sessions should know which differences are intentional vs. accidental.
+
+### Golden References
+
+| Reference | What it covers |
+|-----------|---------------|
+| `docs/openclaw-context-flow.html` | Full pipeline: system prompt, compaction, tool loop, session persistence |
+| `openclaw/docs/concepts/memory.md` | Memory system: search, get, storage, indexing |
+| `openclaw/docs/concepts/compaction.md` | Compaction: overflow detection, summarization prompts, safeguard flush |
+| `openclaw/docs/concepts/system-prompt.md` | System prompt: 8 sections, bootstrap trimming, memory recall |
+| `openclaw/docs/concepts/agent-loop.md` | Agent loop: tool execution, streaming, retry |
+| `openclaw/docs/concepts/context.md` | Context management: token budgets, truncation |
+| `openclaw/docs/concepts/session.md` | Session persistence: .jsonl format, replay |
+| `docs/cua-context-management.md` | CUA constraints: what survives truncation |
+
+### What Phase 1 (TinyClaw) Built
+
+These components are reusable infrastructure for Phase 2:
+- `memory/store.py` — MemoryStore (file-based storage, task-scoped directories)
+- `memory/tools.py` — memory_search, memory_get, memory_write (BaseTool implementations)
+- `memory/planner.py` — call_planner() (shared LLM client for observation extraction + compaction)
+- Agent-planner separation pattern (CUA agent reads, planner writes)
+- `instructions=` injection for TASK_MEMORY.md + MEMORY.md
+
+See `progress-tinyclaw.txt` for detailed story-by-story implementation history and patterns discovered.
