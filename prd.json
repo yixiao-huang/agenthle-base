@@ -224,18 +224,18 @@
         "reference": "openclaw/src/agents/compaction.ts (summarizeWithFallback — uses OpenAI chat completions with system+user messages)"
       },
       "acceptanceCriteria": [
-        "memory/planner.py exists with async call_planner(system_prompt: str, user_prompt: str, model: str | None) → str",
-        "Default model from MEMORY_COMPACTION_MODEL env var, fallback to 'gpt-4.1-mini'",
+        "memory/planner.py exists with async call_planner(system_prompt: str, user_prompt: str, model: str = 'gpt-4.1-mini') → str",
+        "Default model is 'gpt-4.1-mini' (function arg with default, no env var indirection)",
         "Uses OpenAI Python SDK (openai.AsyncOpenAI) — respects OPENAI_API_KEY and OPENAI_API_BASE env vars",
         "Returns the assistant message content as string",
         "Raises on API failure (caller decides fallback behavior)",
         "memory/__init__.py exports call_planner",
-        "uv run pytest tests/test_memory_planner.py passes (unit: mock OpenAI call, verify system/user prompts passed correctly, verify env var model override)",
+        "uv run pytest tests/test_memory_planner.py passes (unit: mock OpenAI call, verify system/user prompts passed correctly, verify explicit model override)",
         "Level 1: Lint passes (uv run ruff check .)"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": "Thin wrapper — just the OpenAI SDK call with model configuration. Both US-MEM-004 (nudge) and US-MEM-CMP (compaction) import call_planner instead of duplicating SDK setup. If OPENAI_API_BASE is set (e.g., LiteLLM proxy), the client respects it automatically."
+      "passes": true,
+      "notes": "Implemented as thin wrapper + integrated planner-driven architecture. call_planner is the shared LLM client; the agent is now read-only for memory (no memory_write tool). Planner handles all writes: observation flush every 10 steps + post-run compaction with naive-append fallback. Level 1 verified (lint + 92 tests + 20-step smoke). Level 2 verified (real LLM calls with gpt-4.1-mini and gpt-5-mini return coherent compacted summaries)."
     },
     {
       "id": "US-MEM-004",
@@ -431,6 +431,78 @@
       "priority": 5,
       "passes": false,
       "notes": "Evaluation-only story — no production code changes. The goal is to validate the default model choice and document alternatives. The recommended model becomes the new default in MEMORY_COMPACTION_MODEL if it outperforms gpt-4.1-mini.\n\nCandidate models to evaluate:\n- gpt-4.1-mini (current default — fast, cheap)\n- gpt-4.1 (higher quality, more expensive)\n- claude-sonnet-4-20250514 (alternative provider)\n- Any reasoning model variants available\n\nKey quality dimensions:\n1. Contradiction removal — does the compacted output resolve conflicting observations?\n2. Deduplication — are redundant observations merged?\n3. Actionability — does the output contain concrete strategies vs vague summaries?\n4. Conciseness — is the output compact enough to fit in agent instructions without bloat?"
+    },
+    {
+      "id": "US-MEM-COMPACT",
+      "title": "Within-session context compaction via instruction absorption",
+      "description": "As a developer, I want a callback that periodically summarizes accumulated agent `message` items AND planner-written session log entries, absorbs key observations into the `instructions=` parameter, then clears old messages from context. This ensures important within-session discoveries survive OpenAI's blind truncation by being promoted to the only non-truncatable content. Also closes Gap 2 (planner→agent communication): the planner's richer observations from reasoning extraction are fed back to the agent via instructions.",
+      "context": {
+        "existingFiles": [
+          "submodules/cua/libs/cua-bench/cua_bench/agents/agenthle_agent.py (agent harness with ComputerAgent callbacks)",
+          "memory/planner.py (call_planner — shared LLM client)",
+          "submodules/cua/libs/python/agent/agent/callbacks/image_retention.py (pattern for on_llm_start callback that modifies context)",
+          "submodules/cua/libs/python/agent/agent/callbacks/prompt_instructions.py (PromptInstructionsCallback — prepends instructions every turn)"
+        ],
+        "depends": "US-MEM-PLN (call_planner), US-MEM-AGT (agent wiring with callbacks)",
+        "designDoc": "docs/cua-context-management.md (context composition, truncation analysis, remaining gaps)",
+        "reference": "submodules/cua/libs/python/agent/agent/callbacks/image_retention.py (ImageRetentionCallback — pattern for on_llm_start callback that filters items from context) + submodules/cua/libs/python/agent/agent/callbacks/prompt_instructions.py (PromptInstructionsCallback — the callback whose instructions field we update)"
+      },
+      "acceptanceCriteria": [
+        "memory/compaction_callback.py exists with ContextCompactionCallback class implementing on_llm_start",
+        "Callback collects message items from context AND reads recent session log entries (written by planner observation flush) every N turns (configurable interval, default 20)",
+        "Calls call_planner() with current instructions + collected messages + session log content to produce compacted instructions. This closes the planner→agent feedback loop: planner-extracted observations from reasoning summaries are fed back to the agent via instructions.",
+        "Updates PromptInstructionsCallback.instructions with the compacted result",
+        "Removes old message items from context, keeping only the last M (default 3) for conversational continuity",
+        "Safety: message-only filtering — callback MUST only remove items where item.get('type') == 'message' or (item.get('role') == 'assistant' and item contains text content). It MUST NOT remove computer_call, computer_call_output, function_call, function_call_output, reasoning, or user items. Unit tests verify this with a mixed context containing all item types.",
+        "Safety: verify no side effects — before implementing clearing logic, audit the CUA SDK agent loop to confirm that removing message items from combined_messages in on_llm_start does not break the agent loop's assumptions (e.g., does new_items reference the same list? does the agent check message counts?). Document findings in code comments.",
+        "Instruction length monitoring — after each compaction, log instruction length (character count and estimated token count at 4 chars/token) to stdout with [TinyClaw] prefix",
+        "Instruction length in trajectories — verify that compacted instructions appear in api_start.json trajectory files (TrajectorySaverCallback runs after ContextCompactionCallback in the callback chain). Add a Level 2 check for this.",
+        "Instruction budget — planner system prompt enforces a max token budget for the observation section (default 2000 tokens ~8000 chars). Instructions must not grow unboundedly across compaction rounds.",
+        "Instructions structured with a clear '## Session Observations' section separator so the planner knows which part to rewrite vs preserve",
+        "If planner call fails, callback is a no-op (keeps existing instructions and messages unchanged, logs warning)",
+        "Wired into agenthle_agent.py ComputerAgent callbacks= list, positioned AFTER PromptInstructionsCallback and BEFORE ImageRetentionCallback in the chain",
+        "uv run pytest tests/test_compaction_callback.py passes — tests include: compaction fires at correct interval, only message items removed (mixed context safety test with all 6 item types), instructions updated correctly, planner failure is no-op, instruction length is logged",
+        "Level 1: Lint passes (uv run ruff check .)",
+        "Level 1: Smoke test run_magic_tower.sh 20 doesn't crash",
+        "Level 2: After a 50+ step run, trajectory api_start.json files show instructions growing with a '## Session Observations' section that contains compacted observations",
+        "Level 2: After a 50+ step run, verify that message items are reduced in later turns' api_start.json input arrays compared to a run without the callback",
+        "Level 2: Verify function_call/function_call_output truncation impact — check whether losing these from context affects agent behavior in practice. Document findings. (We speculate it doesn't affect workflow since memory tools are read-only and results are acted on immediately, but this needs verification.)"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": "This addresses Gap 1 (no within-session context compaction) AND Gap 2 (planner→agent communication) from the agent-planner architecture review (2026-03-09).\n\nThe key insight is that `instructions=` is the ONLY content guaranteed to survive all truncation — PromptInstructionsCallback prepends it on every turn. By folding important observations from both `message` items and the planner-written session log into instructions, we:\n- Make within-session discoveries permanent (Gap 1)\n- Feed planner observations back to the agent (Gap 2)\n\nThe planner observation flush (every 10 steps) extracts observations from reasoning summaries that the agent has already lost from context. Without this feedback loop, those observations only exist in the session log file — invisible to the agent. By including session log content as input to the compaction callback, the agent benefits from the planner's richer analysis.\n\nDesign details:\n1. The callback needs a reference to the PromptInstructionsCallback instance to update its .instructions field, AND a reference to MemoryStore to read the session log. Pass both in the constructor.\n2. Instructions are split into a static part (tool descriptions, task guidance) and a dynamic '## Session Observations' section. Only the dynamic section is rewritten by the planner.\n3. The planner receives three inputs: (a) current ## Session Observations section, (b) agent message items from context, (c) recent session log entries. It merges all three into a compacted observation section.\n4. The planner prompt must say: 'Keep the observation section under 2000 tokens. Replace older observations with newer contradicting ones. Deduplicate. Messages and session log may overlap — merge, don't duplicate.'\n5. Message clearing returns a new list (not mutating in-place) to avoid aliasing issues with the agent loop's new_items.\n6. on_llm_start is async in the CUA SDK — call_planner is also async, so this works naturally.\n\nCallback ordering matters:\n- PromptInstructionsCallback (prepends instructions) → ContextCompactionCallback (reads+updates instructions, filters messages) → ImageRetentionCallback (removes old screenshots) → TrajectorySaverCallback (saves final context to disk)\n\nThis ensures TrajectorySaverCallback captures the post-compaction state in api_start.json."
+    },
+    {
+      "id": "US-MEM-PLN-CTX",
+      "title": "Planner memory access — TASK_MEMORY.md context + memory tools",
+      "description": "As a developer, I want the planner LLM to have access to existing memory (TASK_MEMORY.md as system context, memory_search and memory_get as tools) so it can produce better summaries that avoid duplicating known observations and leverage prior session knowledge.",
+      "context": {
+        "existingFiles": [
+          "memory/planner.py (current call_planner — stateless, no memory access)",
+          "memory/store.py (MemoryStore with search and read_file methods)",
+          "memory/tools.py (MemorySearchTool, MemoryGetTool — tool schemas to reuse for function definitions)",
+          "submodules/cua/libs/cua-bench/cua_bench/agents/agenthle_agent.py (callers: _flush_reasoning_to_session, _consolidate_session)"
+        ],
+        "depends": "US-MEM-PLN (call_planner exists), US-MEM-AGT (MemoryStore available in agent)",
+        "designDoc": "docs/memory-system.md § Agent-Planner Orchestration",
+        "reference": "memory/planner.py (current implementation to extend) + memory/tools.py:MemorySearchTool.parameters (tool schema to reuse for OpenAI function definitions)"
+      },
+      "acceptanceCriteria": [
+        "call_planner gains optional store: MemoryStore parameter (default None)",
+        "When store is provided and store has a task_id, TASK_MEMORY.md content is prepended to system_prompt under a '## Known Task Memory' header",
+        "When store is provided, memory_search and memory_get are included as function tool definitions in the API call (OpenAI function calling format: tools=[{type: 'function', function: {name, description, parameters}}])",
+        "Tool call loop: if the model returns a tool_call, execute it against MemoryStore (memory_search → store.search with keywords, memory_get → store.read_file with path/from/lines), return result as tool message, continue until model produces a text response. Max 3 tool call rounds to prevent infinite loops.",
+        "When store is None, behaves identically to current implementation (no tools, no task memory injection — backward compatible). All existing tests pass unchanged.",
+        "agenthle_agent.py updated: pass self.memory_store to call_planner in _flush_reasoning_to_session and _consolidate_session",
+        "Log tool calls made by planner to stdout with [TinyClaw Planner] prefix (e.g., '[TinyClaw Planner] memory_search(keywords=[\"floor\", \"key\"])')",
+        "uv run pytest tests/test_memory_planner.py passes — new tests: (a) store=None backward compat, (b) TASK_MEMORY.md injected into system prompt, (c) tool definitions included in API call when store provided, (d) tool call loop executes and returns results, (e) max rounds cap stops after 3 rounds, (f) empty TASK_MEMORY.md not injected",
+        "Level 1: Lint passes (uv run ruff check .)",
+        "Level 1: Smoke test run_magic_tower.sh 20 doesn't crash",
+        "Level 2: After a real run, stdout logs show planner invoked memory tools during observation flush or consolidation"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": "This addresses Gap 3 from the agent-planner architecture review (2026-03-09): planner has no memory access.\n\nThe planner is currently stateless — it only sees what callers explicitly pass in the prompt. This causes:\n- Duplicate observations (planner doesn't know TASK_MEMORY.md already covers a topic)\n- Missing context (planner can't search for related observations from earlier in the session)\n- Weaker summaries (no task-specific background knowledge)\n\nDesign details:\n1. TASK_MEMORY.md injection is automatic when store is provided — callers don't need to manually read and pass it. This is prepended to the system_prompt, not replacing it.\n2. Tool definitions reuse the same parameter schemas from MemorySearchTool and MemoryGetTool (memory/tools.py) but formatted as OpenAI function calling schema.\n3. Tool execution is synchronous within the async call_planner — we call store.search() and store.read_file() directly (they're sync methods on MemoryStore).\n4. The max 3 rounds cap is important: the planner should quickly check memory and produce a response, not enter an exploratory search loop. If it hits the cap, return whatever content it has.\n5. This is backward compatible: all existing callers that don't pass store= continue to work identically. Only callers that opt in get memory access.\n6. US-MEM-COMPACT's compaction callback should also pass store when calling call_planner — but that wiring happens in US-MEM-COMPACT, not here."
     }
   ]
 }

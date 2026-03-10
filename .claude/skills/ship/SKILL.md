@@ -44,7 +44,7 @@ Run the acceptance criteria from the current story's PRD entry. At minimum:
 - Any unit tests relevant to changed files
 - `run_magic_tower.sh 5` smoke test
 
-**VM test rule**: Any verification step that requires a remote VM (smoke test, real runs, trajectory analysis) is mandatory. If you cannot run it (e.g., no VM connection), you MUST explain why and ask the user to decide the next step — do NOT silently skip it.
+**VM test rule**: Any verification step that requires a remote VM (smoke test, real runs, trajectory analysis) is mandatory. You MUST actually run the command (e.g., `bash run_magic_tower.sh 5`) and observe the output — do NOT assume the VM is unavailable without trying. If the command fails with a connection error, show the error output and ask the user to decide the next step — do NOT silently skip it.
 
 If checks fail, fix and re-review (go back to step 1).
 

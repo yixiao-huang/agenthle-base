@@ -161,24 +161,90 @@ memory_data/
 
 ### Tools
 
-Three tools, all registered via `@register_tool` and wired into `ComputerAgent`:
+The computer-use agent has **read-only** memory access. All memory writes are handled by the planner LLM.
 
-| Tool | Parameters | Purpose |
-|------|-----------|---------|
-| `memory_search` | `keywords: list[str]`, `max_results?: int`, `task_id?: str` | Search across memory files by keyword (later: hybrid). When task_id set, searches task-scoped files first |
-| `memory_get` | `file_path: str`, `start_line?: int`, `end_line?: int` | Read a specific file or line range. Path restricted to `memory_data/` tree |
-| `memory_write` | `content: str`, `target?: "session" \| "memory" \| "task_memory"` | Append to current session log (default), overwrite global MEMORY.md, or overwrite TASK_MEMORY.md |
+| Tool | Available to | Parameters | Purpose |
+|------|-------------|-----------|---------|
+| `memory_search` | CUA agent | `keywords: list[str]`, `max_results?: int` | Search across memory files by keyword (later: hybrid) |
+| `memory_get` | CUA agent | `path: str`, `from?: int`, `lines?: int` | Read a specific memory file or line range (.md only) |
+| `memory_write` | Planner only (via `MemoryStore` API) | N/A | Not exposed as agent tool; planner writes via `append_to_session_log()`, `write_task_memory()`, `write_memory()` |
 
-### MemoryFlushCallback (during session)
+### Agent-Planner Orchestration
 
-A callback that runs alongside the agent. During a session, only `session-NNN.md` is written to. `TASK_MEMORY.md` is read-only during a session, compacted only at session end.
+The computer-use agent and planner LLM have distinct roles:
 
-**Trajectory-driven nudge** (every N turns, default 20):
-1. Reads the last N turns' trajectory data (reasoning summaries from `agent_response.json`)
-2. Summarizes observations into the session log via `memory_write`
-3. Adaptive interval: can increase for long runs to avoid nudge fatigue
+```
+┌───────────────────────────────────────────────────────────────┐
+│                      perform_task()                            │
+│                                                                │
+│  1. Init MemoryStore (task-scoped)                             │
+│  2. Read MEMORY.md + TASK_MEMORY.md → inject into agent        │
+│     instructions= (survives all context truncation)            │
+│  3. Start agent loop                                           │
+│                                                                │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │  Computer-Use Agent (openai/computer-use-preview)         │  │
+│  │                                                           │  │
+│  │  Tools (read-only for memory):                            │  │
+│  │   • Computer (mouse / keyboard / screenshot)              │  │
+│  │   • MilestoneTool (save milestone screenshots)            │  │
+│  │   • memory_search (keyword search over memory)            │  │
+│  │   • memory_get (read specific memory file)                │  │
+│  │                                                           │  │
+│  │  Each step yields result["output"] containing:            │  │
+│  │   • type:"reasoning" → summary[].text (agent thinking)    │  │
+│  │   • type:"computer_call" → actions (click, type, etc.)    │  │
+│  │   • type:"function_call" → tool invocations               │  │
+│  └──────────────┬────────────────────────────────────────────┘  │
+│                 │                                                │
+│                 │ Reasoning texts collected into buffer          │
+│                 │                                                │
+│                 │ Every 10 steps:                                │
+│                 ▼                                                │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │  Planner LLM (gpt-4.1-mini via call_planner)             │  │
+│  │                                                           │  │
+│  │  Input: numbered reasoning texts from last 10 steps       │  │
+│  │    e.g. "Step 1: Clicking start button"                   │  │
+│  │         "Step 5: Navigating to floor 2"                   │  │
+│  │                                                           │  │
+│  │  System prompt: "Extract key observations — what the      │  │
+│  │    agent saw, what succeeded/failed, what it learned.     │  │
+│  │    Output concise bulleted list."                         │  │
+│  │                                                           │  │
+│  │  Output → written to session-NNN.md via                   │  │
+│  │           MemoryStore.append_to_session_log()             │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│                                                                │
+│  After loop ends (max_steps or DONE):                          │
+│   • Flush any remaining reasoning buffer → session log         │
+│                                                                │
+│  Post-run consolidation (two planner calls):                   │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │  Phase 1: session log + existing TASK_MEMORY.md           │  │
+│  │    → planner compacts → new TASK_MEMORY.md                │  │
+│  │                                                           │  │
+│  │  Phase 2: TASK_MEMORY.md + existing MEMORY.md             │  │
+│  │    → planner extracts cross-task patterns → MEMORY.md     │  │
+│  │                                                           │  │
+│  │  Fallback: if planner fails → naive append (no data loss) │  │
+│  └──────────────────────────────────────────────────────────┘  │
+└───────────────────────────────────────────────────────────────┘
+```
 
-Currently the computer-use agent performs the summarization (it sees the nudge as a system message with recent trajectory context). Later this can be replaced by a dedicated planner LLM.
+**Key design decision**: The computer-use agent (`openai/computer-use-preview`) is optimized for screen interaction, not text reasoning or memory management. Asking it to also write observations leads to unreliable behavior — it often ignores write instructions, especially in short runs. By delegating all writes to the planner LLM (`gpt-4.1-mini`), observation capture is guaranteed and deterministic.
+
+### Planner-Driven Observation Flush (during session)
+
+During a session, only `session-NNN.md` is written to. `TASK_MEMORY.md` is read-only during a session, compacted only at session end.
+
+**How it works** (every 10 steps, configurable via `_PLANNER_FLUSH_INTERVAL`):
+1. Each agent step's reasoning summaries (from `result["output"]` items with `type:"reasoning"`) are collected into a buffer
+2. Every 10 steps, the buffer is sent to `call_planner()` with a system prompt asking for key observation extraction
+3. The planner returns a concise bulleted list of observations
+4. Written to `session-NNN.md` via `MemoryStore.append_to_session_log()`
+5. If the planner call fails, raw reasoning texts are written as fallback (no data loss)
+6. Any remaining buffer is flushed when the loop ends
 
 ### Post-Session Compaction (after session)
 
@@ -220,16 +286,19 @@ Session 3: Starts knowing both facts
 
 ```
 During session:
-  CUA trajectories → automatic raw logging (every turn)
-  TASK_MEMORY.md   → read-only (injected at start, searchable)
-  session-NNN.md   → append-only (nudge reads trajectories, writes here)
+  CUA agent        → computer actions + reads memory (memory_search, memory_get)
+  reasoning buffer → collected from each step's result["output"] reasoning items
+  Every 10 steps   → planner LLM summarizes buffer → appended to session-NNN.md
+  TASK_MEMORY.md   → read-only (injected into instructions= at start, searchable)
 
 After session:
   session-NNN.md   → finalized (no more appends)
-  TASK_MEMORY.md   → rewritten by LLM compaction (session-NNN.md → TASK_MEMORY.md)
+  TASK_MEMORY.md   → rewritten by planner compaction (session log + existing → compacted)
+  MEMORY.md        → rewritten by planner compaction (task memory → cross-task patterns)
+  Fallback         → if planner fails, naive append preserves data
 ```
 
-Session logs are strictly append-only during the run (like OpenClaw's daily logs). Compaction only happens after the session ends. TinyClaw adds LLM-driven compaction of `TASK_MEMORY.md` at session end — the automation that OpenClaw leaves to the human.
+Session logs are strictly append-only during the run (like OpenClaw's daily logs). Compaction only happens after the session ends. The planner LLM handles all writes — both the periodic observation flushes during the run and the post-session compaction.
 
 ### Relationship with CUA Trajectories
 
@@ -347,10 +416,13 @@ No specific trigger categories, no "mandatory" framing, no failure guidance, no 
 |-----------|-------|--------|
 | MemoryStore | US-MEM-001 | Done |
 | memory_search (keyword) | US-MEM-002 | Done |
-| memory_get | US-MEM-003 | Planned |
-| memory_write | US-MEM-W01 | Planned |
-| MemoryFlushCallback | US-MEM-004 | Planned |
-| Task-scoped memory + compaction | US-MEM-TSK | Planned |
+| memory_get | US-MEM-003 | Done |
+| memory_write | US-MEM-W01 | Done (used by planner, not exposed to CUA agent) |
+| Task-scoped storage | US-MEM-TSK-S | Done |
+| Agent wiring (read-only tools) | US-MEM-AGT | Done |
+| Planner LLM client | US-MEM-PLN | Done |
+| Planner-driven observation flush | US-MEM-PLN | Done (integrated into agent loop) |
+| Post-session compaction | US-MEM-PLN | Done (planner with naive-append fallback) |
 | Hybrid search + chunking | US-MEM-006 | Future |
 
 ---
@@ -364,8 +436,8 @@ Memory scope:       Per-agent                   Per-task (cross-session)
 Search:             Hybrid (vector+keyword)     Keyword → Hybrid (planned)
 Chunking:           400 tokens, 80 overlap      Same (planned)
 Embeddings:         6 providers + auto-detect   OpenAI + keyword fallback
-Tools:              memory_search, memory_get   + memory_write (agent has no FS)
-Write mechanism:    File tools + hooks          memory_write tool + callback
+Tools:              memory_search, memory_get   memory_search, memory_get (read-only)
+Write mechanism:    File tools + hooks          Planner LLM writes via MemoryStore API
 Session logs:       Append-only daily logs      Append-only session logs
 Compaction:         Pre-compaction flush to      LLM post-hoc at session end
                     daily log (agent-driven,     (merges session summary into

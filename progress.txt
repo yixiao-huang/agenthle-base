@@ -241,3 +241,26 @@
   - MEMORY.md was write-only (consolidated to but never read) — now injected into instructions alongside TASK_MEMORY.md
   - memory_search searches ALL session files + TASK_MEMORY.md + MEMORY.md with no scope filtering — US-MEM-RCL will add a scope parameter
 ---
+
+## 2026-03-10 - US-MEM-PLN: Central planner LLM client + agent-planner architecture
+- Implemented `memory/planner.py` with `call_planner(system_prompt, user_prompt, model="gpt-4.1-mini") → str`
+- Exported `call_planner` from `memory/__init__.py`
+- 5 unit tests in `tests/test_memory_planner.py` (default model, explicit model, prompt passthrough, content return, error propagation)
+- Level 2 verification script `scripts/verify_planner.py` — tested with gpt-4.1-mini and gpt-5-mini
+- **Major architecture change**: separated computer-use agent (read-only memory) from planner (handles all writes)
+  - Agent tools: Computer, MilestoneTool, memory_search, memory_get (no memory_write)
+  - Planner flushes reasoning observations every 10 steps → session-NNN.md
+  - Post-run: planner compacts session → TASK_MEMORY.md → MEMORY.md (with naive-append fallback)
+- Updated `docs/memory-system.md` with Agent-Planner Orchestration diagram and planner-driven flow
+- Updated `docs/cua-context-management.md` with full context window composition (item types, token costs, callback chain)
+- Designed 3 new PRD stories to address identified gaps:
+  - US-MEM-COMPACT: within-session context compaction via instruction absorption (Gap 1 + Gap 2)
+  - US-MEM-PLN-CTX: planner memory access — TASK_MEMORY.md context + memory tools (Gap 3)
+- Files changed: memory/planner.py (new), memory/__init__.py, tests/test_memory_planner.py (new), scripts/verify_planner.py (new), agenthle_agent.py (major refactor), architecture.md, docs/memory-system.md, docs/cua-context-management.md, prd.json
+- **Learnings for future iterations:**
+  - The computer-use agent (openai/computer-use-preview) ignores memory_write instructions in short runs — delegating writes to the planner is more reliable
+  - `instructions=` (via PromptInstructionsCallback) is the ONLY content never truncated — use it for all persistent within-session knowledge
+  - The callback chain is provider-agnostic (works for OpenAI, Anthropic, Gemini); only `truncation: "auto"` is OpenAI-specific
+  - `message` items are the unmanaged middle ground — they survive ImageRetentionCallback but get blindly truncated by OpenAI
+  - `function_call/function_call_output` items are all gone by turn 100 — we speculate this doesn't affect read-only memory tools but needs verification
+---

@@ -1,4 +1,4 @@
-<!-- Last updated: 2026-03-08 (added MemoryGetTool) -->
+<!-- Last updated: 2026-03-09 (added planner.py) -->
 # AgentHLE Architecture
 
 ## Overview
@@ -59,7 +59,8 @@ agenthle-base/
 ├── opencua.py                   # VM connection test utility
 │
 ├── memory/                      # TinyClaw memory system
-│   ├── __init__.py              # Exports MemoryStore, MemorySearchTool
+│   ├── __init__.py              # Exports MemoryStore, tools, call_planner
+│   ├── planner.py               # call_planner() — shared LLM client for memory ops
 │   ├── store.py                 # MemoryStore (MEMORY.md + daily logs)
 │   └── tools.py                 # MemorySearchTool, MemoryGetTool (BaseTool)
 │
@@ -168,6 +169,13 @@ Tasks extend `GeneralTaskConfig` (`tasks/common_config.py`) which provides:
 - Accepts: `path: str`, `from: int` (optional), `lines: int` (optional)
 - Reads specific file content with line slicing; .md-only, rejects path traversal
 - Ref: openclaw/src/agents/tools/memory-tool.ts
+
+**call_planner** (`memory/planner.py`):
+- Async function: `call_planner(system_prompt, user_prompt, model="gpt-4.1-mini") → str`
+- Shared LLM client for compaction (US-MEM-CMP) and nudge summarization (US-MEM-004)
+- Uses OpenAI SDK; respects OPENAI_API_KEY and OPENAI_API_BASE env vars
+- Raises on API failure (caller decides fallback)
+- Ref: openclaw/src/agents/compaction.ts (summarizeWithFallback)
 
 ## Data Flow
 
