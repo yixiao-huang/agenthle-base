@@ -1,6 +1,6 @@
 {
-  "project": "AgentHLE",
+  "project": "OpenClaw Agent Reproduction for CUA",
   "branchName": "openclaw-harness",
-  "description": "Faithful reproduction of OpenClaw's agent-side architecture for CUA. Adapts OpenClaw's context management (system prompt construction, compaction pipeline, memory recall, tool loop, session persistence) to CUA's constraints (instructions= for persistent context, planner-driven writes, trajectory-based observation). See docs/openclaw-context-flow.html for golden reference, openclaw/docs/concepts/ for component docs.",
+  "description": "Faithful reproduction of OpenClaw's agent-side architecture for CUA.",
   "userStories": []
 }
