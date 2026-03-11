@@ -5,6 +5,7 @@
 - BaseTool pattern: constructor takes domain object + optional cfg, calls `super().__init__(cfg)`; `@register_tool` sets `cls.name` and adds to `TOOL_REGISTRY`. `_verify_json_format_args` handles both dict and JSON string params.
 - CUA trajectory reasoning summaries: `turn_NNN/NNNN_agent_response.json → response.output[].summary[].text`
 - Turn count ≠ step count: each turn can contain multiple API calls (~2 steps/turn for openai/computer-use-preview)
+- Trajectory tool verification: `turn_000/0000_api_start.json → kwargs.tools[].name` for registered tools; `*_agent_response.json → response.output[] where type=="function_call"` for invocations
 
 ---
 
@@ -150,4 +151,16 @@
   - `allow_overwrite=True` needed on both old and new `@register_tool` calls when same names exist in different packages
   - Agent doesn't use memory tools on first session with empty memory — expected; cross-session testing needed for behavioral verification
   - Two write targets (session/task_memory) instead of three (legacy had "memory" for global MEMORY.md) — correct for task-scoped design
+---
+
+## 2026-03-11 - US-OC-003: Judge audit (PASS)
+- Judge audit confirmed all 4 acceptance criteria met
+- VM test (50 steps): agent ran successfully, all 5 tools registered, 4 memory tool invocations (1 search, 2 get, 1 write)
+- Agent autonomously searched prior session data, read files, and wrote game-relevant observations
+- Cross-session memory confirmed working: agent found and used data from sessions 9 and 10
+- Report: `docs/judges/judge_2026-03-11_1847_US-OC-003.md`
+- **Learnings for future iterations:**
+  - Agent uses memory tools most on first turn (startup recall), then focuses on task — memory writes during gameplay may need prompt tuning
+  - `session._computer` is a CUA Computer, not BaseTool — guard tool introspection with `isinstance(tool, BaseTool)` checks
+  - `allow_overwrite=True` needed on `@register_tool` when legacy and new packages register same tool names — prefer removing stale registration
 ---
