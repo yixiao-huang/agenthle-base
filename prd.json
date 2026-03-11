@@ -78,7 +78,7 @@
         "Level 1: Tools handle missing files gracefully (empty string, not exception)"
       ],
       "priority": 3,
-      "passes": false,
+      "passes": true,
       "notes": "File: agents/openclaw/memory.py (append below MemoryStore from US-OC-002). Three BaseTool subclasses wrapping MemoryStore. Read memory/tools.py for the pattern — it's already well-aligned with OpenClaw's schemas. Key deviation: we accept both query and keywords on search. NOTE: OpenClaw has only memory_search + memory_get as dedicated tools — agents write via generic write/edit file tools. Decide whether to add a dedicated memory_write tool (simpler for CUA where no generic file tools exist) or reuse another mechanism. After finalizing tool names, revise agents/openclaw/AGENTS.md to reference the correct write tool/mechanism."
     },
     {

@@ -6,6 +6,10 @@ user-invocable: true
 
 # Codebase Onboarding
 
+**Modes:** `/onboard` (auto-select story) | `/onboard US-XXX-NNN` (target specific story)
+
+Target: $ARGUMENTS (if empty, read `.current-story`; if also empty, auto-select from PRD).
+
 Build context and identify work for the current session. Follows the **progressive exposure** layers defined in CLAUDE.md — load only what the current story requires.
 
 ---
@@ -38,7 +42,9 @@ If this fails (submodule not initialized, missing remotes, etc.), run `/first-on
 
 ### 4. Identify current work
 
-From the PRD, find all stories where `passes: false`. Do NOT simply select the next one in the list. Instead, determine which story to implement first by carefully considering:
+**If a target story was provided** (via $ARGUMENTS), use that story directly — skip the selection logic below. Verify it exists in the PRD and note its status.
+
+**Otherwise**, from the PRD, find all stories where `passes: false`. Do NOT simply select the next one in the list. Instead, determine which story to implement first by carefully considering:
 - **Dependencies**: Which stories are blocked vs. ready to start? Check each story's `context.depends` field and verify prerequisite stories have `passes: true`.
 - **Priority**: Among unblocked stories, prefer higher priority (lower number).
 - **Critical path**: Which story unblocks the most downstream work?

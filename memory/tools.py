@@ -4,24 +4,17 @@ Memory tools for the agent - search, read, and write memory files.
 
 from typing import Union
 
-from agent.tools.base import BaseTool, register_tool
+from agent.tools.base import BaseTool
 
 from .store import MemoryStore
 
 _WRITE_TARGETS = ("session", "memory", "task_memory")
 
 
-@register_tool("memory_search", allow_overwrite=True)
 class MemorySearchTool(BaseTool):
-    """Tool for searching memory files by keywords.
+    """Legacy memory search tool — superseded by cua_bench.agents.openclaw.memory.MemorySearchTool."""
 
-    Reference: openclaw/src/agents/tools/memory-tool.ts (createMemorySearchTool).
-    Intentional deviations from OpenClaw:
-    - Accepts both `query` (string) and `keywords` (list[str]); OpenClaw uses only `query`.
-      `query` is split on whitespace internally. `keywords` is a convenience shorthand.
-    - No `minScore` parameter (planned for US-MEM-SQL when BM25 scores are continuous).
-    - Returns plain text lines, not structured JSON (CUA agent consumes text).
-    """
+    name = "memory_search"
 
     def __init__(self, store: MemoryStore, cfg=None):
         self.store = store
@@ -89,14 +82,10 @@ class MemorySearchTool(BaseTool):
         return "\n".join(lines)
 
 
-@register_tool("memory_get", allow_overwrite=True)
 class MemoryGetTool(BaseTool):
-    """Tool for reading memory files or specific line ranges.
+    """Legacy memory get tool — superseded by cua_bench.agents.openclaw.memory.MemoryGetTool."""
 
-    Reference: openclaw/src/agents/tools/memory-tool.ts (createMemoryGetTool)
-    and openclaw/src/memory/manager.ts (readFile). API shape (path/from/lines),
-    .md-only restriction, and path traversal checks follow that implementation.
-    """
+    name = "memory_get"
 
     def __init__(self, store: MemoryStore, cfg=None):
         self.store = store
@@ -157,14 +146,10 @@ class MemoryGetTool(BaseTool):
         return content
 
 
-@register_tool("memory_write", allow_overwrite=True)
 class MemoryWriteTool(BaseTool):
-    """Tool for writing content to memory files.
+    """Legacy memory write tool — superseded by cua_bench.agents.openclaw.memory.MemoryWriteTool."""
 
-    No direct OpenClaw equivalent. OpenClaw agents write memory via filesystem
-    access; this explicit tool enables the same capability for CUA agents that
-    lack direct file I/O.
-    """
+    name = "memory_write"
 
     def __init__(self, store: MemoryStore, cfg=None):
         self.store = store
