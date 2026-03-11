@@ -33,3 +33,16 @@
   - Category C assumptions (CUA SDK reusability) need runtime verification, not just source analysis
   - ComputerAgent vs Pi agent core equivalence is the highest-risk assumption — needs deep investigation in US-OC-009
 ---
+
+## 2026-03-11 - Improve /ship and /judge skills with subagent delegation
+- Refactored `.claude/skills/judge/SKILL.md` to use subagent delegation model
+- Judge skill now spawns a single Sonnet general-purpose agent with fresh context
+- Cost reduction: ~3x less expensive than Opus, avoids expensive cache reads from bloated conversation
+- Cleaner execution model: skill handles coordination, agent does the rigorous auditing work
+- Cleaner documentation: separated skill coordination ("Execution" section) from agent prompt
+- Improved variable substitution: $TARGET replaces $ARGUMENTS for story targeting
+- **Learnings for future iterations:**
+  - Subagent delegation is effective for long-running, high-context audits (judge, post-eval reviews)
+  - Fresh context window prevents conversation bloat and reduces token costs during intensive verification
+  - Separating skill metadata (name, description, user-invocable) from prompt improves clarity
+---
