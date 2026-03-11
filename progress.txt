@@ -82,3 +82,19 @@
   - Bootstrap injection via ContextFile avoids the "Current Time" section complexity (VM clock is reliable, hardcoded times break cache)
   - Design rationale doc structure (OpenClaw → CUA → dropped → differences) is effective for capturing architectural decisions
 ---
+
+## 2026-03-11 - US-OC-001: Test refinements (finalization)
+- Refined `tests/test_prompt_builder.py` to match final PromptBuilder implementation:
+  - Added `test_build_has_time_section()` to verify "## Current Date & Time" section presence
+  - Updated `test_full_build_has_all_sections_in_order()` to verify section ordering: Identity → Tools → Memory Recall → Current Time → Project Context
+  - Added `test_disable_time()` to verify time section can be disabled via config
+  - Updated `test_each_section_independently_disableable()` to include time section in the disablement matrix
+  - Updated context file header assertion from `## AGENTS.md` to `### AGENTS.md` (subsection under Project Context)
+  - Updated all context file header assertions and ordering tests to use `###` instead of `##`
+- All 28 tests passing (lint + pytest)
+- **Files changed:**
+  - `tests/test_prompt_builder.py` (test refinements for Current Time section + subsection headers)
+- **Learnings for future iterations:**
+  - Current Time section is intentionally kept in system prompt (contrary to earlier note) but is now included in section disablement config
+  - Project Context file headers use H3 (###) instead of H2 (##) to create proper subsection hierarchy
+---

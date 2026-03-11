@@ -48,7 +48,13 @@ class TestPromptBuilderSections:
         files = [ContextFile(path="AGENTS.md", content="Agent guidance content")]
         result = builder.build(context_files=files)
         assert "# Project Context" in result
-        assert "## AGENTS.md" in result
+        assert "### AGENTS.md" in result
+
+    def test_build_has_time_section(self):
+        builder = PromptBuilder()
+        result = builder.build()
+        assert "## Current Date & Time" in result
+        assert "UTC" in result
 
     def test_full_build_has_all_sections_in_order(self):
         builder = PromptBuilder()
@@ -59,13 +65,14 @@ class TestPromptBuilderSections:
         files = [ContextFile(path="AGENTS.md", content="guidance")]
         result = builder.build(tool_summaries=tools, context_files=files)
 
-        # Verify section order
+        # Verify section order (matches OpenClaw's system-prompt.ts)
         identity_pos = result.index("## Identity")
         tools_pos = result.index("## Tools")
         memory_pos = result.index("## Memory Recall")
+        time_pos = result.index("## Current Date & Time")
         context_pos = result.index("# Project Context")
 
-        assert identity_pos < tools_pos < memory_pos < context_pos
+        assert identity_pos < tools_pos < memory_pos < time_pos < context_pos
 
 
 class TestDisabledSections:
@@ -98,9 +105,16 @@ class TestDisabledSections:
         result = builder.build(context_files=files)
         assert "# Project Context" not in result
 
+    def test_disable_time(self):
+        config = PromptConfig(time=SectionConfig(enabled=False))
+        builder = PromptBuilder(config)
+        result = builder.build()
+        assert "## Current Date & Time" not in result
+
     def test_all_disabled_returns_empty(self):
         config = PromptConfig(
             identity=SectionConfig(enabled=False),
+            time=SectionConfig(enabled=False),
             tools=SectionConfig(enabled=False),
             memory=SectionConfig(enabled=False),
             project_context=SectionConfig(enabled=False),
@@ -116,8 +130,8 @@ class TestDisabledSections:
         tools = {"computer": "control", "memory_search": "search"}
         files = [ContextFile(path="test.md", content="test")]
 
-        sections = ["identity", "tools", "memory", "project_context"]
-        markers = ["## Identity", "## Tools", "## Memory Recall", "# Project Context"]
+        sections = ["identity", "time", "tools", "memory", "project_context"]
+        markers = ["## Identity", "## Current Date & Time", "## Tools", "## Memory Recall", "# Project Context"]
 
         for i, section in enumerate(sections):
             kwargs = {section: SectionConfig(enabled=False)}
@@ -211,7 +225,7 @@ class TestProjectContext:
         builder = PromptBuilder()
         files = [ContextFile(path="AGENTS.md", content="content")]
         result = builder.build(context_files=files)
-        assert "## AGENTS.md" in result
+        assert "### AGENTS.md" in result
 
     def test_empty_context_files_omits_section(self):
         builder = PromptBuilder()
@@ -227,9 +241,9 @@ class TestProjectContext:
         ]
         result = builder.build(context_files=files)
 
-        agents_pos = result.index("## AGENTS.md")
-        task_pos = result.index("## task.md")
-        memory_pos = result.index("## MEMORY.md")
+        agents_pos = result.index("### AGENTS.md")
+        task_pos = result.index("### task.md")
+        memory_pos = result.index("### MEMORY.md")
 
         assert agents_pos < task_pos < memory_pos
 
