@@ -1,6 +1,6 @@
 ---
 name: ship
-description: "Self-review, commit, and push changes for the current story. Delegates all work to a Haiku subagent to minimize cost in bloated contexts. Use when you're done with a story."
+description: "Self-review, commit, and push changes for the current story. Delegates all work to a Sonnet subagent to minimize cost in bloated contexts. Use when you're done with a story."
 user-invocable: true
 ---
 
@@ -8,7 +8,7 @@ user-invocable: true
 
 Self-review, commit, and push the current story's changes.
 
-**Cost optimization**: This skill delegates ALL work to a Haiku subagent with a fresh context window, so it costs ~$0.10 instead of ~$1+ in a large conversation.
+**Cost optimization**: This skill delegates ALL work to a Sonnet subagent with a fresh context window, so it costs ~$0.10 instead of ~$1+ in a large conversation.
 
 ---
 
@@ -118,7 +118,7 @@ prompt: |
 
 Use the Agent tool with these parameters:
 - `subagent_type`: `general-purpose`
-- `model`: `haiku`
+- `model`: `sonnet`
 - `description`: `Ship current story`
 - `prompt`: The full prompt text above (fill in any dynamic values like story ID if already known)
 
