@@ -46,3 +46,11 @@
   - Fresh context window prevents conversation bloat and reduces token costs during intensive verification
   - Separating skill metadata (name, description, user-invocable) from prompt improves clarity
 ---
+
+## 2026-03-11 - US-OC-001: Onboard skill revision
+- Revised `/onboard` skill to require **Design Rationale** section in all OpenClaw reproduction plans
+- Added structure guidance: What OpenClaw Does → What We Kept and Why → What We Dropped and Why → Key Differences
+- Created example design rationale at `docs/plan/US-OC-001-system-prompt-builder.md` for reference
+- **Files changed:** `.claude/skills/onboard/SKILL.md`, `docs/plan/US-OC-001-system-prompt-builder.md`, `docs/openclaw-reproduction-plan.md` (relocated)
+- **Learnings:** Design rationale structure forces explicit documentation of OpenClaw → CUA adaptations and avoids cargo-cult reproduction
+---

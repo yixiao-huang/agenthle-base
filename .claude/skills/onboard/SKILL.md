@@ -87,6 +87,16 @@ Write the chosen story ID to `.current-story` in the project root.
 
 After reporting, enter planning mode to draft the plan for the current story.
 
+**Critical**: When planning a feature, your plan MUST include an **OpenClaw Design Rationale** section explaining:
+- **What OpenClaw Does** — Describe the component/feature OpenClaw implements (reference `openclaw/src/`)
+- **What We Keep and Why** — Which OpenClaw patterns/design decisions apply to CUA, and justify each
+- **What We Drop and Why** — Which patterns don't fit CUA (due to architecture differences), with clear reasoning
+- **Key Differences from OpenClaw** — Highlight CUA-specific constraints or capabilities that shape our design
+
+See `docs/plan/US-OC-001-system-prompt-builder.md` for an example of a well-structured design rationale.
+
+**After planning**: Use `/prd` to register your plan file in the story's `context.planFile` field so future agents can find and reference it.
+
 ---
 
 ## Important Notes
@@ -96,3 +106,4 @@ After reporting, enter planning mode to draft the plan for the current story.
 - If `architecture.md` doesn't exist, flag this to the user
 - If `prd.json` doesn't exist, let the user know they can use `/prd` to create one
 - If all stories in the PRD pass, report that the feature is complete
+- **Design rationale is non-negotiable**: Every plan reproducing an OpenClaw component must justify design choices explicitly
