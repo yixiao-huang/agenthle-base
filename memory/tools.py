@@ -11,7 +11,7 @@ from .store import MemoryStore
 _WRITE_TARGETS = ("session", "memory", "task_memory")
 
 
-@register_tool("memory_search")
+@register_tool("memory_search", allow_overwrite=True)
 class MemorySearchTool(BaseTool):
     """Tool for searching memory files by keywords.
 
@@ -89,7 +89,7 @@ class MemorySearchTool(BaseTool):
         return "\n".join(lines)
 
 
-@register_tool("memory_get")
+@register_tool("memory_get", allow_overwrite=True)
 class MemoryGetTool(BaseTool):
     """Tool for reading memory files or specific line ranges.
 
@@ -157,7 +157,7 @@ class MemoryGetTool(BaseTool):
         return content
 
 
-@register_tool("memory_write")
+@register_tool("memory_write", allow_overwrite=True)
 class MemoryWriteTool(BaseTool):
     """Tool for writing content to memory files.
 

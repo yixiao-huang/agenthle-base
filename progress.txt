@@ -127,3 +127,27 @@
   - Integration tests that mock ComputerAgent constructor can capture `instructions=` to verify the full system prompt without a VM
   - SearchResult as a dataclass (vs plain class in legacy store) is cleaner and gets __eq__ for free
 ---
+
+## 2026-03-11 - US-OC-003: Memory Tools
+- Implemented three BaseTool subclasses in `agents/openclaw/memory.py`:
+  - **MemorySearchTool** (`memory_search`): keyword search via `query` or `keywords` params, returns formatted `[path:line] (score N) content` lines
+  - **MemoryGetTool** (`memory_get`): safe file read with `path`/`from`/`lines`, rejects path traversal and non-.md files
+  - **MemoryWriteTool** (`memory_write`): two targets — `session` (append) and `task_memory` (overwrite TASK_MEMORY.md)
+- Wired all three tools into `openclaw_agent.py` tool list
+- Fixed pre-existing `.name` AttributeError: `session._computer` (CUA Computer) lacks `.name`; filtered `tool_summaries` to `isinstance(tool, BaseTool)` only
+- Added `allow_overwrite=True` to legacy `memory/tools.py` decorators to prevent registration conflicts
+- Updated AGENTS.md: replaced "requires US-OC-003" caveat with tool usage instructions
+- VM test (50 steps): agent ran successfully, all 5 tools registered in API calls, system prompt includes tool descriptions and Memory Recall section
+- **Files changed:**
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/memory.py` (3 tool classes appended)
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/__init__.py` (exports)
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/AGENTS.md` (tool references)
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw_agent.py` (tool wiring + .name fix)
+  - `memory/tools.py` (allow_overwrite on legacy decorators)
+  - `tests/test_openclaw_memory_tools.py` (new, 34 tests)
+- **Learnings for future iterations:**
+  - `session._computer` is a CUA Computer object, not a BaseTool — always guard tool introspection with isinstance checks
+  - `allow_overwrite=True` needed on both old and new `@register_tool` calls when same names exist in different packages
+  - Agent doesn't use memory tools on first session with empty memory — expected; cross-session testing needed for behavioral verification
+  - Two write targets (session/task_memory) instead of three (legacy had "memory" for global MEMORY.md) — correct for task-scoped design
+---
