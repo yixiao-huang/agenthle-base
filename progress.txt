@@ -20,3 +20,16 @@
   - OpenClaw concept docs (`openclaw/docs/concepts/`) are the authoritative component-level references
   - `docs/openclaw-context-flow.html` is the primary interactive reference for the full pipeline
 ---
+
+## 2026-03-11 - PRD: OpenClaw reproduction stories (B1-B6 + post-eval)
+- Created 10 stories in `prd.json` covering B1-B6 components across 3 phases plus 2 post-evaluation stories
+- Phase 1 (P1-P4): System Prompt Builder, Memory Store, Memory Tools, Session Persistence
+- Phase 2 (P5-P7): Context Overflow Detection, Compaction Pipeline, Tool Registry + Hooks
+- Phase 3 (P8): Agent Loop Integration
+- Post-eval (P9-P10): Category C SDK audit, Category A skipped component review
+- Updated `.claude/skills/prd/SKILL.md` with "Reference brevity: pointers, not inventories" principle
+- **Learnings for future iterations:**
+  - PRD references should use directory pointers + entry points, not exhaustive file lists — the implementing agent can explore on its own
+  - Category C assumptions (CUA SDK reusability) need runtime verification, not just source analysis
+  - ComputerAgent vs Pi agent core equivalence is the highest-risk assumption — needs deep investigation in US-OC-009
+---

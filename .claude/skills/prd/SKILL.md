@@ -166,12 +166,19 @@ Each story should include a `context` object to help the implementing agent:
 
 **Golden references** are the single most useful piece of context you can give to both the implementer and the evaluator. A good reference answers "what does good look like?" without being a rigid spec.
 
-Examples:
-- `"memory/tools.py:MemorySearchTool (same file, follow this pattern for new tools)"`
-- `"openclaw/src/agents/compaction.ts (reference implementation for compaction pipeline)"`
-- `"openclaw/docs/concepts/memory.md (OpenClaw design doc for memory system)"`
-- `"submodules/cua/.../base.py:BaseTool (upstream pattern for all tool classes)"`
-- `"tests/test_memory_store.py (test structure and coverage level to match)"`
+### Reference brevity: pointers, not inventories
+
+Each story is implemented by a fresh agent that can explore the codebase on its own. Give **directory pointers with entry points**, not exhaustive file lists. The implementing agent will `Glob`, `Grep`, and `Read` to discover what it needs.
+
+**Good** — concise pointer with a starting point:
+- `"openclaw/src/agents/pi-embedded-runner/ (start from run.ts for the main loop; explore compact.ts for compaction)"`
+- `"openclaw/src/memory/ (start from manager.ts, explore hybrid.ts for search logic)"`
+- `"submodules/cua/libs/python/agent/agent/callbacks/ (explore all built-in callbacks)"`
+
+**Bad** — exhaustive inventory the agent could find itself:
+- `"openclaw/src/agents/pi-embedded-runner/run.ts (main loop), compact.ts (compaction), extensions.ts (pruning), history.ts (loading), model.ts (resolution), types.ts (types), tool-result-truncation.ts (truncation), tool-result-context-guard.ts (guard), system-prompt.ts (prompt), thinking.ts (thinking)"`
+
+Apply the same principle to `existingFiles` and `notes` — keep them concise. If a directory has 10+ relevant files, point to the directory and name 1-2 entry points.
 
 Only include fields that are relevant. Omit the entire `context` object for simple stories.
 
@@ -189,11 +196,11 @@ Only include fields that are relevant. Omit the entire `context` object for simp
 
 ## Writing for Implementation
 
-The PRD reader is an AI agent working autonomously. Therefore:
+The PRD reader is an AI agent working autonomously with a fresh context window. It can explore the codebase on its own. Therefore:
 
 - Be explicit and unambiguous
 - Reference specific files and functions (e.g., "extends `BaseTool` in `agent/tools/base.py`")
-- Include enough detail to understand purpose and core logic
+- Include enough detail to understand purpose and core logic, but **don't over-specify** — give directory pointers and entry points, not exhaustive file lists (see "Reference brevity" above)
 - Use `notes` for critical design insights the implementing agent must know
 - Use concrete examples from the codebase where helpful
 
