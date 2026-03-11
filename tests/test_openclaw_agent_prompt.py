@@ -6,7 +6,6 @@ verifying that MemoryStore, PromptBuilder, and bootstrap injection are wired cor
 """
 
 import asyncio
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -102,15 +101,16 @@ class TestSystemPromptIntegration:
         assert "UTC" in prompt
         assert "# Project Context" in prompt
         assert "### AGENTS.md" in prompt
-        assert "### task.md" in prompt
-        assert "Navigate to floor 3" in prompt
+        # Task description is NOT in the system prompt — it's passed via agent.run()
+        assert "### task.md" not in prompt
         # No TASK_MEMORY.md injected on first run
         assert "### TASK_MEMORY.md" not in prompt
-        # Memory Recall not present (no memory tools registered yet)
-        assert "## Memory Recall" not in prompt
-        # Tool names present
-        assert "**computer**" in prompt
-        assert "**save_milestone_screenshot**" in prompt
+        # Memory Recall present (memory_search + memory_get are registered)
+        assert "## Memory Recall" in prompt
+        # Memory tool names present (mock computer/milestone don't pass isinstance(BaseTool))
+        assert "**memory_search**" in prompt
+        assert "**memory_get**" in prompt
+        assert "**memory_write**" in prompt
 
     def test_system_prompt_with_task_memory(self, setup):
         """Second run — TASK_MEMORY.md exists with prior knowledge."""

@@ -164,3 +164,26 @@
   - `session._computer` is a CUA Computer, not BaseTool — guard tool introspection with `isinstance(tool, BaseTool)` checks
   - `allow_overwrite=True` needed on `@register_tool` when legacy and new packages register same tool names — prefer removing stale registration
 ---
+
+## 2026-03-11 - US-OC-001/002 revision
+- Removed duplicate task description injection: `task.md` was being injected as a ContextFile AND passed via `agent.run()`, causing duplication in the agent's context window
+- Added memory citation guidance to Memory Recall section in `prompt.py`: "Citations: include Source: <path#line> when referencing memory snippets." (matches OpenClaw's buildMemorySection pattern)
+- Removed redundant TASK_MEMORY.md reference from AGENTS.md Session Startup (it's already injected as a ContextFile by the agent harness, no need to tell the agent it's "already in your system prompt")
+- Updated tests (`test_openclaw_agent_prompt.py`, `test_prompt_builder.py`) to reflect no task.md injection and verify memory tool presence in prompt
+- Updated `prd.json` acceptance criteria and notes for US-OC-001 and US-OC-002 to match final implementation
+- Updated `docs/plan/US-OC-001-system-prompt-builder.md` design rationale (Project Context and Key Differences sections)
+- Added `planFile` field to US-OC-001 and US-OC-003 in `prd.json`
+- Revised `/judge` SKILL.md and `/onboard` SKILL.md (minor clarifications)
+- **Files changed:**
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw_agent.py` (remove task.md ContextFile injection)
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/prompt.py` (add citation line to Memory Recall)
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/AGENTS.md` (remove TASK_MEMORY.md note from Session Startup)
+  - `tests/test_openclaw_agent_prompt.py` (updated assertions)
+  - `tests/test_prompt_builder.py` (remove task.md references)
+  - `prd.json` (updated criteria, notes, planFile fields)
+  - `docs/plan/US-OC-001-system-prompt-builder.md` (design rationale update)
+  - `.claude/skills/judge/SKILL.md`, `.claude/skills/onboard/SKILL.md` (minor revisions)
+- **Learnings for future iterations:**
+  - Avoid injecting the task description as both a ContextFile and via agent.run() — ComputerAgent sends it as a user message; double injection wastes context
+  - AGENTS.md should describe agent behavior rules, not echo what the harness already does programmatically — keep it free of implementation details
+---

@@ -95,7 +95,9 @@ After reporting, enter planning mode to draft the plan for the current story.
 
 See `docs/plan/US-OC-001-system-prompt-builder.md` for an example of a well-structured design rationale.
 
-**After planning**: Use `/prd` to register your plan file in the story's `context.planFile` field so future agents can find and reference it.
+**Plan file location**: Save the plan as `docs/plan/<STORY-ID>-<slug>.md` (e.g., `docs/plan/US-OC-003-context-manager.md`). All plan files live in `docs/plan/`.
+
+**After planning**: Use `/prd` to register the plan file path in the story's `context.planFile` field so future agents can find and reference it.
 
 ---
 

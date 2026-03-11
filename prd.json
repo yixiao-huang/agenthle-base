@@ -13,20 +13,21 @@
           "submodules/cua/libs/python/agent/agent/callbacks/prompt_instructions.py (PromptInstructionsCallback — how instructions are injected)"
         ],
         "designDoc": "openclaw/docs/concepts/system-prompt.md (section structure, prompt modes, workspace bootstrap injection, time handling)",
-        "reference": "openclaw/src/agents/system-prompt.ts (start here — buildAgentSystemPrompt); also explore openclaw/src/agents/pi-embedded-helpers/bootstrap.ts for context file injection"
+        "reference": "openclaw/src/agents/system-prompt.ts (start here — buildAgentSystemPrompt); also explore openclaw/src/agents/pi-embedded-helpers/bootstrap.ts for context file injection",
+        "planFile": "docs/plan/US-OC-001-system-prompt-builder.md"
       },
       "acceptanceCriteria": [
         "Level 1: Lint passes (uv run ruff check submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/ tests/test_prompt_builder.py)",
         "Level 1: Unit tests pass — PromptBuilder assembles sections in correct order, omits empty sections, includes tool names; Memory Recall section conditionally included only when memory tools (memory_search, memory_get) are registered",
         "Level 1: PromptBuilder.build() returns a single string with labeled sections (## Identity, ## Tools, ## Memory Recall, # Project Context); Current Time intentionally dropped (agent reads VM clock; breaks cache stability)",
         "Level 1: Sections are configurable — each can be enabled/disabled; disabled sections produce no output",
-        "Level 1: Project Context injects context files (AGENTS.md, task.md) with per-file headers, following OpenClaw's contextFiles bootstrap pattern",
-        "Level 1: PromptBuilder.build() is wired into openclaw_agent.py — tool_summaries derived from registered tools, AGENTS.md and task.md injected as ContextFiles, output passed as instructions= to ComputerAgent",
+        "Level 1: Project Context injects context files (AGENTS.md, optionally TASK_MEMORY.md) with per-file headers, following OpenClaw's contextFiles bootstrap pattern. Task description is NOT injected — it's passed via agent.run() to avoid duplication",
+        "Level 1: PromptBuilder.build() is wired into openclaw_agent.py — tool_summaries derived from registered tools, AGENTS.md injected as ContextFile, output passed as instructions= to ComputerAgent",
         "Level 2: run_magic_tower.sh 50 — agent follows structured instructions (e.g., uses DONE signal, references tool names from prompt)"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "File: agents/openclaw/prompt.py. Sections: identity (agent name + role), tools (registered tool names with descriptions), memory recall (when/how to use memory_search — conditional on memory tools), project context (AGENTS.md + task.md via bootstrap injection). Current Time intentionally dropped (agent reads VM clock; breaks cache stability). Integrated into openclaw_agent.py via instructions= parameter. Skip OpenClaw-specific sections: skills, messaging, reply tags, voice/TTS, reactions, heartbeats, sandbox, documentation paths, OpenClaw self-update."
+      "notes": "File: agents/openclaw/prompt.py. Sections: identity (agent name + role), tools (registered tool names with descriptions), memory recall (when/how to use memory_search — conditional on memory tools), project context (AGENTS.md via bootstrap injection, optionally TASK_MEMORY.md). Task description is passed via agent.run(instruction), NOT injected as a context file — avoids duplication since ComputerAgent sends it as a separate user message. Integrated into openclaw_agent.py via instructions= parameter. Skip OpenClaw-specific sections: skills, messaging, reply tags, voice/TTS, reactions, heartbeats, sandbox, documentation paths, OpenClaw self-update."
     },
     {
       "id": "US-OC-002",
@@ -67,7 +68,8 @@
           "tests/test_memory_tools.py (test patterns to match)"
         ],
         "depends": "US-OC-002 must be done first (tools wrap MemoryStore)",
-        "reference": "openclaw/src/agents/tools/memory-tool.ts (start here for tool schemas and behavior); also memory/tools.py in this repo for the BaseTool pattern"
+        "reference": "openclaw/src/agents/tools/memory-tool.ts (start here for tool schemas and behavior); also memory/tools.py in this repo for the BaseTool pattern",
+        "planFile": "docs/plan/US-OC-003-memory-tools.md"
       },
       "acceptanceCriteria": [
         "Level 1: Lint passes (uv run ruff check .)",

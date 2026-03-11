@@ -236,26 +236,24 @@ class TestProjectContext:
         builder = PromptBuilder()
         files = [
             ContextFile(path="AGENTS.md", content="Agent guidance"),
-            ContextFile(path="task.md", content="Task description"),
-            ContextFile(path="MEMORY.md", content="Memory content"),
+            ContextFile(path="TASK_MEMORY.md", content="Memory content"),
         ]
         result = builder.build(context_files=files)
 
         agents_pos = result.index("### AGENTS.md")
-        task_pos = result.index("### task.md")
-        memory_pos = result.index("### MEMORY.md")
+        memory_pos = result.index("### TASK_MEMORY.md")
 
-        assert agents_pos < task_pos < memory_pos
+        assert agents_pos < memory_pos
 
     def test_multiple_context_files_all_content_present(self):
         builder = PromptBuilder()
         files = [
             ContextFile(path="AGENTS.md", content="Agent guidance here"),
-            ContextFile(path="task.md", content="Complete the puzzle"),
+            ContextFile(path="TASK_MEMORY.md", content="Yellow key on floor 2"),
         ]
         result = builder.build(context_files=files)
         assert "Agent guidance here" in result
-        assert "Complete the puzzle" in result
+        assert "Yellow key on floor 2" in result
 
     def test_context_header_text(self):
         builder = PromptBuilder()
