@@ -16,15 +16,17 @@
         "reference": "openclaw/src/agents/system-prompt.ts (start here — buildAgentSystemPrompt); also explore openclaw/src/agents/pi-embedded-helpers/bootstrap.ts for context file injection"
       },
       "acceptanceCriteria": [
-        "Level 1: Lint passes (uv run ruff check .)",
-        "Level 1: Unit tests pass — PromptBuilder assembles sections in correct order, omits empty sections, includes tool names, includes current time/timezone",
-        "Level 1: PromptBuilder.build() returns a single string with labeled sections (## Identity, ## Tools, ## Memory, ## Task Context, ## Current Time)",
+        "Level 1: Lint passes (uv run ruff check submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/ tests/test_prompt_builder.py)",
+        "Level 1: Unit tests pass — PromptBuilder assembles sections in correct order, omits empty sections, includes tool names; Memory Recall section conditionally included only when memory tools (memory_search, memory_get) are registered",
+        "Level 1: PromptBuilder.build() returns a single string with labeled sections (## Identity, ## Tools, ## Memory Recall, # Project Context); Current Time intentionally dropped (agent reads VM clock; breaks cache stability)",
         "Level 1: Sections are configurable — each can be enabled/disabled; disabled sections produce no output",
+        "Level 1: Project Context injects context files (AGENTS.md, task.md) with per-file headers, following OpenClaw's contextFiles bootstrap pattern",
+        "Level 1: PromptBuilder.build() is wired into openclaw_agent.py — tool_summaries derived from registered tools, AGENTS.md and task.md injected as ContextFiles, output passed as instructions= to ComputerAgent",
         "Level 2: run_magic_tower.sh 50 — agent follows structured instructions (e.g., uses DONE signal, references tool names from prompt)"
       ],
       "priority": 1,
-      "passes": false,
-      "notes": "File: agents/openclaw/prompt.py. Sections to include: identity (agent name + role), tool guidance (list registered tool names with one-line descriptions), memory recall instructions (when/how to use memory_search), task context (task description + any injected bootstrap), current time (timezone + UTC offset). Skip OpenClaw-specific sections: skills, messaging, reply tags, voice/TTS, reactions, heartbeats, sandbox, documentation paths, OpenClaw self-update. The builder takes a dict of section configs and returns a formatted string. Use PromptInstructionsCallback to inject into CUA — the instructions= parameter is never truncated from context."
+      "passes": true,
+      "notes": "File: agents/openclaw/prompt.py. Sections: identity (agent name + role), tools (registered tool names with descriptions), memory recall (when/how to use memory_search — conditional on memory tools), project context (AGENTS.md + task.md via bootstrap injection). Current Time intentionally dropped (agent reads VM clock; breaks cache stability). Integrated into openclaw_agent.py via instructions= parameter. Skip OpenClaw-specific sections: skills, messaging, reply tags, voice/TTS, reactions, heartbeats, sandbox, documentation paths, OpenClaw self-update."
     },
     {
       "id": "US-OC-002",
@@ -46,7 +48,7 @@
       ],
       "priority": 2,
       "passes": false,
-      "notes": "File: agents/openclaw/memory.py (MemoryStore class only — tools are US-OC-003). Fresh implementation inside the CUA submodule — read memory/store.py for the API shape to adapt, but keep it self-contained (no cross-repo imports). Key API: search, read_file, write_memory, append_to_daily_log, init_session, append_to_session_log, write/read_task_memory."
+      "notes": "File: agents/openclaw/memory.py (MemoryStore class only — tools are US-OC-003). Fresh implementation inside the CUA submodule — read memory/store.py for the API shape to adapt, but keep it self-contained (no cross-repo imports). Key API: search, read_file, write_memory, append_to_daily_log, init_session, append_to_session_log, write/read_task_memory. IMPORTANT: After finalizing the memory file layout, revise agents/openclaw/AGENTS.md (Session Startup + Memory sections) to match the actual file paths, tool names, and write mechanism. The current AGENTS.md has a placeholder note marking this dependency."
     },
     {
       "id": "US-OC-003",
@@ -69,7 +71,7 @@
       ],
       "priority": 3,
       "passes": false,
-      "notes": "File: agents/openclaw/memory.py (append below MemoryStore from US-OC-002). Three BaseTool subclasses wrapping MemoryStore. Read memory/tools.py for the pattern — it's already well-aligned with OpenClaw's schemas. Key deviation: we accept both query and keywords on search."
+      "notes": "File: agents/openclaw/memory.py (append below MemoryStore from US-OC-002). Three BaseTool subclasses wrapping MemoryStore. Read memory/tools.py for the pattern — it's already well-aligned with OpenClaw's schemas. Key deviation: we accept both query and keywords on search. NOTE: OpenClaw has only memory_search + memory_get as dedicated tools — agents write via generic write/edit file tools. Decide whether to add a dedicated memory_write tool (simpler for CUA where no generic file tools exist) or reuse another mechanism. After finalizing tool names, revise agents/openclaw/AGENTS.md to reference the correct write tool/mechanism."
     },
     {
       "id": "US-OC-004",

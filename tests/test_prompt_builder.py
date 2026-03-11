@@ -182,16 +182,17 @@ class TestMemorySection:
         result = builder.build(tool_summaries=tools)
         assert "## Memory Recall" in result
 
-    def test_memory_present_with_memory_write(self):
+    def test_memory_not_triggered_by_non_recall_tools(self):
+        """Only memory_search and memory_get trigger Memory Recall (matching OpenClaw)."""
         builder = PromptBuilder()
         tools = {"memory_write": "Write to memory"}
         result = builder.build(tool_summaries=tools)
-        assert "## Memory Recall" in result
+        assert "## Memory Recall" not in result
 
     def test_memory_mentions_search_first_directive(self):
         """Memory section should have search-first behavioral directive like OpenClaw."""
         builder = PromptBuilder()
-        tools = {"memory_search": "search", "memory_get": "get", "memory_write": "write"}
+        tools = {"memory_search": "search", "memory_get": "get"}
         result = builder.build(tool_summaries=tools)
         assert "memory_search" in result
         assert "memory_get" in result

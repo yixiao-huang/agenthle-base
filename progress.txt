@@ -54,3 +54,31 @@
 - **Files changed:** `.claude/skills/onboard/SKILL.md`, `docs/plan/US-OC-001-system-prompt-builder.md`, `docs/openclaw-reproduction-plan.md` (relocated)
 - **Learnings:** Design rationale structure forces explicit documentation of OpenClaw → CUA adaptations and avoids cargo-cult reproduction
 ---
+## 2026-03-11 - US-OC-001: System Prompt Builder
+- Implemented PromptBuilder class in `agents/openclaw/prompt.py` with five major sections:
+  - **Identity**: agent name + CUA benchmark role
+  - **Tools**: registered tool names with descriptions (derived at runtime from tool_summaries dict)
+  - **Memory Recall**: search-first directive for memory_search + memory_get (conditionally included)
+  - **Project Context**: bootstrap injection of AGENTS.md + task.md files
+  - **Current Time**: intentionally dropped (agent reads VM clock; breaks cache stability)
+- Integrated PromptBuilder into `openclaw_agent.py`:
+  - tool_summaries derived from [session._computer, MilestoneTool] at runtime
+  - AGENTS.md read from `openclaw/AGENTS.md`, task description injected as task.md
+  - instructions= parameter passed to ComputerAgent (never truncated from context)
+- Updated acceptance criteria in `prd.json` to match final implementation
+- Updated design rationale in `docs/plan/US-OC-001-system-prompt-builder.md` with tool runtime derivation pattern
+- Revised `agents/openclaw/AGENTS.md` to clarify memory file layout and write mechanism dependencies (forward reference to US-OC-002 and US-OC-003)
+- **Files changed:**
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/prompt.py` (new)
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw_agent.py` (integrated PromptBuilder)
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/AGENTS.md` (clarified memory sections)
+  - `docs/plan/US-OC-001-system-prompt-builder.md` (updated design rationale)
+  - `tests/test_prompt_builder.py` (updated memory tests — memory_write no longer triggers Memory Recall)
+  - `prd.json` (updated acceptance criteria + notes)
+- **Learnings for future iterations:**
+  - Memory Recall section is triggered by memory_search OR memory_get presence, NOT memory_write (matches OpenClaw behavior)
+  - Tool summaries must be derived at runtime from actual registered tools, not hardcoded — enables flexible tool list for future stories
+  - AGENTS.md and task.md as ContextFile injections allow persistent, section-specific guidance without breaking cache stability
+  - Bootstrap injection via ContextFile avoids the "Current Time" section complexity (VM clock is reliable, hardcoded times break cache)
+  - Design rationale doc structure (OpenClaw → CUA → dropped → differences) is effective for capturing architectural decisions
+---

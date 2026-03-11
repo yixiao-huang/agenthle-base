@@ -19,7 +19,7 @@ Bootstrap injection (`contextFiles` pattern) appends workspace files (AGENTS.md,
 |---------|-----|
 | **Identity** | Agent needs a role definition. Adapted from OpenClaw's identity line to describe CUA benchmark context. |
 | **Tools** | CUA tools differ from OpenClaw's (Computer, MilestoneTool vs file ops, shell, browser). Listing available tools with descriptions is essential for any agent. |
-| **Memory Recall** | Same tool names (`memory_search`, `memory_get`, `memory_write`), same usage pattern. Conditionally included only when memory tools are registered. |
+| **Memory Recall** | Same tool names (`memory_search`, `memory_get`), same search-first directive pattern. Conditionally included only when memory tools are registered. **Note**: OpenClaw has only read-only memory tools — agents write to memory files using generic `write`/`edit` file tools, not a dedicated `memory_write`. Our tool set may differ; see US-OC-003 for the final decision on whether to add a `memory_write` tool or reuse a generic file write tool. |
 | **Project Context** | Bootstrap injection is the right vehicle for persistent guidance. AGENTS.md replaces OpenClaw's AGENTS.md (agent behavior rules). task.md replaces USER.md (task context vs user identity). |
 
 ## What We Dropped and Why
@@ -47,11 +47,22 @@ Bootstrap injection (`contextFiles` pattern) appends workspace files (AGENTS.md,
 
 ## Key Differences from OpenClaw
 
-1. **AGENTS.md** — Our AGENTS.md focuses on CUA benchmark behavior (DONE signal, milestones, observation strategy). OpenClaw's AGENTS.md covers workspace-specific agent configuration.
+1. **AGENTS.md** — Our AGENTS.md focuses on CUA benchmark behavior (DONE signal, milestones, observation strategy). OpenClaw's AGENTS.md covers workspace-specific agent configuration (session startup ritual, persona files, group chat behavior, heartbeats).
 2. **task.md** — Replaces OpenClaw's USER.md. In OpenClaw, USER.md describes the user's identity and preferences. In CUA, task.md describes the specific task to complete.
 3. **No Bootstrap.md** — OpenClaw uses Bootstrap.md for first-run workspace setup. CUA tasks are stateless (no workspace lifecycle).
 4. **No prompt modes** — We build one prompt. Sub-agent support can be added later if needed.
 5. **Conditional Memory section** — Only included when memory tools are registered, unlike OpenClaw where memory is always available.
+6. **No `memory_write` tool** — OpenClaw has only `memory_search` and `memory_get` as dedicated memory tools. Agents write to memory files using generic `write`/`edit` file tools. Additionally, OpenClaw has a pre-compaction "memory flush" system that prompts the agent to persist durable memories before context compaction. CUA doesn't have generic file write tools, so US-OC-003 must decide how agents write to memory (dedicated `memory_write` tool vs reusing another mechanism).
+
+## How Tools Are Specified
+
+In the real implementation (US-OC-008), `tool_summaries` will be derived from the registered tool list at runtime. Each CUA `BaseTool` subclass has a `name` and `description` attribute set by `@register_tool`. The integration code in `perform_task()` will build the dict from the actual tool instances:
+
+```python
+tool_summaries = {tool.name: tool.description for tool in tools}
+```
+
+This means the Tools section automatically reflects whatever tools are registered for that run — no hardcoding needed.
 
 ## Future Additions
 

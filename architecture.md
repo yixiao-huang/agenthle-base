@@ -1,4 +1,4 @@
-<!-- Last updated: 2026-03-10 -->
+<!-- Last updated: 2026-03-11 -->
 # AgentHLE Architecture
 
 ## Overview
@@ -133,6 +133,9 @@ agenthle-base/
 `OpenClawAgent` class (`@register_agent("openclaw-agent")`):
 
 - **`perform_task()`** — Main async entry point
+  - Builds structured system prompt via `PromptBuilder` (US-OC-001):
+    - Identity, Tools (derived from registered tools), Memory Recall (conditional), Project Context (AGENTS.md + task.md)
+    - Injects context files as bootstrap (never truncated from context via `instructions=` parameter)
   - Creates `ComputerAgent` from CUA SDK with tools: Computer, MilestoneTool
   - Memory tools (MemorySearchTool, MemoryGetTool, MemoryWriteTool) are implemented but not yet wired in
   - Model: configurable, default `anthropic/claude-sonnet-4-20250514`
