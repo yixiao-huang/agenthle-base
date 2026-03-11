@@ -98,3 +98,32 @@
   - Current Time section is intentionally kept in system prompt (contrary to earlier note) but is now included in section disablement config
   - Project Context file headers use H3 (###) instead of H2 (##) to create proper subsection hierarchy
 ---
+
+## 2026-03-11 - US-OC-002: Memory Store
+- Implemented `MemoryStore` class + `SearchResult` dataclass in `agents/openclaw/memory.py`
+  - Task workspace layout: `tasks/<task_id>/TASK_MEMORY.md` + `memory/session-NNN.md`
+  - API: init_session, append_to_session_log, write/read_task_memory, read_file, search, list_session_files, get_bootstrap_context
+  - `DEFAULT_BASE_DIR = "openclaw_memory"` with runtime resolution (patchable in tests)
+- Wired MemoryStore into `openclaw_agent.py`:
+  - task_id derived from `logging_dir.parent.name`
+  - init_session() called on each run
+  - TASK_MEMORY.md injected as ContextFile if it exists (bootstrap injection)
+- Added "Current Date & Time" section to PromptBuilder (mirrors OpenClaw's system-prompt.ts)
+- Updated AGENTS.md: session startup reads two most recent session logs
+- Updated prompt.py Memory Recall to reference TASK_MEMORY.md + memory/session-*.md
+- Integration test (`test_openclaw_agent_prompt.py`) mocks CUA SDK and captures/prints full system prompt
+- **Files changed:**
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/memory.py` (new)
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/__init__.py` (exports)
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/prompt.py` (time section, memory recall update, ### headers)
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/AGENTS.md` (task workspace layout)
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw_agent.py` (MemoryStore wiring)
+  - `tests/test_openclaw_memory_store.py` (new, 38 tests)
+  - `tests/test_openclaw_agent_prompt.py` (new, 4 integration tests)
+  - `docs/plan/US-OC-002-memory-store.md` (design doc with decisions)
+- **Learnings for future iterations:**
+  - Class-level `DEFAULT_BASE_DIR` as a default parameter is bound at class definition time — use `None` sentinel + `self.DEFAULT_BASE_DIR` for patchability
+  - `patch.object(MemoryStore, "DEFAULT_BASE_DIR", ...)` works when the default is resolved at call time via `self.`
+  - Integration tests that mock ComputerAgent constructor can capture `instructions=` to verify the full system prompt without a VM
+  - SearchResult as a dataclass (vs plain class in legacy store) is cleaner and gets __eq__ for free
+---

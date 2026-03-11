@@ -53,7 +53,7 @@
         "Level 1: prompt.py Memory Recall section references TASK_MEMORY.md + memory/session-*.md"
       ],
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "notes": "File: agents/openclaw/memory.py (MemoryStore class only — tools are US-OC-003). Task workspace layout: tasks/<task_id>/TASK_MEMORY.md + tasks/<task_id>/memory/session-NNN.md. Simplified from OpenClaw: no global memory (MEMORY.md, daily logs), no SQLite/vector search, no file watching/chunking/temporal decay (may revisit in future PRD). TASK_MEMORY.md is bootstrap-injected into system prompt as ContextFile, mirroring OpenClaw's MEMORY.md injection pattern."
     },
     {
