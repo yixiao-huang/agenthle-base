@@ -100,7 +100,7 @@
         "Level 1: load_history() returns previous run's messages; save_history() appends current run"
       ],
       "priority": 4,
-      "passes": false,
+      "passes": true,
       "notes": "File: agents/openclaw/session.py. SessionManager with state JSON + JSONL transcripts. Storage layout: sessions_dir/task_id/state.json + run-NNN.jsonl. Design the JSONL format to support future cross-task indexing — include task_id and timestamps per entry. Compaction summaries stored as a list in state.json for injection into future runs."
     },
     {
