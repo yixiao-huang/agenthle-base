@@ -165,6 +165,36 @@
   - `allow_overwrite=True` needed on `@register_tool` when legacy and new packages register same tool names — prefer removing stale registration
 ---
 
+## 2026-03-12 - PRD update: US-OC-004a, US-OC-005a, US-OC-011
+- Compared our state.json schema against OpenClaw's full SessionEntry type (openclaw/src/config/sessions/types.ts)
+- Created US-OC-004a (P4.1): Session State Schema Extension — remove run_number, add cache tokens, model, system_prompt_report
+- Created US-OC-005a (P5.1): Wire Memory Flush Tracking — placeholder for memory_flush_at/memory_flush_compaction_count discussion
+- Created US-OC-011 (P11): Abort/Resume Tracking — aborted_last_run + abort_cutoff_entry_id, post-integration
+- Updated US-OC-008 notes: memory flush fields come from US-OC-005a, not added in integration story
+- **Learnings for future iterations:**
+  - OpenClaw SessionEntry has ~60+ fields; ~90% are multi-channel routing, UI delivery, and gateway concerns irrelevant to CUA
+  - Relevant gaps for CUA: cache token tracking (cache_read, cache_write, context_tokens), model in state, system prompt size reporting, abort/resume state, memory flush tracking
+  - OpenClaw's systemPromptReport tracks char-level budget of every prompt component — useful for context window observability without needing to parse the prompt string
+---
+
+## 2026-03-12 - US-OC-004a: Session State Schema Extension
+- Removed `run_number` from `SessionState` — run numbers are now derived by counting session header entries in the transcript (`_count_session_headers()`)
+- Added `cache_read`, `cache_write`, `context_tokens` fields to `TokenUsage` with matching `accumulate()` keyword args
+- Added `model` field to `SessionState` — set by `init_session(model=...)` and persisted to state.json
+- Added `system_prompt_report: dict | None` to `SessionState` — omitted from `to_dict()` when None; loaded via `set_system_prompt_report()`
+- Implemented `build_system_prompt_report()` — measures total/project/non-project chars, injected file sizes, tool schema chars and property counts
+- Exported `build_system_prompt_report` via `openclaw/__init__.py`
+- Updated all 42 existing tests + added 16 new tests (58 total); all pass
+- **Files changed:**
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/session.py`
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/__init__.py`
+  - `tests/test_openclaw_session.py`
+- **Learnings for future iterations:**
+  - Deriving run_number from transcript avoids state drift — count session headers before appending the new one
+  - `system_prompt_report` serialization: omit key entirely when None (not `"system_prompt_report": null`) to keep state.json clean and support backward compat
+  - Duck-typed tool schema extraction (`hasattr(tool, "parameters")`) avoids importing BaseTool, making `build_system_prompt_report` testable with plain Python objects
+---
+
 ## 2026-03-12 - US-OC-004: Session Persistence
 - Implemented `SessionManager` + `SessionState` + `TokenUsage` + `TranscriptEntry` in `agents/openclaw/session.py`
   - Storage layout: `openclaw_sessions/<task_id>/state.json` + `transcript.jsonl`

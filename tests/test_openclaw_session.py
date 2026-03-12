@@ -9,6 +9,7 @@ from cua_bench.agents.openclaw.session import (
     SessionState,
     TokenUsage,
     TranscriptEntry,
+    build_system_prompt_report,
 )
 
 
@@ -22,6 +23,9 @@ class TestTokenUsage:
         t = TokenUsage()
         assert t.input_tokens == 0
         assert t.output_tokens == 0
+        assert t.cache_read == 0
+        assert t.cache_write == 0
+        assert t.context_tokens == 0
 
     def test_accumulation(self):
         t = TokenUsage(input_tokens=100, output_tokens=50)
@@ -29,17 +33,43 @@ class TestTokenUsage:
         assert t.input_tokens == 300
         assert t.output_tokens == 80
 
+    def test_accumulation_with_cache(self):
+        t = TokenUsage()
+        t.accumulate(100, 50, cache_read=1000, cache_write=200, context_tokens=1500)
+        assert t.input_tokens == 100
+        assert t.output_tokens == 50
+        assert t.cache_read == 1000
+        assert t.cache_write == 200
+        assert t.context_tokens == 1500
+
+        t.accumulate(50, 25, cache_read=500)
+        assert t.cache_read == 1500
+        assert t.cache_write == 200  # unchanged
+
     def test_roundtrip(self):
-        t = TokenUsage(input_tokens=42, output_tokens=7)
+        t = TokenUsage(input_tokens=42, output_tokens=7, cache_read=100, cache_write=20, context_tokens=500)
         d = t.to_dict()
         t2 = TokenUsage.from_dict(d)
         assert t2.input_tokens == 42
         assert t2.output_tokens == 7
+        assert t2.cache_read == 100
+        assert t2.cache_write == 20
+        assert t2.context_tokens == 500
 
     def test_from_dict_missing_keys(self):
         t = TokenUsage.from_dict({})
         assert t.input_tokens == 0
         assert t.output_tokens == 0
+        assert t.cache_read == 0
+        assert t.cache_write == 0
+        assert t.context_tokens == 0
+
+    def test_backward_compat_old_format(self):
+        """Old state.json without cache fields loads correctly."""
+        t = TokenUsage.from_dict({"input_tokens": 100, "output_tokens": 50})
+        assert t.cache_read == 0
+        assert t.cache_write == 0
+        assert t.context_tokens == 0
 
 
 # ---------------------------------------------------------------------------
@@ -51,28 +81,61 @@ class TestSessionState:
     def test_serialization_roundtrip(self):
         state = SessionState(
             task_id="mota_24_easy",
-            run_number=3,
             step_count=47,
             total_tokens=TokenUsage(125000, 8500),
             compaction_count=1,
             compaction_summaries=["Agent navigated floor 2"],
+            model="claude-sonnet",
             created_at="2026-03-11T10:00:00Z",
             updated_at="2026-03-11T10:15:00Z",
         )
         d = state.to_dict()
         restored = SessionState.from_dict(d)
         assert restored.task_id == "mota_24_easy"
-        assert restored.run_number == 3
         assert restored.step_count == 47
         assert restored.total_tokens.input_tokens == 125000
         assert restored.compaction_count == 1
         assert restored.compaction_summaries == ["Agent navigated floor 2"]
+        assert restored.model == "claude-sonnet"
 
     def test_defaults(self):
         state = SessionState(task_id="test")
-        assert state.run_number == 0
         assert state.step_count == 0
         assert state.compaction_summaries == []
+        assert state.model == ""
+        assert state.system_prompt_report is None
+
+    def test_backward_compat_old_state(self):
+        """Old state.json with run_number but no model/system_prompt_report loads correctly."""
+        data = {
+            "task_id": "test",
+            "run_number": 3,  # old field — ignored
+            "step_count": 10,
+            "total_tokens": {"input_tokens": 100, "output_tokens": 50},
+            "compaction_count": 0,
+            "compaction_summaries": [],
+            "created_at": "2026-03-11T10:00:00Z",
+            "updated_at": "2026-03-11T10:15:00Z",
+        }
+        state = SessionState.from_dict(data)
+        assert state.task_id == "test"
+        assert state.step_count == 10
+        assert state.model == ""
+        assert state.system_prompt_report is None
+
+    def test_system_prompt_report_serialization(self):
+        report = {"source": "run", "system_prompt": {"chars": 5000}}
+        state = SessionState(task_id="test", system_prompt_report=report)
+        d = state.to_dict()
+        assert d["system_prompt_report"] == report
+
+        restored = SessionState.from_dict(d)
+        assert restored.system_prompt_report == report
+
+    def test_system_prompt_report_omitted_when_none(self):
+        state = SessionState(task_id="test")
+        d = state.to_dict()
+        assert "system_prompt_report" not in d
 
 
 # ---------------------------------------------------------------------------
@@ -149,19 +212,25 @@ class TestSessionManagerInit:
 
 
 class TestInitSession:
-    def test_first_session_creates_run_1(self, tmp_path):
+    def test_first_session_creates_state(self, tmp_path):
         sm = SessionManager("task1", base_dir=tmp_path)
         state = sm.init_session(model="claude-sonnet")
-        assert state.run_number == 1
         assert state.step_count == 0
         assert state.task_id == "task1"
+        assert state.model == "claude-sonnet"
         assert state.created_at != ""
 
-    def test_increments_run_number(self, tmp_path):
+    def test_run_number_in_transcript_headers(self, tmp_path):
+        """Run numbers are derived from transcript, not stored in state."""
         sm = SessionManager("task1", base_dir=tmp_path)
         sm.init_session()
-        state2 = sm.init_session()
-        assert state2.run_number == 2
+        sm.init_session()
+
+        entries = sm.load_history()
+        sessions = [e for e in entries if e.type == "session"]
+        assert len(sessions) == 2
+        assert sessions[0].data["run_number"] == 1
+        assert sessions[1].data["run_number"] == 2
 
     def test_preserves_cumulative_tokens(self, tmp_path):
         sm = SessionManager("task1", base_dir=tmp_path)
@@ -201,6 +270,21 @@ class TestInitSession:
         assert entries[0].data["model"] == "claude-sonnet"
         assert entries[0].data["run_number"] == 1
 
+    def test_model_persisted_in_state(self, tmp_path):
+        sm = SessionManager("task1", base_dir=tmp_path)
+        sm.init_session(model="claude-sonnet")
+
+        state = sm.load_state()
+        assert state.model == "claude-sonnet"
+
+    def test_model_updated_on_reinit(self, tmp_path):
+        sm = SessionManager("task1", base_dir=tmp_path)
+        sm.init_session(model="claude-sonnet")
+
+        sm2 = SessionManager("task1", base_dir=tmp_path)
+        state = sm2.init_session(model="claude-opus")
+        assert state.model == "claude-opus"
+
 
 # ---------------------------------------------------------------------------
 # SessionManager — save/load state
@@ -216,7 +300,6 @@ class TestSaveLoadState:
         sm2 = SessionManager("task1", base_dir=tmp_path)
         state = sm2.load_state()
         assert state is not None
-        assert state.run_number == 1
         assert state.total_tokens.input_tokens == 500
 
     def test_missing_returns_none(self, tmp_path):
@@ -476,3 +559,125 @@ class TestCompaction:
         compactions = [e for e in entries if e.type == "compaction"]
         assert len(compactions) == 1
         assert compactions[0].data["summary"] == "Compacted"
+
+
+# ---------------------------------------------------------------------------
+# SessionManager — system_prompt_report
+# ---------------------------------------------------------------------------
+
+
+class TestSystemPromptReport:
+    def test_set_and_persist(self, tmp_path):
+        sm = SessionManager("task1", base_dir=tmp_path)
+        sm.init_session()
+
+        report = {"source": "run", "system_prompt": {"chars": 5000}}
+        sm.set_system_prompt_report(report)
+
+        state = sm.load_state()
+        assert state.system_prompt_report == report
+
+    def test_survives_reinit(self, tmp_path):
+        sm = SessionManager("task1", base_dir=tmp_path)
+        sm.init_session()
+        sm.set_system_prompt_report({"source": "run", "chars": 100})
+
+        sm2 = SessionManager("task1", base_dir=tmp_path)
+        state = sm2.init_session()
+        # system_prompt_report is preserved across runs (loaded from state.json)
+        assert state.system_prompt_report == {"source": "run", "chars": 100}
+
+
+# ---------------------------------------------------------------------------
+# build_system_prompt_report
+# ---------------------------------------------------------------------------
+
+
+class TestBuildSystemPromptReport:
+    def test_basic_prompt(self):
+        report = build_system_prompt_report(system_prompt="Hello world")
+        assert report["source"] == "run"
+        assert report["system_prompt"]["chars"] == 11
+        assert report["system_prompt"]["project_context_chars"] == 0
+        assert report["system_prompt"]["non_project_context_chars"] == 11
+        assert report["injected_files"] == []
+        assert report["tools"]["entries"] == []
+        assert isinstance(report["generated_at"], float)
+
+    def test_project_context_split(self):
+        prompt = "System instructions here\n# Project Context\nProject details here"
+        report = build_system_prompt_report(system_prompt=prompt)
+        assert report["system_prompt"]["chars"] == len(prompt)
+        marker_pos = prompt.find("# Project Context")
+        assert report["system_prompt"]["non_project_context_chars"] == marker_pos
+        assert report["system_prompt"]["project_context_chars"] == len(prompt) - marker_pos
+
+    def test_custom_source(self):
+        report = build_system_prompt_report(system_prompt="x", source="test")
+        assert report["source"] == "test"
+
+    def test_context_files(self):
+        class FakeFile:
+            def __init__(self, name, content):
+                self.name = name
+                self.content = content
+
+        prompt = "Instructions\nContent of AGENTS.md\nMore stuff"
+        files = [FakeFile("AGENTS.md", "Content of AGENTS.md")]
+        report = build_system_prompt_report(system_prompt=prompt, context_files=files)
+
+        assert len(report["injected_files"]) == 1
+        f = report["injected_files"][0]
+        assert f["name"] == "AGENTS.md"
+        assert f["raw_chars"] == len("Content of AGENTS.md")
+        assert f["injected_chars"] == len("Content of AGENTS.md")
+        assert f["truncated"] is False
+
+    def test_tools_with_parameters(self):
+        class FakeTool:
+            name = "computer"
+            parameters = {
+                "type": "object",
+                "properties": {
+                    "action": {"type": "string"},
+                    "x": {"type": "integer"},
+                    "y": {"type": "integer"},
+                },
+            }
+
+        report = build_system_prompt_report(
+            system_prompt="test",
+            tools=[FakeTool()],
+            tool_summaries={"computer": "Control the computer"},
+        )
+        entries = report["tools"]["entries"]
+        assert len(entries) == 1
+        assert entries[0]["name"] == "computer"
+        assert entries[0]["summary_chars"] == len("Control the computer")
+        assert entries[0]["properties_count"] == 3
+        assert entries[0]["schema_chars"] > 0
+
+    def test_tools_without_parameters(self):
+        class SimpleTool:
+            name = "simple"
+
+        report = build_system_prompt_report(
+            system_prompt="test",
+            tools=[SimpleTool()],
+            tool_summaries={"simple": "A simple tool"},
+        )
+        entries = report["tools"]["entries"]
+        assert len(entries) == 1
+        assert entries[0]["name"] == "simple"
+        assert entries[0]["summary_chars"] == len("A simple tool")
+        assert "schema_chars" not in entries[0]
+
+    def test_tool_summaries_only(self):
+        report = build_system_prompt_report(
+            system_prompt="test",
+            tool_summaries={"memory_search": "Search memory store"},
+        )
+        entries = report["tools"]["entries"]
+        assert len(entries) == 1
+        assert entries[0]["name"] == "memory_search"
+        assert entries[0]["summary_chars"] == len("Search memory store")
