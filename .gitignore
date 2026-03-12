@@ -50,6 +50,11 @@ helloworld/
 
 # Runtime memory data
 memory_data/
+memory_data_legacy/
+openclaw_memory/
+
+# Runtime session data
+openclaw_sessions/
 
 # Claude Code local settings
 .claude/settings.local.json
