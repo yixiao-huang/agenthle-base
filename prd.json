@@ -373,6 +373,112 @@
       "priority": 8.1,
       "passes": false,
       "notes": "Closes four gaps vs OpenClaw: (1) Prior messages not replayed — currently each ComputerAgent.run() starts with only the instruction string; OpenClaw replays full transcript as API messages. Fix: load_history() → build_replay_messages() → pass as messages arg to agent.run(). CUA's ComputerAgent.run(messages) already accepts a message list that becomes old_items in the loop. (2) Compaction summary as instruction vs message — currently summaries are prepended to instruction string via _create_compacted_instruction(); OpenClaw injects them as real messages replacing pre-compaction entries. Fix: convert compaction entries to assistant messages in the replay. (3) Cross-run relies on memory system only — TASK_MEMORY.md bootstrap + memory_search/get are the only bridges; the model never sees prior turns as conversation. Fix: transcript replay gives the model actual prior context. (4) No history sanitization — OpenClaw has a pipeline (repair tool pairings, drop thinking blocks, strip stale usage, validate images, limit turns). Fix: implement sanitize_history() + limit_history_turns() applied before replay. Key files: agents/openclaw/session.py (add build_replay_messages, sanitize_history, limit_history_turns), openclaw_agent.py (wire replay into perform_task before agent.run())."
+    },
+    {
+      "id": "US-OC-013",
+      "title": "Budget-Aware Compaction Split",
+      "description": "As the agent harness, I want the compaction pipeline's half-split replaced with a budget-aware split that calculates available space for kept messages, so that kept message replay (US-OC-012) doesn't cause cascading compaction from context budget pressure.",
+      "context": {
+        "existingFiles": [
+          "submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/context.py (compact_messages — current half-split logic)"
+        ],
+        "depends": "US-OC-012 must be done first (budget pressure only manifests when kept messages are replayed)",
+        "reference": "openclaw/src/agents/compaction.ts (compaction-safeguard extension adjusts split point for budget); openclaw/src/agents/pi-embedded-runner/compact.ts (Pi SDK split logic)",
+        "planFile": "docs/plan/US-OC-006-compaction-pipeline.md (Known Gaps — Group A)"
+      },
+      "acceptanceCriteria": [
+        "Level 1: Lint passes (uv run ruff check .)",
+        "Level 1: Unit tests pass — split point calculated as available_for_kept = context_window - instructions_tokens - summary_estimate - margin; split adapts when instructions are large",
+        "Level 1: Unit tests pass — repairToolUseResultPairing() fixes orphaned tool_use/tool_result pairs at split boundary",
+        "Level 2: run_magic_tower.sh 100 with CONTEXT_WINDOW_OVERRIDE=50000 — no cascading compaction (compaction_count stays <= 2)"
+      ],
+      "priority": 12,
+      "passes": false,
+      "notes": "PRD Group A (from US-OC-006 design review). Three coupled changes: (1) Replace naive half-split with budget calculation. (2) Add repairToolUseResultPairing() for kept messages — chunk_messages_by_token_share can split between tool_use and its result, API rejects orphaned tool_results. (3) Wire with US-OC-012's kept message replay. OpenClaw does NOT split by half — Pi SDK decides the split point internally, and the compaction-safeguard extension adjusts if budget is exceeded."
+    },
+    {
+      "id": "US-OC-014",
+      "title": "Transcript Fidelity: Capture on_llm_start Messages",
+      "description": "As the agent harness, I want to capture the actual API payload (after CUA callbacks process messages) alongside the transcript, so that kept message replay has faithful API-facing messages instead of reconstructed approximations.",
+      "context": {
+        "existingFiles": [
+          "submodules/cua/libs/cua-bench/cua_bench/agents/openclaw_agent.py (transcript logging)",
+          "submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/context.py (ContextOverflowCallback.on_llm_start — already sees the full payload)"
+        ],
+        "depends": "US-OC-012 should be done first (replay needs faithful messages)",
+        "reference": "submodules/cua/libs/python/agent/agent/callbacks/base.py (on_llm_start signature)",
+        "planFile": "docs/plan/US-OC-006-compaction-pipeline.md (Known Gaps — Group B)"
+      },
+      "acceptanceCriteria": [
+        "Level 1: Lint passes (uv run ruff check .)",
+        "Level 1: Unit tests pass — on_llm_start callback captures messages and stores alongside transcript entries",
+        "Level 2: run_magic_tower.sh 50 — trajectory includes api_messages entries showing CUA-processed payloads (with ImageRetentionCallback modifications visible)"
+      ],
+      "priority": 13,
+      "passes": false,
+      "notes": "PRD Group B (from US-OC-006 design review). CUA's PromptInstructionsCallback and ImageRetentionCallback modify messages before API calls. Our transcript captures what CUA yields (output items), not what it sends (preprocessed messages). For replay fidelity, we need the actual API-facing messages. The ContextOverflowCallback already receives the full payload in on_llm_start — extend it to persist these messages."
+    },
+    {
+      "id": "US-OC-015",
+      "title": "Summarization Safety Timeout",
+      "description": "As the agent harness, I want an explicit timeout on litellm.acompletion calls in the compaction pipeline, so that a hung summarization call doesn't block the agent indefinitely.",
+      "context": {
+        "existingFiles": [
+          "submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/context.py (summarize_chunk — litellm.acompletion call)"
+        ],
+        "planFile": "docs/plan/US-OC-006-compaction-pipeline.md (Known Gaps — Group B)"
+      },
+      "acceptanceCriteria": [
+        "Level 1: Lint passes (uv run ruff check .)",
+        "Level 1: Unit tests pass — summarize_chunk passes timeout=60 to litellm.acompletion; timeout is configurable",
+        "Level 1: Unit test — timeout triggers fallback to static summary note"
+      ],
+      "priority": 13.1,
+      "passes": false,
+      "notes": "PRD Group B (from US-OC-006 design review). Minor gap: add explicit timeout=60 to litellm.acompletion() in summarize_chunk(). Currently relying on litellm defaults which may be very long or unset. If timeout triggers, should fall through to the existing three-tier fallback (static note)."
+    },
+    {
+      "id": "US-OC-016",
+      "title": "Multi-Stage Summarization for Scale",
+      "description": "As the agent harness, I want a multi-stage summarization strategy (split-summarize-merge) alongside iterative rolling summarization, so that 500+ step tasks don't overwhelm the summarization prompt with accumulated context.",
+      "context": {
+        "existingFiles": [
+          "submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/context.py (summarize_chunks_iterative — current approach)"
+        ],
+        "reference": "openclaw/src/agents/compaction.ts (summarizeInStages — the multi-stage pattern)",
+        "planFile": "docs/plan/US-OC-006-compaction-pipeline.md (Known Gaps — Group C)"
+      },
+      "acceptanceCriteria": [
+        "Level 1: Lint passes (uv run ruff check .)",
+        "Level 1: Unit tests pass — summarize_in_stages splits chunks into groups, summarizes each group, then merges group summaries",
+        "Level 1: Unit tests pass — strategy selection: iterative for <= 10 chunks, multi-stage for > 10 chunks",
+        "Level 2: Synthetic test with 500+ messages — multi-stage produces coherent summary without context overflow in summarization calls"
+      ],
+      "priority": 14,
+      "passes": false,
+      "notes": "PRD Group C (from US-OC-006 design review). For 500+ step tasks, iterative rolling summarization accumulates summary context across many chunks — the accumulated summary may compete for space in the summarization prompt. OpenClaw's summarizeInStages splits chunks into groups of ~5, summarizes each group independently, then merges the group summaries. Add this as an alternative strategy, auto-selected when chunk count exceeds a threshold."
+    },
+    {
+      "id": "US-OC-017",
+      "title": "Custom Loop Architecture Exploration",
+      "description": "As the project lead, I want an investigation of CUA's custom_loop parameter as an alternative to stop-compact-resume, so that I can decide whether mid-conversation compaction is feasible without breaking out of the agent loop.",
+      "context": {
+        "existingFiles": [
+          "submodules/cua/libs/python/agent/agent/agent.py (ComputerAgent — custom_loop parameter)",
+          "submodules/cua/libs/cua-bench/cua_bench/agents/openclaw_agent.py (current stop-compact-resume pattern)"
+        ],
+        "reference": "submodules/cua/libs/python/agent/agent/agent.py (custom_loop implementation)",
+        "planFile": "docs/plan/US-OC-006-compaction-pipeline.md (Known Gaps — Group D)"
+      },
+      "acceptanceCriteria": [
+        "Level 1: Document findings in docs/plan/US-OC-017-custom-loop-exploration.md",
+        "Level 1: Prototype custom_loop that manages a mutable message list and supports mid-loop compaction injection",
+        "Level 2: run_magic_tower.sh 50 with custom_loop — agent completes task without stop-compact-resume; compaction happens mid-conversation",
+        "Level 2: Compare trajectory quality: custom_loop vs stop-compact-resume on same task"
+      ],
+      "priority": 15,
+      "passes": false,
+      "notes": "PRD Group D (from US-OC-006 design review). CUA's on_llm_start callback output is discarded after each turn — the agent loop always re-concatenates from immutable old_items + new_items. This makes callback-based compaction impossible. A custom_loop could manage its own mutable message list, enabling OpenClaw-style mid-conversation compaction without the state discontinuity of stop-compact-resume. This is an exploration story — the outcome may be 'not feasible' if custom_loop has constraints we don't yet see."
     }
   ]
 }

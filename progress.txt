@@ -293,3 +293,51 @@
   - `role: "tool"` is the standard OpenAI Responses API role for tool results; never use custom roles like "toolResult"
   - `usage.total` saves downstream code (compaction token estimation) from having to recompute it — always include it
 ---
+
+## 2026-03-13 - US-OC-006: Compaction Pipeline
+- Implemented compaction pipeline in `agents/openclaw/context.py` (appended below ContextOverflowCallback):
+  - `CompactionResult` dataclass: summary, tokens_before, tokens_after, first_kept_message_index, chunks_processed
+  - `chunk_messages_by_token_share(messages, parts)` — splits by token budget, not count
+  - `chunk_messages_by_max_tokens(messages, max_tokens)` — respects per-chunk token limit with SAFETY_MARGIN
+  - `compute_adaptive_chunk_ratio(messages, context_window)` — reduces ratio for large avg message size (BASE=0.4, MIN=0.15)
+  - `serialize_messages_for_summary(messages)` — converts message dicts to readable text, strips base64 images
+  - `summarize_chunk()` — single chunk summarization via litellm.acompletion with retry (3 attempts, exponential backoff)
+  - `summarize_chunks_iterative()` — rolling summarization: each chunk gets the previous summary as context
+  - `summarize_with_fallback()` — three-tier: full → exclude oversized → static fallback
+  - `compact_messages()` — main entry point: split in half, summarize older half, return CompactionResult
+  - Identifier preservation prompt injected at every summarization call
+  - `ContextOverflowCallback.reset_after_compaction()` for clean state after compaction cycle
+- Implemented stop-compact-resume pattern in `openclaw_agent.py`:
+  - While-loop with max_compactions=3 limit around `async for result in agent.run(instruction)`
+  - When `overflow_cb.needs_compaction`: break loop → compact transcript → rebuild agent → resume
+  - `_compact_and_rebuild()` method: extract messages, run compact_messages(), persist compaction entry, rebuild ComputerAgent
+  - `_extract_messages_for_compaction()` — loads transcript entries, extracts role/content dicts
+  - `_create_compacted_instruction()` — prepends compaction summaries to task description
+  - Reactive compaction: on API overflow error, attempt one compaction + retry
+- VM test (CONTEXT_WINDOW_OVERRIDE=5000, 15 steps): compaction triggered at step 13 (86% fill), 88 messages → 3 chunks summarized, tokens reduced 9159→5821, agent continued coherently post-compaction
+- **Files changed:**
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/context.py` (CompactionResult + 9 functions)
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/__init__.py` (exports)
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw_agent.py` (stop-compact-resume loop)
+  - `tests/test_openclaw_compaction.py` (new, 47 tests)
+  - `docs/plan/US-OC-006-compaction-pipeline.md` (plan doc)
+- **Learnings for future iterations:**
+  - litellm is imported lazily inside async functions — must patch `litellm.acompletion` directly (not `module.litellm`) in tests
+  - CUA's ComputerAgent.run() is opaque — stop-compact-resume is the only viable compaction pattern; cannot inject mid-run
+  - Serializing messages for summarization: strip base64 entirely, truncate tool args to 200 chars — keeps the summarization prompt compact
+  - with `only_n_most_recent_images=3`, context grows slower — need CONTEXT_WINDOW_OVERRIDE≤5000 to trigger compaction in 15-step tests
+---
+
+## 2026-03-13 - US-OC-006 (Design Review)
+- Expanded plan doc with detailed rationale for 6 dropped OpenClaw features and 3 architectural differences
+- Added Known Gaps section with 4 groups (A–D) of future work, each linking to specific code locations
+- Added PRD stories US-OC-013 through US-OC-017 for all identified gaps (budget-aware split, transcript fidelity, safety timeout, multi-stage summarization, custom_loop exploration)
+- **Files changed:**
+  - `docs/plan/US-OC-006-compaction-pipeline.md` (design rationale + Known Gaps expanded)
+  - `prd.json` (US-OC-013–017 added)
+  - `.claude/skills/onboard/SKILL.md` (planning mode: stay for user feedback before writing plan)
+- **Learnings for future iterations:**
+  - Design review is best done before coding ends — gaps caught here (budget-aware split, pairing repair, replay fidelity) would have been bugs if discovered post-implementation
+  - Group related future items by coupling (Group A: budget+pairing+replay all need each other) — this shapes priority ordering in PRD
+  - CUA's on_llm_start callback output is discarded each turn — callback-based mid-run state injection is impossible; stop-compact-resume is architecturally necessary
+---

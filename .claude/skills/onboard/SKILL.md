@@ -103,11 +103,12 @@ See `docs/plan/US-OC-001-system-prompt-builder.md` for an example of a well-stru
 
 **Plan file location**: `docs/plan/<STORY-ID>-<slug>.md` (e.g., `docs/plan/US-OC-003-context-manager.md`). All plan files live in `docs/plan/`.
 
-**IMPORTANT — Save the plan before moving on**:
-1. Draft the plan inside planning mode.
-2. Exit planning mode.
-3. **Immediately** write the plan to `docs/plan/<STORY-ID>-<slug>.md` using the Write tool. Do NOT skip this step — the plan only exists in conversation context until written to disk.
-4. Use `/prd` to register the plan file path in the story's `context.planFile` field so future agents can find and reference it.
+**IMPORTANT — Stay in planning mode for discussion**:
+1. Enter planning mode and draft the plan.
+2. Present the plan to the user and **ask for feedback**. Stay in planning mode — do NOT exit yet.
+3. Iterate on the plan based on user feedback. Repeat until the user approves.
+4. Once approved, exit planning mode and **immediately** write the final plan to `docs/plan/<STORY-ID>-<slug>.md` using the Write tool. Do NOT skip this — the plan only exists in conversation context until written to disk.
+5. Use `/prd` to register the plan file path in the story's `context.planFile` field so future agents can find and reference it.
 
 ---
 
