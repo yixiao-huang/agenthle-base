@@ -4,7 +4,7 @@
 
 US-OC-004 implemented `SessionManager` + transcript.jsonl. Investigation of the actual
 runtime `openclaw_sessions/mota_24_easy/transcript.jsonl` against the golden reference
-(OpenClaw `transcript.ts` + `sessions.test.ts` + plan doc spec) reveals 5 concrete problems.
+(OpenClaw `transcript.ts` + `sessions.test.ts` + plan doc spec) reveals 6 concrete problems.
 US-OC-004b fixes them before US-OC-006 (Compaction Pipeline) consumes the transcript.
 
 ---
@@ -61,6 +61,16 @@ Fix: use `type: "function_call"` to match the CUA SDK / OpenAI Responses API.
 OpenClaw includes `api: "openai-responses"` on each assistant message for observability.
 We don't include this. Minor but useful for identifying which API generated each turn.
 
+### Problem 6 — Screenshot path missing from transcript
+
+`TrajectorySaverCallback` already saves `*_screenshot_after.png` into
+`trajectories/<trajectory_id>/turn_NNN/` for every computer action. We store the opaque
+string `"image:trajectory"` with no path, making entries non-self-contained and non-replayable.
+
+**Fix:** Resolve the actual path via `_find_latest_screenshot(trajectory_dir)` which globs
+`*_screenshot_after.png` and returns the most recently modified file (matching the action
+just completed). Falls back to `"image:trajectory"` if no screenshots exist yet.
+
 ---
 
 ## What the Golden Reference Looks Like
@@ -96,7 +106,7 @@ Our additions (`parentId`, `task_id`, `run_number`, `model`) are intentional CUA
     "role": "tool",
     "content": [
       {"type": "tool_result", "tool_use_id": "call_...", "content": "result text"},
-      {"type": "tool_result", "tool_use_id": "call_...", "content": "image:trajectory"}
+      {"type": "tool_result", "tool_use_id": "call_...", "content": "/abs/path/to/turn_001_screenshot_after.png"}
     ]
   }
 }
@@ -135,62 +145,25 @@ exactly one assistant entry and one user/tool entry.
 
 ### File 1 (MODIFY): `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw_agent.py`
 
-Replace the per-item logging loop with a turn-aware grouping approach.
+Two module-level pure functions extracted for testability, then called from `perform_task`.
 
-**Logic (replaces the `for item in result["output"]` loop for transcript logging):**
+**`_find_latest_screenshot(trajectory_dir)`** — globs `*_screenshot_after.png` recursively,
+returns the most recently modified file's absolute path, or `"image:trajectory"` as fallback.
+
+**`group_step_output(output_items, trajectory_dir=None)`** — replaces the per-item loop.
+Returns `(assistant_content, tool_results)`:
 
 ```python
-# Group step output into logical turns
-assistant_content = []   # text + function_call + computer_call blocks
-tool_results = []        # function_call_output + computer_call_output blocks
+assistant_content, tool_results = group_step_output(result["output"], trajectory_dir)
 
-for item in result["output"]:
-    item_type = item.get("type")
-    if item_type == "message":
-        for block in item.get("content", []):
-            if block.get("text"):
-                assistant_content.append({"type": "text", "text": block["text"]})
-    elif item_type == "function_call":
-        assistant_content.append({
-            "type": "function_call",
-            "id": item.get("call_id", ""),
-            "name": item.get("name", ""),
-            "arguments": item.get("arguments", ""),
-        })
-    elif item_type == "computer_call":
-        assistant_content.append({
-            "type": "computer_call",
-            "id": item.get("call_id", ""),
-            "action": item.get("action", {}),
-        })
-    elif item_type == "function_call_output":
-        tool_results.append({
-            "type": "tool_result",
-            "tool_use_id": item.get("call_id", ""),
-            "content": item.get("output", ""),
-        })
-    elif item_type == "computer_call_output":
-        output = item.get("output", {})
-        content_str = (
-            "image:trajectory"
-            if isinstance(output, dict) and output.get("type") == "input_image"
-            else str(output)[:500]
-        )
-        tool_results.append({
-            "type": "tool_result",
-            "tool_use_id": item.get("call_id", ""),
-            "content": content_str,
-        })
-
-# Log assistant turn (one entry per step, even if only tool calls, no text)
 if assistant_content:
+    has_tools = any(b["type"] in ("function_call", "computer_call") for b in assistant_content)
     usage = {
         "input": step_input,
         "output": step_output,
         "total": step_input + step_output,
         "cost": result["usage"].get("response_cost", 0),
     }
-    has_tools = any(b["type"] in ("function_call", "computer_call") for b in assistant_content)
     session_mgr.append_message(
         "assistant",
         assistant_content,
@@ -199,10 +172,12 @@ if assistant_content:
         api="openai-responses",
     )
 
-# Log tool results (one entry batching all results from this step)
 if tool_results:
     session_mgr.append_message("tool", tool_results)
 ```
+
+`computer_call_output` with `type=="input_image"` resolves to the actual `.png` path via
+`_find_latest_screenshot`, not the opaque `"image:trajectory"` string.
 
 ### File 2 (MODIFY): `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/session.py`
 
@@ -229,19 +204,24 @@ Add 2 tests:
 
 ### File 4 (NEW): `tests/test_openclaw_transcript_format.py`
 
-8 tests exercising the grouping logic directly (mock `result["output"]` structures, call the
-grouping logic, verify transcript entries):
+13 tests — imports `group_step_output` and `_find_latest_screenshot` directly from
+`openclaw_agent.py` (no VM needed; both are pure functions):
 
 | Test | Verifies |
 |------|---------|
 | `test_assistant_turn_grouping` | Text + tool call → 1 assistant entry with 2 content blocks |
+| `test_computer_call_grouped_with_text` | computer_call block grouped into assistant content |
 | `test_tool_result_grouping` | Two tool results → 1 `role:"tool"` entry with 2 `tool_result` blocks |
+| `test_computer_call_output_role_is_tool` | computer_call_output → appears in tool_results |
 | `test_usage_total` | `usage.total == usage.input + usage.output` |
-| `test_role_is_tool_not_tool_result` | No `"toolResult"` role appears |
+| `test_role_is_tool_not_tool_result` | No `"toolResult"` role appears in serialized entries |
 | `test_function_call_type` | Content block type is `"function_call"` not `"toolCall"` |
-| `test_computer_call_grouping` | Computer call block grouped with text in assistant entry |
-| `test_computer_result_tool_role` | computer_call_output → `role:"tool"` entry |
-| `test_no_consecutive_assistant_entries` | After grouping, no two adjacent entries both have `role:"assistant"` |
+| `test_no_consecutive_assistant_entries` | No two adjacent entries both have `role:"assistant"` |
+| `test_returns_path_to_newest_screenshot` | Returns most recently modified `.png` path |
+| `test_returns_fallback_when_dir_missing` | Returns `"image:trajectory"` for missing dir |
+| `test_returns_fallback_when_none` | Returns `"image:trajectory"` when trajectory_dir is None |
+| `test_returns_fallback_when_no_pngs` | Returns `"image:trajectory"` when dir has no PNGs |
+| `test_computer_call_output_uses_screenshot_path` | computer_call_output resolves to actual `.png` path |
 
 ---
 
@@ -249,11 +229,13 @@ grouping logic, verify transcript entries):
 
 - Level 1: `uv run ruff check .` — lint passes
 - Level 1: `uv run pytest tests/ -v` — all existing 58+ tests pass
-- Level 1: `tests/test_openclaw_transcript_format.py` — 8 new tests pass
+- Level 1: `tests/test_openclaw_transcript_format.py` — 13 new tests pass
 - Level 1: `tests/test_openclaw_session.py` — 2 new `api` field tests pass
 - Level 1: `role: "toolResult"` never appears in new transcripts
 - Level 1: `usage.total` present in every assistant message with usage
+- Level 1: `type:"toolCall"` never appears (replaced by `"function_call"`)
 - Level 2: `run_magic_tower.sh 50` — transcript shows ≤2 entries per step (no consecutive assistant entries)
+- Level 2: `computer_call_output` entries contain actual `.png` file paths (not `"image:trajectory"`)
 
 ---
 
@@ -261,7 +243,7 @@ grouping logic, verify transcript entries):
 
 | File | Change |
 |------|--------|
-| `submodules/cua/.../openclaw_agent.py` | Replace per-item loop with turn-aware grouping |
+| `submodules/cua/.../openclaw_agent.py` | Add `_find_latest_screenshot` + `group_step_output` helpers; replace per-item loop |
 | `submodules/cua/.../openclaw/session.py` | Add `api` param to `append_message` |
 | `tests/test_openclaw_session.py` | +2 tests for `api` field |
-| `tests/test_openclaw_transcript_format.py` | NEW — 8 format correctness tests |
+| `tests/test_openclaw_transcript_format.py` | NEW — 13 format correctness + screenshot helper tests |
