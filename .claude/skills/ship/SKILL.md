@@ -59,7 +59,7 @@ prompt: |
 
   Do NOT re-run VM tests. If checks fail, fix and re-review.
 
-  ### 3. Update progress.txt
+  ### 3. Update progress.txt (APPEND-ONLY)
 
   Append a progress entry for the story using this format:
   ```

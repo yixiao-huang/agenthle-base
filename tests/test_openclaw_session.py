@@ -422,6 +422,18 @@ class TestAppendMessage:
         assert msg["usage"]["input"] == 100
         assert msg["stopReason"] == "end_turn"
 
+    def test_append_message_with_api_field(self, tmp_path):
+        sm = SessionManager("task1", base_dir=tmp_path)
+        sm.init_session()
+        entry = sm.append_message("assistant", "hello", api="openai-responses")
+        assert entry.data["message"]["api"] == "openai-responses"
+
+    def test_append_message_no_api_field(self, tmp_path):
+        sm = SessionManager("task1", base_dir=tmp_path)
+        sm.init_session()
+        entry = sm.append_message("assistant", "hello")
+        assert "api" not in entry.data["message"]
+
 
 # ---------------------------------------------------------------------------
 # SessionManager — load_history

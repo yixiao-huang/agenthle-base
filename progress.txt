@@ -100,6 +100,29 @@
   - Project Context file headers use H3 (###) instead of H2 (##) to create proper subsection hierarchy
 ---
 
+## 2026-03-11 - US-OC-001/002 revision
+- Removed duplicate task description injection: `task.md` was being injected as a ContextFile AND passed via `agent.run()`, causing duplication in the agent's context window
+- Added memory citation guidance to Memory Recall section in `prompt.py`: "Citations: include Source: <path#line> when referencing memory snippets." (matches OpenClaw's buildMemorySection pattern)
+- Removed redundant TASK_MEMORY.md reference from AGENTS.md Session Startup (it's already injected as a ContextFile by the agent harness, no need to tell the agent it's "already in your system prompt")
+- Updated tests (`test_openclaw_agent_prompt.py`, `test_prompt_builder.py`) to reflect no task.md injection and verify memory tool presence in prompt
+- Updated `prd.json` acceptance criteria and notes for US-OC-001 and US-OC-002 to match final implementation
+- Updated `docs/plan/US-OC-001-system-prompt-builder.md` design rationale (Project Context and Key Differences sections)
+- Added `planFile` field to US-OC-001 and US-OC-003 in `prd.json`
+- Revised `/judge` SKILL.md and `/onboard` SKILL.md (minor clarifications)
+- **Files changed:**
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw_agent.py` (remove task.md ContextFile injection)
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/prompt.py` (add citation line to Memory Recall)
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/AGENTS.md` (remove TASK_MEMORY.md note from Session Startup)
+  - `tests/test_openclaw_agent_prompt.py` (updated assertions)
+  - `tests/test_prompt_builder.py` (remove task.md references)
+  - `prd.json` (updated criteria, notes, planFile fields)
+  - `docs/plan/US-OC-001-system-prompt-builder.md` (design rationale update)
+  - `.claude/skills/judge/SKILL.md`, `.claude/skills/onboard/SKILL.md` (minor revisions)
+- **Learnings for future iterations:**
+  - Avoid injecting the task description as both a ContextFile and via agent.run() — ComputerAgent sends it as a user message; double injection wastes context
+  - AGENTS.md should describe agent behavior rules, not echo what the harness already does programmatically — keep it free of implementation details
+---
+
 ## 2026-03-11 - US-OC-002: Memory Store
 - Implemented `MemoryStore` class + `SearchResult` dataclass in `agents/openclaw/memory.py`
   - Task workspace layout: `tasks/<task_id>/TASK_MEMORY.md` + `memory/session-NNN.md`
@@ -177,24 +200,6 @@
   - OpenClaw's systemPromptReport tracks char-level budget of every prompt component — useful for context window observability without needing to parse the prompt string
 ---
 
-## 2026-03-12 - US-OC-004a: Session State Schema Extension
-- Removed `run_number` from `SessionState` — run numbers are now derived by counting session header entries in the transcript (`_count_session_headers()`)
-- Added `cache_read`, `cache_write`, `context_tokens` fields to `TokenUsage` with matching `accumulate()` keyword args
-- Added `model` field to `SessionState` — set by `init_session(model=...)` and persisted to state.json
-- Added `system_prompt_report: dict | None` to `SessionState` — omitted from `to_dict()` when None; loaded via `set_system_prompt_report()`
-- Implemented `build_system_prompt_report()` — measures total/project/non-project chars, injected file sizes, tool schema chars and property counts
-- Exported `build_system_prompt_report` via `openclaw/__init__.py`
-- Updated all 42 existing tests + added 16 new tests (58 total); all pass
-- **Files changed:**
-  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/session.py`
-  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/__init__.py`
-  - `tests/test_openclaw_session.py`
-- **Learnings for future iterations:**
-  - Deriving run_number from transcript avoids state drift — count session headers before appending the new one
-  - `system_prompt_report` serialization: omit key entirely when None (not `"system_prompt_report": null`) to keep state.json clean and support backward compat
-  - Duck-typed tool schema extraction (`hasattr(tool, "parameters")`) avoids importing BaseTool, making `build_system_prompt_report` testable with plain Python objects
----
-
 ## 2026-03-12 - US-OC-004: Session Persistence
 - Implemented `SessionManager` + `SessionState` + `TokenUsage` + `TranscriptEntry` in `agents/openclaw/session.py`
   - Storage layout: `openclaw_sessions/<task_id>/state.json` + `transcript.jsonl`
@@ -220,25 +225,43 @@
   - Computer call outputs contain image data — store only a trajectory reference in JSONL to avoid bloating the transcript file
 ---
 
-## 2026-03-11 - US-OC-001/002 revision
-- Removed duplicate task description injection: `task.md` was being injected as a ContextFile AND passed via `agent.run()`, causing duplication in the agent's context window
-- Added memory citation guidance to Memory Recall section in `prompt.py`: "Citations: include Source: <path#line> when referencing memory snippets." (matches OpenClaw's buildMemorySection pattern)
-- Removed redundant TASK_MEMORY.md reference from AGENTS.md Session Startup (it's already injected as a ContextFile by the agent harness, no need to tell the agent it's "already in your system prompt")
-- Updated tests (`test_openclaw_agent_prompt.py`, `test_prompt_builder.py`) to reflect no task.md injection and verify memory tool presence in prompt
-- Updated `prd.json` acceptance criteria and notes for US-OC-001 and US-OC-002 to match final implementation
-- Updated `docs/plan/US-OC-001-system-prompt-builder.md` design rationale (Project Context and Key Differences sections)
-- Added `planFile` field to US-OC-001 and US-OC-003 in `prd.json`
-- Revised `/judge` SKILL.md and `/onboard` SKILL.md (minor clarifications)
+## 2026-03-12 - US-OC-004a: Session State Schema Extension
+- Removed `run_number` from `SessionState` — run numbers are now derived by counting session header entries in the transcript (`_count_session_headers()`)
+- Added `cache_read`, `cache_write`, `context_tokens` fields to `TokenUsage` with matching `accumulate()` keyword args
+- Added `model` field to `SessionState` — set by `init_session(model=...)` and persisted to state.json
+- Added `system_prompt_report: dict | None` to `SessionState` — omitted from `to_dict()` when None; loaded via `set_system_prompt_report()`
+- Implemented `build_system_prompt_report()` — measures total/project/non-project chars, injected file sizes, tool schema chars and property counts
+- Exported `build_system_prompt_report` via `openclaw/__init__.py`
+- Updated all 42 existing tests + added 16 new tests (58 total); all pass
 - **Files changed:**
-  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw_agent.py` (remove task.md ContextFile injection)
-  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/prompt.py` (add citation line to Memory Recall)
-  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/AGENTS.md` (remove TASK_MEMORY.md note from Session Startup)
-  - `tests/test_openclaw_agent_prompt.py` (updated assertions)
-  - `tests/test_prompt_builder.py` (remove task.md references)
-  - `prd.json` (updated criteria, notes, planFile fields)
-  - `docs/plan/US-OC-001-system-prompt-builder.md` (design rationale update)
-  - `.claude/skills/judge/SKILL.md`, `.claude/skills/onboard/SKILL.md` (minor revisions)
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/session.py`
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/__init__.py`
+  - `tests/test_openclaw_session.py`
 - **Learnings for future iterations:**
-  - Avoid injecting the task description as both a ContextFile and via agent.run() — ComputerAgent sends it as a user message; double injection wastes context
-  - AGENTS.md should describe agent behavior rules, not echo what the harness already does programmatically — keep it free of implementation details
+  - Deriving run_number from transcript avoids state drift — count session headers before appending the new one
+  - `system_prompt_report` serialization: omit key entirely when None (not `"system_prompt_report": null`) to keep state.json clean and support backward compat
+  - Duck-typed tool schema extraction (`hasattr(tool, "parameters")`) avoids importing BaseTool, making `build_system_prompt_report` testable with plain Python objects
+---
+
+## 2026-03-13 - US-OC-004b: Transcript JSONL Format Fixes
+- Fixed 5 transcript format problems found by comparing runtime transcript against golden reference (OpenClaw transcript.ts + sessions.test.ts)
+- **Fix 1 — Turn fragmentation**: Replaced per-item logging loop with `group_step_output()` helper that batches all output items into one assistant entry + one tool entry per step
+- **Fix 2 — Role correctness**: Changed `role: "toolResult"` → `role: "tool"` (standard OpenAI Responses API role)
+- **Fix 3 — usage.total**: Added `total = input + output` to every assistant usage dict
+- **Fix 4 — Content block type**: Changed `type: "toolCall"` → `type: "function_call"` (matches CUA SDK / OpenAI Responses API)
+- **Fix 5 — api field**: Added optional `api` parameter to `append_message()`; assistant messages now include `api: "openai-responses"`
+- Extracted `_find_latest_screenshot(trajectory_dir)` helper that resolves the newest `*_screenshot_after.png` from TrajectorySaverCallback output
+- `group_step_output()` exported as module-level function (testable without VM)
+- Added 2 tests to `test_openclaw_session.py` (api field presence/absence); added 13 new tests in `test_openclaw_transcript_format.py`; all 73 tests pass
+- **Files changed:**
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw_agent.py` (group_step_output + _find_latest_screenshot helpers; rewired logging loop)
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/session.py` (api param on append_message)
+  - `tests/test_openclaw_session.py` (+2 api field tests)
+  - `tests/test_openclaw_transcript_format.py` (NEW — 13 tests)
+  - `docs/plan/US-OC-004b-transcript-format-fixes.md` (plan doc)
+- **Learnings for future iterations:**
+  - CUA SDK yields multiple output items per step (text + function_call + computer_call) — always group into logical turns before logging or replaying
+  - Extract grouping logic as a testable module-level function (`group_step_output`) rather than inline in the agent loop — makes format correctness testable without a VM
+  - `role: "tool"` is the standard OpenAI Responses API role for tool results; never use custom roles like "toolResult"
+  - `usage.total` saves downstream code (compaction token estimation) from having to recompute it — always include it
 ---
