@@ -171,7 +171,7 @@
         "Level 2: run_magic_tower.sh 50 — callback logs token estimates per turn (visible in agent output), estimates are within 2x of actual usage reported by API"
       ],
       "priority": 5,
-      "passes": false,
+      "passes": true,
       "notes": "File: agents/openclaw/context.py. ContextOverflowCallback(AsyncCallbackHandler) — estimates tokens via chars/4 in on_llm_start, sets needs_compaction flag when threshold exceeded. Also truncates oversized tool results (>25% of context window). Does NOT perform compaction — only detects the need (US-OC-006 does the actual compaction). IMPORTANT: Before implementing, read ComputerAgent's run loop to verify on_llm_start receives the full message history, not just a delta — this assumption is critical for token estimation."
     },
     {

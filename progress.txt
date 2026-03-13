@@ -2,6 +2,7 @@
 - Source `.envrc` directly (`source "/path/.envrc"`) for reliable env var loading in Bash tool (NOT `direnv export bash`)
 - Use `uv sync --reinstall` if editable CUA packages fail to import (agent, cua_bench, etc.)
 - Solver exits with code 1 on MAX_STEPS_EXCEEDED — expected behavior, not an error
+- `CONTEXT_WINDOW_OVERRIDE=N` env var forces a small context window for testing overflow detection (e.g. `CONTEXT_WINDOW_OVERRIDE=8000 bash run_magic_tower.sh 15`)
 - BaseTool pattern: constructor takes domain object + optional cfg, calls `super().__init__(cfg)`; `@register_tool` sets `cls.name` and adds to `TOOL_REGISTRY`. `_verify_json_format_args` handles both dict and JSON string params.
 - CUA trajectory reasoning summaries: `turn_NNN/NNNN_agent_response.json → response.output[].summary[].text`
 - Turn count ≠ step count: each turn can contain multiple API calls (~2 steps/turn for openai/computer-use-preview)
@@ -241,6 +242,33 @@
   - Deriving run_number from transcript avoids state drift — count session headers before appending the new one
   - `system_prompt_report` serialization: omit key entirely when None (not `"system_prompt_report": null`) to keep state.json clean and support backward compat
   - Duck-typed tool schema extraction (`hasattr(tool, "parameters")`) avoids importing BaseTool, making `build_system_prompt_report` testable with plain Python objects
+---
+
+## 2026-03-13 - US-OC-005: Context Overflow Detection
+- Implemented `ContextOverflowCallback` in `agents/openclaw/context.py`
+  - `on_llm_start` estimates token usage (chars/4 heuristic with 1.2x safety margin + fixed 1200 tokens/image)
+  - Truncates oversized tool results (>25% of context window) with head+tail strategy (important tail detection)
+  - Sets `needs_compaction` flag at 80% of context window threshold; exposes `current_tokens`, `context_window`, `overflow_ratio`, `turn_count` properties
+  - `force_compaction()` for reactive overflow detection from API rejections
+- Implemented `is_context_overflow_error()` — classifies API error strings, excludes rate-limit false positives
+- Implemented `resolve_context_window()` — litellm model registry lookup with multi-candidate fallback
+- Wired `ContextOverflowCallback` into `openclaw_agent.py`:
+  - Initialized with `CONTEXT_WINDOW_OVERRIDE` env var support for testing
+  - Added proactive check (`overflow_cb.needs_compaction`) in step loop (US-OC-006 will do the actual compaction)
+  - Added reactive check (`is_context_overflow_error`) in the except block
+- Exported `ContextOverflowCallback` and `is_context_overflow_error` via `openclaw/__init__.py`
+- **Files changed:**
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/context.py` (new)
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/__init__.py` (exports)
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw_agent.py` (wiring)
+  - `tests/test_openclaw_context.py` (new, 58 tests — all pass)
+  - `docs/plan/US-OC-005-context-overflow.md` (plan doc)
+- **Learnings for future iterations:**
+  - Image token estimation: strip base64 data from char count, add 1200 tokens flat per image (Anthropic billing) — avoids multi-million-token hallucinations for screenshot-heavy runs
+  - Head+tail truncation with "important tail detection" (error keywords, JSON closure, result/summary) preserves diagnostically useful info when truncating tool outputs
+  - `CONTEXT_WINDOW_OVERRIDE` env var enables testing overflow at any step count without a large run — add it to Codebase Patterns
+  - litellm's `get_model_info()` accepts multiple name formats (with/without provider prefix) — try both before falling back to default
+  - `on_llm_start` receives full message history per turn (not a delta) — this is what makes cumulative token estimation work correctly
 ---
 
 ## 2026-03-13 - US-OC-004b: Transcript JSONL Format Fixes

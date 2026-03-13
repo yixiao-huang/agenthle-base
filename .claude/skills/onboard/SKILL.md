@@ -89,7 +89,7 @@ Write the chosen story ID to `.current-story` in the project root.
 - [What to work on, based on PRD priority]
 ```
 
-### 8. Enter planning mode
+### 8. Enter planning mode and save the plan
 
 After reporting, enter planning mode to draft the plan for the current story.
 
@@ -101,9 +101,13 @@ After reporting, enter planning mode to draft the plan for the current story.
 
 See `docs/plan/US-OC-001-system-prompt-builder.md` for an example of a well-structured design rationale.
 
-**Plan file location**: Save the plan as `docs/plan/<STORY-ID>-<slug>.md` (e.g., `docs/plan/US-OC-003-context-manager.md`). All plan files live in `docs/plan/`.
+**Plan file location**: `docs/plan/<STORY-ID>-<slug>.md` (e.g., `docs/plan/US-OC-003-context-manager.md`). All plan files live in `docs/plan/`.
 
-**After planning**: Use `/prd` to register the plan file path in the story's `context.planFile` field so future agents can find and reference it.
+**IMPORTANT — Save the plan before moving on**:
+1. Draft the plan inside planning mode.
+2. Exit planning mode.
+3. **Immediately** write the plan to `docs/plan/<STORY-ID>-<slug>.md` using the Write tool. Do NOT skip this step — the plan only exists in conversation context until written to disk.
+4. Use `/prd` to register the plan file path in the story's `context.planFile` field so future agents can find and reference it.
 
 ---
 
