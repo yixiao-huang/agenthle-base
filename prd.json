@@ -1,3 +1,4 @@
+
 {
   "project": "OpenClaw Agent Reproduction for CUA",
   "branchName": "openclaw-harness",
@@ -205,7 +206,8 @@
         ],
         "depends": "US-OC-005 must be done first (needs overflow detection to trigger compaction); US-OC-004 for persisting compaction summaries",
         "designDoc": "openclaw/docs/concepts/compaction.md (what compaction is, auto-compaction, compaction vs pruning)",
-        "reference": "openclaw/src/agents/compaction.ts (summarization logic — start here); openclaw/src/agents/pi-embedded-runner/compact.ts (orchestration flow); explore pi-embedded-runner/ for related files like run.overflow-compaction tests"
+        "reference": "openclaw/src/agents/compaction.ts (summarization logic — start here); openclaw/src/agents/pi-embedded-runner/compact.ts (orchestration flow); explore pi-embedded-runner/ for related files like run.overflow-compaction tests",
+        "planFile": "docs/plan/US-OC-006-compaction-pipeline.md"
       },
       "acceptanceCriteria": [
         "Level 1: Lint passes (uv run ruff check .)",
@@ -215,8 +217,8 @@
         "Level 2: run_magic_tower.sh 100 — if compaction triggers, trajectory logs show the compaction summary injected into subsequent turns and agent continues coherently (does not repeat actions from before compaction)"
       ],
       "priority": 6,
-      "passes": false,
-      "notes": "File: agents/openclaw/context.py (append below ContextOverflowCallback from US-OC-005). Compaction flow: split messages into chunks → summarize each with LLM → merge summaries → return CompactionResult. Use litellm.acompletion for summarization. Identifier preservation: instruct the summarization prompt to preserve UUIDs, file paths, URLs exactly. Read openclaw/src/agents/compaction.ts for the adaptive chunk ratio and multi-stage approach."
+      "passes": true,
+      "notes": "File: agents/openclaw/context.py (CompactionResult + 9 functions). Stop-compact-resume pattern in openclaw_agent.py: break out of agent.run() loop → compact transcript → rebuild agent → resume. Uses litellm.acompletion for summarization with identifier preservation. Adaptive chunk ratio (BASE=0.4, MIN=0.15), three-tier fallback, iterative rolling summarization. VM tested: CONTEXT_WINDOW_OVERRIDE=5000, compaction triggered at 86% fill, 3 chunks summarized, agent continued coherently. Plan: docs/plan/US-OC-006-compaction-pipeline.md"
     },
     {
       "id": "US-OC-007",
@@ -344,6 +346,33 @@
       "priority": 11,
       "passes": false,
       "notes": "Add aborted_last_run (bool, default false) and abort_cutoff_entry_id (str | None) to SessionState. When a run is interrupted (signal handler, exception, max_steps), mark_aborted() records the last entry ID. On next init_session(), if aborted_last_run is set, load_history() uses abort_cutoff_entry_id to skip already-processed entries. OpenClaw uses abortCutoffMessageSid + abortCutoffTimestamp for the same purpose. This is a resilience feature — not critical for the core pipeline but important for long-running tasks that may be interrupted."
+    },
+    {
+      "id": "US-OC-012",
+      "title": "Transcript Replay for Cross-Run Continuity",
+      "description": "As the agent harness, I want prior session transcript entries replayed as real API messages when starting a new run, with history sanitization and configurable turn limiting, so that the agent sees actual conversation history across runs instead of relying solely on the memory system for cross-run continuity.",
+      "context": {
+        "existingFiles": [
+          "submodules/cua/libs/cua-bench/cua_bench/agents/openclaw_agent.py (perform_task — currently starts fresh each run)",
+          "submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/session.py (SessionManager.load_history — exists but unused at startup)",
+          "submodules/cua/libs/python/agent/agent/agent.py (ComputerAgent.run(messages) — already accepts a messages list as old_items)"
+        ],
+        "depends": "US-OC-008 must be done first (needs full pipeline running to modify startup behavior)",
+        "designDoc": "openclaw/docs/concepts/session.md (session lifecycle, resume semantics)",
+        "reference": "openclaw/src/agents/pi-embedded-runner/ (start from run/attempt.ts for SessionManager.open → createAgentSession → sanitizeSessionHistory → limitHistoryTurns → replaceMessages flow; explore google.ts for sanitization pipeline, history.ts for turn limiting)"
+      },
+      "acceptanceCriteria": [
+        "Level 1: Lint passes (uv run ruff check .)",
+        "Level 1: Unit tests pass — build_replay_messages() converts TranscriptEntry list to API message dicts; sanitize_history() repairs orphaned tool results, strips base64 images, drops stale usage; limit_history_turns(messages, N) keeps last N user turns with associated assistant/tool responses",
+        "Level 1: Unit tests pass — compaction entries in transcript are converted to a single assistant message containing the summary text, replacing all messages before firstKeptEntryId",
+        "Level 1: Unit tests pass — configurable max_history_turns (default: all) limits how many prior turns are replayed",
+        "Level 2: run_magic_tower.sh 50 (run 1), then run_magic_tower.sh 50 (run 2) — run 2's first API call includes prior messages from run 1 (verify via trajectory turn_000/0000_api_start.json messages array length > 1)",
+        "Level 2: After run 2, agent reasoning in early turns references observations from run 1 (check agent_response.json summaries)",
+        "Level 3: Two sequential 50-step runs on mota_24_easy — session 2 agent has access to session 1's full conversation context, not just memory tool results"
+      ],
+      "priority": 8.1,
+      "passes": false,
+      "notes": "Closes four gaps vs OpenClaw: (1) Prior messages not replayed — currently each ComputerAgent.run() starts with only the instruction string; OpenClaw replays full transcript as API messages. Fix: load_history() → build_replay_messages() → pass as messages arg to agent.run(). CUA's ComputerAgent.run(messages) already accepts a message list that becomes old_items in the loop. (2) Compaction summary as instruction vs message — currently summaries are prepended to instruction string via _create_compacted_instruction(); OpenClaw injects them as real messages replacing pre-compaction entries. Fix: convert compaction entries to assistant messages in the replay. (3) Cross-run relies on memory system only — TASK_MEMORY.md bootstrap + memory_search/get are the only bridges; the model never sees prior turns as conversation. Fix: transcript replay gives the model actual prior context. (4) No history sanitization — OpenClaw has a pipeline (repair tool pairings, drop thinking blocks, strip stale usage, validate images, limit turns). Fix: implement sanitize_history() + limit_history_turns() applied before replay. Key files: agents/openclaw/session.py (add build_replay_messages, sanitize_history, limit_history_turns), openclaw_agent.py (wire replay into perform_task before agent.run())."
     }
   ]
 }
