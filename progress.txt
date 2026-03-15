@@ -341,3 +341,26 @@
   - Group related future items by coupling (Group A: budget+pairing+replay all need each other) — this shapes priority ordering in PRD
   - CUA's on_llm_start callback output is discarded each turn — callback-based mid-run state injection is impossible; stop-compact-resume is architecturally necessary
 ---
+
+## 2026-03-15 - US-OC-007: Tool Registry and Logging Hooks
+- Extracted inline tool assembly from `openclaw_agent.py` into `build_tools(session, memory_store)` in `agents/openclaw/tools.py`
+- Extracted `get_tool_summaries(tools)` to filter BaseTool instances and return `{name: description}` dict
+- Implemented `ToolLoggingCallback(AsyncCallbackHandler)` with four hooks:
+  - `on_function_call_start`: logs tool name + truncated args (200 char limit), records start time
+  - `on_function_call_end`: logs tool name + truncated result (100 char limit) + duration in ms
+  - `on_computer_call_start`: logs action type, records start time
+  - `on_computer_call_end`: logs action type + "done" + duration
+- Wired `ToolLoggingCallback` into `openclaw_agent.py` callbacks list and threaded through `_compact_and_rebuild()` so logging persists across compaction cycles
+- Updated `openclaw/__init__.py` to export all three new symbols
+- **Files changed:**
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/tools.py` (new)
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/__init__.py` (exports)
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw_agent.py` (wiring + callbacks threading)
+  - `tests/test_openclaw_tools.py` (new, 19 tests — all pass)
+  - `docs/plan/US-OC-007-tool-registry-logging.md` (plan doc)
+- **Learnings for future iterations:**
+  - CUA `AsyncCallbackHandler` hooks receive the full item dict — `call_id` is the correct key for timing correlation, not `id`
+  - `ToolLoggingCallback` must be re-passed to `_compact_and_rebuild()` so it survives agent reconstruction during compaction; the `callbacks` parameter defaults to `[overflow_cb]` for backward compat
+  - `_extract_result_summary` private helper is worth testing independently — it handles the variety of result list shapes that CUA tools return
+  - Tool logging adds no latency — only print() calls, no I/O or blocking operations
+---
