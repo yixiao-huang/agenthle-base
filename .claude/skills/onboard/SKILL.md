@@ -107,8 +107,17 @@ See `docs/plan/US-OC-001-system-prompt-builder.md` for an example of a well-stru
 1. Enter planning mode and draft the plan.
 2. Present the plan to the user and **ask for feedback**. Stay in planning mode — do NOT exit yet.
 3. Iterate on the plan based on user feedback. Repeat until the user approves.
-4. Once approved, exit planning mode and **immediately** write the final plan to `docs/plan/<STORY-ID>-<slug>.md` using the Write tool. Do NOT skip this — the plan only exists in conversation context until written to disk.
-5. Use `/prd` to register the plan file path in the story's `context.planFile` field so future agents can find and reference it.
+4. Once approved, exit planning mode and proceed to **step 9** to save the plan.
+
+### 9. Save the plan to disk
+
+Once the user approves the plan, you **MUST** persist it before doing anything else:
+
+1. **Write the plan file** to `docs/plan/<STORY-ID>-<slug>.md` using the Write tool. The plan only lives in conversation context until this step — if you skip it, the plan is lost.
+2. **Update the PRD** by running `/prd` to set the story's `context.planFile` to the path you just wrote.
+3. **Verify** the file exists by reading it back. If it's missing or incomplete, rewrite it immediately.
+
+> **Why a separate step?** Plans drafted in planning mode exist only in ephemeral conversation context. Multiple past sessions lost plans because the model exited planning mode and moved on to implementation without writing the file. This step exists to prevent that failure mode.
 
 ---
 

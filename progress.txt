@@ -387,3 +387,24 @@
   - Single litellm turn with `max_tokens=1024, temperature=0.3` is sufficient — the model either writes memories or replies silent; no long generation needed
   - `_run_memory_flush()` uses session-level `self.model` (same model as the main agent) so flush behavior matches the agent's capabilities
 ---
+
+## 2026-03-15 - US-OC-008: Agent Loop Integration (Cross-Run Continuity)
+- Wired cross-run continuity in `openclaw_agent.py`: `get_compaction_summaries()` loaded from prior session, injected via `_create_compacted_instruction()` so agent starts each run with prior session summaries
+- Wired `build_system_prompt_report()` into agent init: called after prompt build, stored via `session_mgr.set_system_prompt_report()` for observability
+- Fixed step count accumulation: `step_offset = session_mgr.get_step_count()` before loop, steps tracked as `step_offset + step` — cumulative across runs instead of reset per run
+- Removed `self._state.step_count = 0` from `init_session()` in `session.py` — step_count now preserved across runs (matches schema intent: cumulative progress tracker)
+- Added `get_step_count()` method to `SessionManager` for reading current step count before the run starts
+- Updated `test_preserves_step_count` (renamed from `test_resets_step_count`) to assert step count survives session re-init
+- Improved `/onboard` SKILL.md: extracted plan-saving as explicit "Step 9" with verification loop — prevents plan loss when exiting planning mode
+- **Files changed:**
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw_agent.py` (cross-run summaries, system prompt report, step_offset)
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/session.py` (remove step reset from init_session, add get_step_count)
+  - `tests/test_openclaw_session.py` (test_preserves_step_count, 79 tests all pass)
+  - `.claude/skills/onboard/SKILL.md` (plan-save as explicit step 9)
+  - `docs/plan/US-OC-008-agent-loop-integration.md` (plan doc)
+- **Learnings for future iterations:**
+  - Step count must be read BEFORE calling init_session() — init_session() now preserves it, but if called before get_step_count(), you'd still get the right value since it no longer resets
+  - Cross-run summaries pattern: `get_compaction_summaries()` → check not empty → call `_create_compacted_instruction()` — this is the standard way to inject prior context at run start
+  - System prompt report should be stored immediately after building instructions, before the agent loop starts — it captures the initial state, not per-step state
+  - Plan documents written in planning mode exist only in ephemeral conversation context — always write to disk before exiting planning mode or implementing
+---

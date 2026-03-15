@@ -279,14 +279,14 @@ class TestInitSession:
         state = sm2.init_session()
         assert state.compaction_summaries == ["Floor 2 cleared"]
 
-    def test_resets_step_count(self, tmp_path):
+    def test_preserves_step_count(self, tmp_path):
         sm = SessionManager("task1", base_dir=tmp_path)
         sm.init_session()
         sm.update_step_count(25)
 
         sm2 = SessionManager("task1", base_dir=tmp_path)
         state = sm2.init_session()
-        assert state.step_count == 0
+        assert state.step_count == 25
 
     def test_appends_session_header_to_transcript(self, tmp_path):
         sm = SessionManager("task1", base_dir=tmp_path)

@@ -270,7 +270,7 @@
         "Level 3: Two sequential runs on mota_24_easy \u2014 session 2 loads session 1's transcript, state.json shows run_number=2, agent in session 2 has access to session 1's observations via memory"
       ],
       "priority": 8,
-      "passes": false,
+      "passes": true,
       "notes": "Modify: agents/openclaw_agent.py. Wire all B1-B5 components into perform_task(): init memory + session, load previous transcript, build prompt, assemble tools, create callbacks, run ComputerAgent, handle compaction triggers, save transcript + state after run. Pre-compaction memory flush: wire the flush trigger using memory_flush_at/memory_flush_compaction_count from US-OC-005a (schema only \u2014 the fields are added there, the wiring happens here). NOTE: memory flush state fields (memory_flush_at, memory_flush_compaction_count) live in SessionState via US-OC-005a \u2014 do NOT add them here. CATEGORY C VERIFICATION: This story wires in CUA SDK callbacks (ImageRetentionCallback, TrajectorySaverCallback, PromptInstructionsCallback). Read each callback's source before using it \u2014 verify ordering doesn't conflict with our custom callbacks. Do a short 10-step smoke run before the full 50-step VM test. If a CUA callback misbehaves, implement a replacement in agents/openclaw/ rather than patching the SDK."
     },
     {
