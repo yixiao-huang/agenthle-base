@@ -194,7 +194,7 @@
         "Level 1: SessionManager exposes record_memory_flush() that sets memory_flush_at=now and memory_flush_compaction_count=current compaction_count"
       ],
       "priority": 5.1,
-      "passes": false,
+      "passes": true,
       "notes": "TODO placeholder for discussion. Add memory_flush_at (ISO timestamp) and memory_flush_compaction_count (int) to SessionState. These track when the last memory flush happened relative to the compaction count, preventing redundant flushes. OpenClaw uses this to decide: 'only flush if compaction happened since last flush'. Wiring into the agent loop (actually triggering flushes before compaction) is part of US-OC-008."
     },
     {

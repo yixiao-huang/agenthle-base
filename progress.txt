@@ -364,3 +364,26 @@
   - `_extract_result_summary` private helper is worth testing independently — it handles the variety of result list shapes that CUA tools return
   - Tool logging adds no latency — only print() calls, no I/O or blocking operations
 ---
+
+## 2026-03-15 - US-OC-008: Agent Loop Integration (Memory Flush Wiring)
+- Added `memory_flush_at` and `memory_flush_compaction_count` fields to `SessionState` (US-OC-005a schema)
+- Added `record_memory_flush()` to `SessionManager` — sets flush timestamp and compaction count, saves state
+- Implemented `should_run_memory_flush()` — triggers when tokens exceed `(context_window - soft_threshold)` and no flush has occurred in current compaction cycle
+- Implemented `has_already_flushed_for_current_compaction()` — compares flush compaction count to current count
+- Added constants: `SILENT_REPLY_TOKEN`, `MEMORY_FLUSH_PROMPT`, `MEMORY_FLUSH_SYSTEM_PROMPT`, `DEFAULT_MEMORY_FLUSH_SOFT_THRESHOLD_TOKENS=4000`
+- Implemented `_run_memory_flush()` async method in `OpenClawAgent` — single litellm turn with `memory_write` tool schema; handles tool calls (session/task_memory writes), silent token reply, and plain text reply; non-fatal error handling prevents retry loops
+- Wired memory flush trigger in the compaction loop: checks `should_run_memory_flush()` after overflow detection, before `_compact_and_rebuild()`
+- Exported all new symbols via `openclaw/__init__.py`
+- Added 24 unit tests in `test_openclaw_session.py` covering all new functions and constants (79 total, all pass)
+- **Files changed:**
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/session.py` (SessionState fields, record_memory_flush, flush functions + constants)
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/__init__.py` (exports)
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw_agent.py` (_run_memory_flush method + wiring in compaction loop)
+  - `tests/test_openclaw_session.py` (+24 tests)
+- **Learnings for future iterations:**
+  - Memory flush is wired BEFORE compaction, not after — the agent persists memories to disk while they're still in context, then compaction reduces the context window
+  - `record_memory_flush()` must be called even on failure to prevent retry loops within the same compaction cycle
+  - Soft threshold (4000 tokens) leaves a safety buffer below the hard compaction threshold (20% of context window) so flush runs reliably before compaction
+  - Single litellm turn with `max_tokens=1024, temperature=0.3` is sufficient — the model either writes memories or replies silent; no long generation needed
+  - `_run_memory_flush()` uses session-level `self.model` (same model as the main agent) so flush behavior matches the agent's capabilities
+---

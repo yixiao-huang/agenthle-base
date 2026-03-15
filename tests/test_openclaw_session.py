@@ -5,11 +5,17 @@ from pathlib import Path
 
 from cua_bench.agents.openclaw.session import (
     DEFAULT_BASE_DIR,
+    DEFAULT_MEMORY_FLUSH_SOFT_THRESHOLD_TOKENS,
+    MEMORY_FLUSH_PROMPT,
+    MEMORY_FLUSH_SYSTEM_PROMPT,
+    SILENT_REPLY_TOKEN,
     SessionManager,
     SessionState,
     TokenUsage,
     TranscriptEntry,
     build_system_prompt_report,
+    has_already_flushed_for_current_compaction,
+    should_run_memory_flush,
 )
 
 
@@ -136,6 +142,28 @@ class TestSessionState:
         state = SessionState(task_id="test")
         d = state.to_dict()
         assert "system_prompt_report" not in d
+
+    def test_memory_flush_fields_default_none(self):
+        state = SessionState(task_id="test")
+        assert state.memory_flush_at is None
+        assert state.memory_flush_compaction_count is None
+
+    def test_memory_flush_round_trip(self):
+        state = SessionState(
+            task_id="test",
+            memory_flush_at="2026-03-15T10:00:00+00:00",
+            memory_flush_compaction_count=2,
+        )
+        d = state.to_dict()
+        restored = SessionState.from_dict(d)
+        assert restored.memory_flush_at == "2026-03-15T10:00:00+00:00"
+        assert restored.memory_flush_compaction_count == 2
+
+    def test_memory_flush_omitted_when_none(self):
+        state = SessionState(task_id="test")
+        d = state.to_dict()
+        assert "memory_flush_at" not in d
+        assert "memory_flush_compaction_count" not in d
 
 
 # ---------------------------------------------------------------------------
@@ -598,6 +626,140 @@ class TestSystemPromptReport:
         state = sm2.init_session()
         # system_prompt_report is preserved across runs (loaded from state.json)
         assert state.system_prompt_report == {"source": "run", "chars": 100}
+
+
+# ---------------------------------------------------------------------------
+# SessionManager — record_memory_flush
+# ---------------------------------------------------------------------------
+
+
+class TestRecordMemoryFlush:
+    def test_record_memory_flush(self, tmp_path):
+        sm = SessionManager("task1", base_dir=tmp_path)
+        sm.init_session()
+        sm.record_memory_flush()
+
+        state = sm.load_state()
+        assert state.memory_flush_at is not None
+        assert state.memory_flush_compaction_count == 0  # no compactions yet
+
+    def test_record_memory_flush_tracks_compaction_count(self, tmp_path):
+        sm = SessionManager("task1", base_dir=tmp_path)
+        sm.init_session()
+        sm.add_compaction_summary("S1")
+        sm.add_compaction_summary("S2")
+        sm.record_memory_flush()
+
+        state = sm.load_state()
+        assert state.memory_flush_compaction_count == 2
+
+
+# ---------------------------------------------------------------------------
+# has_already_flushed_for_current_compaction
+# ---------------------------------------------------------------------------
+
+
+class TestHasAlreadyFlushedForCurrentCompaction:
+    def test_false_when_none(self):
+        state = SessionState(task_id="test", compaction_count=3)
+        assert has_already_flushed_for_current_compaction(state) is False
+
+    def test_true_when_counts_match(self):
+        state = SessionState(
+            task_id="test",
+            compaction_count=2,
+            memory_flush_compaction_count=2,
+        )
+        assert has_already_flushed_for_current_compaction(state) is True
+
+    def test_false_when_counts_differ(self):
+        state = SessionState(
+            task_id="test",
+            compaction_count=3,
+            memory_flush_compaction_count=2,
+        )
+        assert has_already_flushed_for_current_compaction(state) is False
+
+
+# ---------------------------------------------------------------------------
+# should_run_memory_flush
+# ---------------------------------------------------------------------------
+
+
+class TestShouldRunMemoryFlush:
+    def test_triggers_when_above_threshold(self):
+        state = SessionState(task_id="test", compaction_count=0)
+        # context_window=100000, soft_threshold=4000 → threshold=96000
+        assert should_run_memory_flush(
+            state, current_tokens=97000, context_window=100000
+        ) is True
+
+    def test_false_when_below_threshold(self):
+        state = SessionState(task_id="test", compaction_count=0)
+        assert should_run_memory_flush(
+            state, current_tokens=50000, context_window=100000
+        ) is False
+
+    def test_false_when_already_flushed(self):
+        state = SessionState(
+            task_id="test",
+            compaction_count=1,
+            memory_flush_compaction_count=1,
+        )
+        assert should_run_memory_flush(
+            state, current_tokens=97000, context_window=100000
+        ) is False
+
+    def test_true_after_new_compaction(self):
+        """After a new compaction, flush should be allowed again."""
+        state = SessionState(
+            task_id="test",
+            compaction_count=2,
+            memory_flush_compaction_count=1,  # flushed in cycle 1, now in cycle 2
+        )
+        assert should_run_memory_flush(
+            state, current_tokens=97000, context_window=100000
+        ) is True
+
+    def test_false_when_zero_tokens(self):
+        state = SessionState(task_id="test")
+        assert should_run_memory_flush(
+            state, current_tokens=0, context_window=100000
+        ) is False
+
+    def test_custom_soft_threshold(self):
+        state = SessionState(task_id="test")
+        # context_window=100000, soft_threshold=20000 → threshold=80000
+        assert should_run_memory_flush(
+            state, current_tokens=85000, context_window=100000,
+            soft_threshold_tokens=20000,
+        ) is True
+        assert should_run_memory_flush(
+            state, current_tokens=75000, context_window=100000,
+            soft_threshold_tokens=20000,
+        ) is False
+
+    def test_default_soft_threshold_value(self):
+        assert DEFAULT_MEMORY_FLUSH_SOFT_THRESHOLD_TOKENS == 4000
+
+
+# ---------------------------------------------------------------------------
+# Memory flush constants
+# ---------------------------------------------------------------------------
+
+
+class TestMemoryFlushConstants:
+    def test_silent_reply_token(self):
+        assert SILENT_REPLY_TOKEN == "[!silent]"
+
+    def test_flush_prompt_mentions_silent_token(self):
+        assert SILENT_REPLY_TOKEN in MEMORY_FLUSH_PROMPT
+
+    def test_flush_system_prompt_mentions_silent_token(self):
+        assert SILENT_REPLY_TOKEN in MEMORY_FLUSH_SYSTEM_PROMPT
+
+    def test_flush_prompt_mentions_memory_write(self):
+        assert "memory_write" in MEMORY_FLUSH_PROMPT
 
 
 # ---------------------------------------------------------------------------
