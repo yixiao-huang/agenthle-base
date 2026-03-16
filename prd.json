@@ -662,8 +662,8 @@
         "Level 2: With default context window (200K), flush fires when tokens approach threshold without requiring compaction to trigger first"
       ],
       "priority": 5.2,
-      "passes": false,
-      "notes": "BUG: Currently flush is wired inside the compaction trigger (after needs_compaction=True). OpenClaw runs flush BEFORE each agent turn (agent-runner.ts:221). With our current wiring, compaction fires at 80% of context_window but flush requires (context_window - 4K) tokens — so compaction always fires first and flush never runs. Fix: move the should_run_memory_flush() check + _run_memory_flush() call to the top of the while loop, before agent.run(). On the first iteration current_tokens is 0 (skip flush). On subsequent iterations, use overflow_cb.current_tokens from the previous run. This matches OpenClaw's pattern where flush is evaluated pre-emptively on every turn, not reactively at compaction time."
+      "passes": true,
+      "notes": "BUG: Currently flush is wired inside the compaction trigger (after needs_compaction=True). OpenClaw runs flush BEFORE each agent turn (agent-runner.ts:221). With our current wiring, compaction fires at 80% of context_window but flush requires (context_window - 4K) tokens — so compaction always fires first and flush never runs. Fix: move the should_run_memory_flush() check + _run_memory_flush() call to the top of the while loop, before agent.run(). On the first iteration current_tokens is 0 (skip flush). On subsequent iterations, use overflow_cb.current_tokens from the previous run. This matches OpenClaw's pattern where flush is evaluated pre-emptively on every turn, not reactively at compaction time. DONE: Flush moved to per-step loop (CUA cannot do pre-turn because agent.run() is opaque; per-step is the equivalent). Added DEFAULT_MEMORY_FLUSH_RESERVE_TOKENS_FLOOR=20K to match OpenClaw. Added conversation context injection into flush model call. Added flush guard reset in init_session for cross-run correctness."
     }
   ]
 }

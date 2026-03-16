@@ -5,6 +5,7 @@ from pathlib import Path
 
 from cua_bench.agents.openclaw.session import (
     DEFAULT_BASE_DIR,
+    DEFAULT_MEMORY_FLUSH_RESERVE_TOKENS_FLOOR,
     DEFAULT_MEMORY_FLUSH_SOFT_THRESHOLD_TOKENS,
     MEMORY_FLUSH_PROMPT,
     MEMORY_FLUSH_SYSTEM_PROMPT,
@@ -689,7 +690,7 @@ class TestHasAlreadyFlushedForCurrentCompaction:
 class TestShouldRunMemoryFlush:
     def test_triggers_when_above_threshold(self):
         state = SessionState(task_id="test", compaction_count=0)
-        # context_window=100000, soft_threshold=4000 → threshold=96000
+        # context_window=100000, reserve=20000, soft_threshold=4000 → threshold=76000
         assert should_run_memory_flush(
             state, current_tokens=97000, context_window=100000
         ) is True
@@ -729,14 +730,14 @@ class TestShouldRunMemoryFlush:
 
     def test_custom_soft_threshold(self):
         state = SessionState(task_id="test")
-        # context_window=100000, soft_threshold=20000 → threshold=80000
+        # context_window=100000, reserve=0, soft_threshold=20000 → threshold=80000
         assert should_run_memory_flush(
             state, current_tokens=85000, context_window=100000,
-            soft_threshold_tokens=20000,
+            soft_threshold_tokens=20000, reserve_tokens=0,
         ) is True
         assert should_run_memory_flush(
             state, current_tokens=75000, context_window=100000,
-            soft_threshold_tokens=20000,
+            soft_threshold_tokens=20000, reserve_tokens=0,
         ) is False
 
     def test_default_soft_threshold_value(self):
@@ -760,6 +761,9 @@ class TestMemoryFlushConstants:
 
     def test_flush_prompt_mentions_memory_write(self):
         assert "memory_write" in MEMORY_FLUSH_PROMPT
+
+    def test_default_reserve_tokens_value(self):
+        assert DEFAULT_MEMORY_FLUSH_RESERVE_TOKENS_FLOOR == 20_000
 
 
 # ---------------------------------------------------------------------------

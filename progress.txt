@@ -486,3 +486,24 @@
   - Structured summaries are dramatically more useful for cross-run continuity than freeform prose — the agent can parse Goal/Progress/Next Steps sections reliably
   - `reasoning: "high"` intentionally skipped (cost concern) — consider as a config option in a future story
 ---
+
+## 2026-03-16 - US-OC-025: Fix Memory Flush Timing (Pre-Turn Check)
+- Moved memory flush check from inside the `overflow_cb.needs_compaction` block to the per-step loop — runs on every step where `overflow_cb.current_tokens` is fresh, not only when compaction triggers
+- Added `DEFAULT_MEMORY_FLUSH_RESERVE_TOKENS_FLOOR = 20_000` constant (matches OpenClaw's `DEFAULT_PI_COMPACTION_RESERVE_TOKENS_FLOOR`) and updated `should_run_memory_flush()` default from 0 → 20000
+- Added `_serialize_flush_context()` and `_serialize_content_blocks()` helpers to build full conversation text for the flush model (raw CUA content blocks can't be passed to litellm due to tool_call_id pairing errors)
+- Wired conversation context into `_run_memory_flush()` user message as `<conversation>...</conversation>` wrapper — flush model now sees the entire conversation history
+- Added flush guard reset in `SessionManager.init_session()` (when reusing an existing state): clears `memory_flush_compaction_count` and `memory_flush_at` so each run gets a fresh flush opportunity; matches OpenClaw's `/new`/`/reset` behavior
+- Exported `DEFAULT_MEMORY_FLUSH_RESERVE_TOKENS_FLOOR` via `openclaw/__init__.py`; updated tests and constants test
+- Updated `docs/plan/US-OC-005a-memory-flush-tracking.md` with final rationale for per-step vs pre-turn check, reserve token default alignment, and future work (ratio-based threshold for large context windows)
+- **Files changed:**
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw_agent.py` (flush moved to step loop, _serialize_flush_context, _serialize_content_blocks, _run_memory_flush context injection)
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/session.py` (DEFAULT_MEMORY_FLUSH_RESERVE_TOKENS_FLOOR, reserve_tokens default, flush guard reset in init_session)
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/__init__.py` (export DEFAULT_MEMORY_FLUSH_RESERVE_TOKENS_FLOOR)
+  - `tests/test_openclaw_session.py` (updated threshold comments, custom_soft_threshold reserve_tokens=0, new constant test)
+  - `docs/plan/US-OC-005a-memory-flush-tracking.md` (comparison table updates, per-step check rationale, future work section)
+- **Learnings for future iterations:**
+  - CUA's `agent.run()` is opaque — token data is only fresh inside the per-step loop via `overflow_cb.current_tokens` updated by `on_llm_start`. OpenClaw can check pre-turn because it controls the agent loop directly; CUA forces per-step checking.
+  - Raw CUA content blocks (computer_call, function_call, tool_result) cannot be passed to litellm as-is — they require tool_call_id pairing. Serialize them to text first when passing to a separate model (e.g., flush or summary model).
+  - Flush guard must be reset when re-entering a session — otherwise a flush recorded in a previous run blocks the first compaction cycle of the next run. OpenClaw does this on `/new`/`/reset`; we do it in `init_session()` when reusing state.
+  - `reserve_tokens` default of 0 (US-OC-008) was a bug — with default 20K reserve, flush threshold fires at `context_window - 20K - 4K` which correctly preempts the 80% compaction threshold for typical context windows.
+---

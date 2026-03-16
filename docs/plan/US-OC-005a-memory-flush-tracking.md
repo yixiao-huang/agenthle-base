@@ -73,7 +73,7 @@ Functionally identical.
 | Token source | `resolveFreshSessionTotalTokens(entry)` or `tokenCount` override — resolves from session entry's stale/fresh token tracking | `current_tokens` parameter — directly from `ContextOverflowCallback.current_tokens` (always fresh, estimated pre-LLM) |
 | Token projection | `resolveEffectivePromptTokens(base + lastOutput + promptEstimate)` — projects next input size from transcript tail | Not needed — `overflow_cb.current_tokens` is already the estimated next-input size |
 | Threshold formula | `contextWindow - reserveTokensFloor - softThresholdTokens` | `context_window - reserve_tokens - soft_threshold_tokens` — identical |
-| `reserveTokensFloor` | Resolved from `cfg.agents.defaults.compaction.reserveTokensFloor` (default from `DEFAULT_PI_COMPACTION_RESERVE_TOKENS_FLOOR`) | Parameter with `default=0` — CUA doesn't have OpenClaw's config system |
+| `reserveTokensFloor` | Resolved from `cfg.agents.defaults.compaction.reserveTokensFloor` (default `DEFAULT_PI_COMPACTION_RESERVE_TOKENS_FLOOR = 20000`) | Parameter with `default=DEFAULT_MEMORY_FLUSH_RESERVE_TOKENS_FLOOR` (20000) — matches OpenClaw's hardcoded default |
 | `softThresholdTokens` | Resolved from config (default 4000) | Parameter with `default=4000` |
 | Input validation | `Math.max(1, Math.floor(...))` on all numeric inputs | Simpler: `max(0, ...)` on threshold, `<= 0` checks on tokens |
 
@@ -83,6 +83,7 @@ Functionally equivalent for our use case. OpenClaw's complexity around stale/fre
 
 | Aspect | OpenClaw (`runMemoryFlushIfNeeded`) | Ours (`_run_memory_flush`) |
 |--------|----------|------|
+| Conversation context | Full session file loaded via `SessionManager.open()` — flush agent sees entire conversation history | Full transcript via `_extract_flush_context()` — text-only user/assistant messages from the complete history (US-OC-025). Can't reuse compaction's extractor because raw content blocks (tool calls, computer calls, tool role) cause litellm API errors. |
 | Execution model | `runEmbeddedPiAgent()` — full embedded agent run with model fallback, sandbox config, provider routing, auth profiles | Single `litellm.acompletion()` call with `memory_write` tool |
 | Tool access | Full agent tool set (filesystem, shell, etc.) — memory written via filesystem (`memory/YYYY-MM-DD.md`) | Single `memory_write` tool — memory written via `MemoryStore` API |
 | Tool call rounds | Full agent loop (can do multiple tool calls) | Single round — one LLM call, execute any tool calls, done |
@@ -99,7 +100,7 @@ Functionally equivalent for our use case. OpenClaw's complexity around stale/fre
 
 | Aspect | OpenClaw | Ours |
 |--------|----------|------|
-| Where | `runMemoryFlushIfNeeded()` called from `runReplyAgent()` *before* each agent turn — evaluated pre-emptively on every turn | Checked after `overflow_cb.needs_compaction` triggers, before `_compact_and_rebuild()` — evaluated only at compaction time |
+| Where | `runMemoryFlushIfNeeded()` called from `runReplyAgent()` *before* each agent turn — evaluated pre-emptively on every turn | Per-step check inside `async for` step loop (US-OC-025), right before compaction check — evaluated every step where `overflow_cb.current_tokens` is fresh from `on_llm_start`. OpenClaw checks pre-turn with transcript-based token estimates; we check per-step because CUA's `agent.run()` is opaque and token data is only fresh inside the step loop. |
 | Byte-size trigger | `forceFlushTranscriptBytes` (default 2MB) — forces flush when transcript file exceeds size, independent of token threshold | Not implemented — token-based trigger is sufficient for CUA's single-task sessions |
 | CLI/heartbeat guards | `!isHeartbeat && !isCli` — skips flush for heartbeat pings and CLI-mode sessions | Not needed — CUA benchmark always runs as a full agent session |
 | Sandbox write check | `memoryFlushWritable` — checks sandbox config allows workspace writes | Not needed — CUA agents always have write access |
@@ -118,3 +119,9 @@ Functionally equivalent for our use case. OpenClaw's complexity around stale/fre
 | `readSessionLogSnapshot()` / transcript tail reading for stale token recovery | Not needed — overflow callback always has fresh token estimates. |
 | Compaction-during-flush handling | Our flush is a single LLM call, not a full agent run, so compaction can't happen within it. |
 | `incrementCompactionCount` after flush-triggered compaction | Same reason — no nested compaction possible. |
+
+## Future Work
+
+### Ratio-based flush threshold for large context windows
+
+Both OpenClaw and our implementation use a hardcoded `reserveTokensFloor` (20K tokens). This works well for typical context windows (~50K–200K), where the flush threshold (`contextWindow - 20K - 4K`) fires comfortably before compaction (80% of context window). However, for large context windows (e.g., 1M tokens), the 20K reserve becomes negligible — flush would trigger at ~976K while compaction fires at 800K, meaning compaction always preempts flush. A future revision could make the reserve ratio-based (e.g., a percentage of context window, or keyed to the compaction threshold) to ensure flush fires before compaction at any scale. Keeping the hardcoded 20K default for now to stay faithful to OpenClaw's design.
