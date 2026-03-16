@@ -477,25 +477,28 @@
     },
     {
       "id": "US-OC-017",
-      "title": "Custom Loop Architecture Exploration",
-      "description": "As the project lead, I want an investigation of CUA's custom_loop parameter as an alternative to stop-compact-resume, so that I can decide whether mid-conversation compaction is feasible without breaking out of the agent loop.",
+      "title": "Custom Loop Architecture: Replace Stop-Compact-Resume",
+      "description": "As the project lead, I want to replace the stop-compact-resume pattern with CUA's custom_loop parameter for mid-conversation compaction, AND fix the compaction summary duplication bug where cross-run replay sends 103K chars of redundant summaries (once in replay messages via firstKeptEntryId, again in the instruction via _create_compacted_instruction).",
       "context": {
         "existingFiles": [
           "submodules/cua/libs/python/agent/agent/agent.py (ComputerAgent — custom_loop parameter)",
-          "submodules/cua/libs/cua-bench/cua_bench/agents/openclaw_agent.py (current stop-compact-resume pattern)"
+          "submodules/cua/libs/cua-bench/cua_bench/agents/openclaw_agent.py (stop-compact-resume + _create_compacted_instruction duplication)"
         ],
-        "reference": "submodules/cua/libs/python/agent/agent/agent.py (custom_loop implementation)",
+        "reference": "openclaw/src/agents/pi-embedded-runner/compact.ts (OpenClaw compaction — no separate instruction-prepending, summary lives only in transcript via firstKeptEntryId)",
+        "designDoc": "docs/plan/US-OC-017-custom-loop-architecture.md",
         "planFile": "docs/plan/US-OC-006-compaction-pipeline.md (Known Gaps — Group D)"
       },
       "acceptanceCriteria": [
-        "Level 1: Document findings in docs/plan/US-OC-017-custom-loop-exploration.md",
+        "Level 1: Fix compaction summary duplication — skip _create_compacted_instruction when replay_messages is non-empty (interim fix, one-line guard)",
+        "Level 1: Delete _create_compacted_instruction and _compact_and_rebuild when custom_loop replaces stop-compact-resume",
         "Level 1: Prototype custom_loop that manages a mutable message list and supports mid-loop compaction injection",
+        "Level 2: run_magic_tower.sh 50 — verify reduced input tokens on first turn (~80K vs ~180K with duplication removed)",
         "Level 2: run_magic_tower.sh 50 with custom_loop — agent completes task without stop-compact-resume; compaction happens mid-conversation",
         "Level 2: Compare trajectory quality: custom_loop vs stop-compact-resume on same task"
       ],
       "priority": 15,
       "passes": false,
-      "notes": "PRD Group D (from US-OC-006 design review). CUA's on_llm_start callback output is discarded after each turn — the agent loop always re-concatenates from immutable old_items + new_items. This makes callback-based compaction impossible. A custom_loop could manage its own mutable message list, enabling OpenClaw-style mid-conversation compaction without the state discontinuity of stop-compact-resume. This is an exploration story — the outcome may be 'not feasible' if custom_loop has constraints we don't yet see."
+      "notes": "PRD Group D (from US-OC-006 design review). Two issues merged: (1) CUA's on_llm_start callback output is discarded after each turn — the agent loop always re-concatenates from immutable old_items + new_items, making callback-based compaction impossible. A custom_loop could manage its own mutable message list. (2) Compaction summary duplication: build_replay_messages handles compaction entries via firstKeptEntryId (matching OpenClaw's design), but _create_compacted_instruction ALSO loads all summaries from state.json. OpenClaw has NO equivalent of _create_compacted_instruction — compaction context lives only in the transcript. Interim fix: guard with `if prior_summaries and not replay_messages`. Full fix: delete _create_compacted_instruction when custom_loop removes stop-compact-resume."
     },
     {
       "id": "US-OC-019",
@@ -596,7 +599,7 @@
         "Level 2: run_magic_tower.sh 15 with openai/computer-use-preview and existing transcript — no 'Invalid value' API errors from replay messages"
       ],
       "priority": 8.2,
-      "passes": false,
+      "passes": true,
       "notes": "Root cause: replay messages use Chat Completions format (role-based messages with nested content arrays like [{type: 'text', ...}, {type: 'function_call', ...}]) but CUA SDK agent loops expect Responses API format (top-level type-dispatched items). The Anthropic loop's _convert_responses_items_to_completion_messages (line 169) does content = '\\n'.join(item.get('text', '') for item in content) on assistant messages, silently dropping all function_call/computer_call blocks. Tool messages (role='tool') with tool_result blocks are silently dropped entirely since they match none of the type/role dispatch conditions. The fix is in convert_to_responses_api_format() in session.py: unnest content blocks into top-level Responses API items. This must apply to ALL models (not just OpenAI) since ALL agent loops dispatch on top-level type. Key insight: remove the _is_openai_model guard — ALL backends need this conversion."
     },
     {

@@ -1,12 +1,14 @@
-"""Tests for transcript replay — cross-run continuity (US-OC-012).
+"""Tests for transcript replay — cross-run continuity (US-OC-012, US-OC-022).
 
-Tests build_replay_messages, sanitize_history, and limit_history_turns.
+Tests build_replay_messages, sanitize_history, limit_history_turns,
+and convert_to_responses_api_items.
 """
 
 from cua_bench.agents.openclaw.session import (
     SessionManager,
     TranscriptEntry,
     build_replay_messages,
+    convert_to_responses_api_items,
     limit_history_turns,
     sanitize_history,
 )
@@ -518,3 +520,297 @@ class TestReplayIntegration:
         entries = sm.load_history()
         messages = build_replay_messages(entries)
         assert messages == []
+
+
+# ---------------------------------------------------------------------------
+# convert_to_responses_api_items (US-OC-022)
+# ---------------------------------------------------------------------------
+
+
+class TestConvertToResponsesApiItems:
+    """Test unnesting of Chat Completions messages into Responses API items."""
+
+    def test_user_string_content(self):
+        """User message with string content → message wrapper with input_text."""
+        messages = [{"role": "user", "content": "Do the task"}]
+        items = convert_to_responses_api_items(messages)
+        assert len(items) == 1
+        assert items[0]["type"] == "message"
+        assert items[0]["role"] == "user"
+        assert items[0]["content"] == [{"type": "input_text", "text": "Do the task"}]
+
+    def test_user_content_array(self):
+        """User message with text content array → message wrapper with input_text blocks."""
+        messages = [{
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "Look at this"},
+                {"type": "text", "text": "And this"},
+            ],
+        }]
+        items = convert_to_responses_api_items(messages)
+        assert len(items) == 1
+        assert items[0]["type"] == "message"
+        assert items[0]["role"] == "user"
+        assert len(items[0]["content"]) == 2
+        assert all(b["type"] == "input_text" for b in items[0]["content"])
+
+    def test_assistant_string_content(self):
+        """Assistant message with string → message wrapper with output_text."""
+        messages = [{"role": "assistant", "content": "I see floor 2"}]
+        items = convert_to_responses_api_items(messages)
+        assert len(items) == 1
+        assert items[0]["type"] == "message"
+        assert items[0]["role"] == "assistant"
+        assert items[0]["content"] == [{"type": "output_text", "text": "I see floor 2"}]
+
+    def test_assistant_text_plus_function_call(self):
+        """Assistant text + function_call → message item + function_call item."""
+        messages = [{
+            "role": "assistant",
+            "content": [
+                {"type": "text", "text": "Let me search"},
+                {"type": "function_call", "id": "fc-1", "name": "memory_search", "arguments": '{"q": "test"}'},
+            ],
+        }]
+        items = convert_to_responses_api_items(messages)
+        assert len(items) == 2
+        # First: text flushed as message
+        assert items[0]["type"] == "message"
+        assert items[0]["role"] == "assistant"
+        assert items[0]["content"] == [{"type": "output_text", "text": "Let me search"}]
+        # Second: function_call item with id → call_id mapping
+        assert items[1]["type"] == "function_call"
+        assert items[1]["call_id"] == "fc-1"
+        assert items[1]["name"] == "memory_search"
+        assert items[1]["arguments"] == '{"q": "test"}'
+
+    def test_assistant_text_plus_computer_call(self):
+        """Assistant text + computer_call → message item + computer_call item."""
+        action = {"type": "click", "x": 100, "y": 200}
+        messages = [{
+            "role": "assistant",
+            "content": [
+                {"type": "text", "text": "I'll click the door"},
+                {"type": "computer_call", "id": "cc-1", "action": action},
+            ],
+        }]
+        items = convert_to_responses_api_items(messages)
+        assert len(items) == 2
+        assert items[0]["type"] == "message"
+        assert items[0]["content"] == [{"type": "output_text", "text": "I'll click the door"}]
+        assert items[1]["type"] == "computer_call"
+        assert items[1]["call_id"] == "cc-1"
+        assert items[1]["action"] == action
+
+    def test_assistant_only_function_call(self):
+        """Assistant with only function_call, no text → single function_call item."""
+        messages = [{
+            "role": "assistant",
+            "content": [
+                {"type": "function_call", "id": "fc-2", "name": "search", "arguments": "{}"},
+            ],
+        }]
+        items = convert_to_responses_api_items(messages)
+        assert len(items) == 1
+        assert items[0]["type"] == "function_call"
+        assert items[0]["call_id"] == "fc-2"
+
+    def test_tool_message_with_tool_results(self):
+        """Tool message with tool_result blocks → function_call_output items."""
+        messages = [{
+            "role": "tool",
+            "content": [
+                {"type": "tool_result", "tool_use_id": "fc-1", "content": "found it"},
+                {"type": "tool_result", "tool_use_id": "fc-2", "content": "also found"},
+            ],
+        }]
+        items = convert_to_responses_api_items(messages)
+        assert len(items) == 2
+        assert items[0]["type"] == "function_call_output"
+        assert items[0]["call_id"] == "fc-1"
+        assert items[0]["output"] == "found it"
+        assert items[1]["type"] == "function_call_output"
+        assert items[1]["call_id"] == "fc-2"
+
+    def test_user_message_with_tool_results(self):
+        """User message containing tool_result blocks → function_call_output items.
+
+        After sanitize_history, tool messages have role="user" (OpenClaw convention).
+        """
+        messages = [{
+            "role": "user",
+            "content": [
+                {"type": "tool_result", "tool_use_id": "cc-1", "content": "image:trajectory"},
+            ],
+        }]
+        items = convert_to_responses_api_items(messages)
+        assert len(items) == 1
+        assert items[0]["type"] == "function_call_output"
+        assert items[0]["call_id"] == "cc-1"
+
+    def test_empty_messages(self):
+        """Empty input → empty output."""
+        assert convert_to_responses_api_items([]) == []
+
+    def test_id_to_call_id_mapping(self):
+        """Transcript uses 'id' key, Responses API expects 'call_id'."""
+        messages = [{
+            "role": "assistant",
+            "content": [
+                {"type": "function_call", "id": "call-abc", "name": "tool", "arguments": "{}"},
+            ],
+        }]
+        items = convert_to_responses_api_items(messages)
+        assert items[0]["call_id"] == "call-abc"
+        assert "id" not in items[0]
+
+    def test_tool_use_id_to_call_id_mapping(self):
+        """Transcript tool_result uses 'tool_use_id', output needs 'call_id'."""
+        messages = [{
+            "role": "tool",
+            "content": [
+                {"type": "tool_result", "tool_use_id": "call-xyz", "content": "ok"},
+            ],
+        }]
+        items = convert_to_responses_api_items(messages)
+        assert items[0]["call_id"] == "call-xyz"
+        assert "tool_use_id" not in items[0]
+
+    def test_multiple_messages_ordering(self):
+        """Multiple messages produce items in correct order."""
+        messages = [
+            {"role": "user", "content": "Do something"},
+            {
+                "role": "assistant",
+                "content": [
+                    {"type": "text", "text": "I'll search"},
+                    {"type": "function_call", "id": "fc-1", "name": "search", "arguments": "{}"},
+                ],
+            },
+            {
+                "role": "tool",
+                "content": [
+                    {"type": "tool_result", "tool_use_id": "fc-1", "content": "result"},
+                ],
+            },
+            {"role": "assistant", "content": "Done"},
+        ]
+        items = convert_to_responses_api_items(messages)
+        assert len(items) == 5
+        assert items[0]["type"] == "message"  # user
+        assert items[0]["role"] == "user"
+        assert items[1]["type"] == "message"  # assistant text
+        assert items[1]["role"] == "assistant"
+        assert items[2]["type"] == "function_call"
+        assert items[3]["type"] == "function_call_output"
+        assert items[4]["type"] == "message"  # assistant text
+        assert items[4]["role"] == "assistant"
+
+    def test_assistant_text_after_structured_block(self):
+        """Text after a function_call creates a new message item."""
+        messages = [{
+            "role": "assistant",
+            "content": [
+                {"type": "function_call", "id": "fc-1", "name": "search", "arguments": "{}"},
+                {"type": "text", "text": "Trailing text"},
+            ],
+        }]
+        items = convert_to_responses_api_items(messages)
+        assert len(items) == 2
+        assert items[0]["type"] == "function_call"
+        assert items[1]["type"] == "message"
+        assert items[1]["content"] == [{"type": "output_text", "text": "Trailing text"}]
+
+    def test_integration_full_pipeline(self, tmp_path):
+        """End-to-end: build_replay → sanitize → limit → convert."""
+        sm = SessionManager("test-task", base_dir=tmp_path)
+        sm.init_session(model="claude")
+
+        # Simulate a multi-step conversation
+        sm.append_message("user", "Navigate to floor 2")
+        sm.append_message(
+            "assistant",
+            [
+                {"type": "text", "text": "I'll click the door"},
+                {"type": "computer_call", "id": "cc-1", "action": {"type": "click", "x": 100, "y": 200}},
+            ],
+            stop_reason="tool_use",
+        )
+        sm.append_message(
+            "tool",
+            [{"type": "tool_result", "tool_use_id": "cc-1", "content": "image:trajectory"}],
+        )
+        sm.append_message("assistant", "I can see floor 2 now")
+
+        # Run the full pipeline
+        entries = sm.load_history()
+        messages = build_replay_messages(entries)
+        messages = sanitize_history(messages)
+        messages = limit_history_turns(messages, 10)
+        messages = sanitize_history(messages)
+        items = convert_to_responses_api_items(messages)
+
+        # Verify items are all in Responses API format
+        for item in items:
+            assert "type" in item, f"Item missing 'type': {item}"
+            if item["type"] == "message":
+                assert "role" in item
+                assert isinstance(item.get("content"), list)
+            elif item["type"] == "function_call":
+                assert "call_id" in item
+                assert "name" in item
+            elif item["type"] == "computer_call":
+                assert "call_id" in item
+                assert "action" in item
+            elif item["type"] == "function_call_output":
+                assert "call_id" in item
+            elif item["type"] == "computer_call_output":
+                assert "call_id" in item
+
+        # Should have: bootstrap user msg + user msg + assistant text + computer_call + tool output + assistant text
+        assert len(items) >= 4
+
+    def test_tool_adjacency_with_interleaved_flush(self):
+        """Memory flush messages between tool call and result are reordered.
+
+        Reproduces the real-world pattern where memory flush (user + assistant)
+        is logged between a computer_call and its tool_result in the transcript.
+        """
+        messages = [
+            {"role": "user", "content": "Do something"},
+            {
+                "role": "assistant",
+                "content": [
+                    {"type": "text", "text": "I'll click"},
+                    {"type": "computer_call", "id": "cc-1", "action": {"type": "click", "x": 100, "y": 200}},
+                ],
+            },
+            # Memory flush interleaved BEFORE the tool result
+            {"role": "user", "content": "Pre-compaction memory flush."},
+            {"role": "assistant", "content": "[memory flush — tool calls executed]"},
+            # Tool result comes after flush
+            {
+                "role": "tool",
+                "content": [
+                    {"type": "tool_result", "tool_use_id": "cc-1", "content": "image:trajectory"},
+                ],
+            },
+            {"role": "assistant", "content": "I can see the result"},
+        ]
+        items = convert_to_responses_api_items(messages)
+
+        # Find the computer_call item
+        cc_idx = next(i for i, it in enumerate(items) if it.get("type") == "computer_call")
+        # The very next item must be the function_call_output (not flush messages)
+        assert items[cc_idx + 1]["type"] == "function_call_output"
+        assert items[cc_idx + 1]["call_id"] == "cc-1"
+
+        # Flush messages should come AFTER the tool output
+        flush_idx = next(
+            i for i, it in enumerate(items)
+            if it.get("type") == "message" and it.get("role") == "user"
+            and isinstance(it.get("content"), list)
+            and any("flush" in str(b.get("text", "")).lower() for b in it["content"])
+        )
+        assert flush_idx > cc_idx + 1

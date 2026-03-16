@@ -507,3 +507,29 @@
   - Flush guard must be reset when re-entering a session — otherwise a flush recorded in a previous run blocks the first compaction cycle of the next run. OpenClaw does this on `/new`/`/reset`; we do it in `init_session()` when reusing state.
   - `reserve_tokens` default of 0 (US-OC-008) was a bug — with default 20K reserve, flush threshold fires at `context_window - 20K - 4K` which correctly preempts the 80% compaction threshold for typical context windows.
 ---
+
+## 2026-03-16 - US-OC-022: Replay Message Format: Unnest to Responses API Items
+- Replaced `convert_to_responses_api_format(messages, model)` (OpenAI-only, role-based transformation) with `convert_to_responses_api_items(messages)` (all backends, unnesting transformation)
+- The old function only remapped content block type strings; the new function unnests each Chat Completions message into top-level Responses API items so CUA SDK loop dispatchers can handle them correctly
+- Key transformation rules implemented:
+  - User string/array messages → `{type: "message", role: "user", content: [{type: "input_text", …}]}`
+  - Assistant string messages → `{type: "message", role: "assistant", content: [{type: "output_text", …}]}`
+  - Assistant content blocks: text → flush as message item; function_call → `{type: "function_call", call_id, name, arguments}`; computer_call → `{type: "computer_call", call_id, action}`
+  - Tool messages with tool_result blocks → `{type: "function_call_output", call_id, output}` items
+- Added `_ensure_tool_adjacency()` to reorder items when memory flush messages are interleaved between a tool call and its result in the transcript
+- Added `_unnest_assistant_blocks()`, `_unnest_tool_blocks()`, `_wrap_user_content()` as private helpers
+- Removed `_is_openai_model()` and the `_RESPONSES_API_TYPE_MAP` dict — the guard was the core bug (ALL backends need this conversion)
+- Updated openclaw_agent.py: remove model arg from call, updated log message
+- Renamed in `__init__.py` exports
+- Added 15 new unit tests in `tests/test_openclaw_replay.py` (`TestConvertToResponsesApiItems` class); 49 total tests — all pass
+- **Files changed:**
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/session.py` (new convert_to_responses_api_items + helpers, removed old function + helpers)
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/__init__.py` (renamed export)
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw_agent.py` (updated call, log message)
+  - `tests/test_openclaw_replay.py` (15 new tests for US-OC-022)
+- **Learnings for future iterations:**
+  - Root cause of replay failures: CUA SDK loops (anthropic.py, openai.py) dispatch on TOP-LEVEL `type` field (Responses API), not on `role` with nested content blocks. Any Chat Completions format input is silently mangled — Anthropic loop joins only `text` items and drops function_call/computer_call; tool role messages match nothing.
+  - The `_is_openai_model` guard was the core architectural mistake — it implied only OpenAI needed format conversion. ALL backends need unnesting since ALL loops use Responses API dispatch internally.
+  - `_ensure_tool_adjacency` is needed because memory flush messages (user + assistant) are logged between a tool call and its result during the same step. The Anthropic API requires tool_result immediately after tool_use — deferred flush items must move past the output.
+  - `id` → `call_id` key rename must happen at this stage (not earlier, since `sanitize_history`'s orphan repair uses the `id` key for matching).
+---
