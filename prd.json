@@ -503,6 +503,59 @@
       "priority": 15,
       "passes": false,
       "notes": "PRD Group D (from US-OC-006 design review). CUA's on_llm_start callback output is discarded after each turn \u2014 the agent loop always re-concatenates from immutable old_items + new_items. This makes callback-based compaction impossible. A custom_loop could manage its own mutable message list, enabling OpenClaw-style mid-conversation compaction without the state discontinuity of stop-compact-resume. This is an exploration story \u2014 the outcome may be 'not feasible' if custom_loop has constraints we don't yet see."
+    },
+    {
+      "id": "US-OC-019",
+      "title": "Thinking Mode: Config, CLI, and Main Agent Loop",
+      "description": "As a benchmark operator, I want to configure the agent's thinking mode via CLI flags (--thinking-mode, --thinking-budget) so that the model uses extended thinking during computer-use task execution with configurable depth.",
+      "context": {
+        "existingFiles": [
+          "submodules/cua/libs/cua-bench/cua_bench/agents/openclaw_agent.py (OpenClawAgent.__init__, perform_task line 250, _compact_and_rebuild line 631 — where ComputerAgent is created)",
+          "submodules/cua/libs/cua-bench/cua_bench/batch/solver.py (CLI arg parsing — --model flag at line 130)",
+          "run_magic_tower.sh (shell entry point — passes CLI flags to solver)"
+        ],
+        "depends": "None — standalone feature",
+        "reference": "submodules/cua/libs/python/agent/agent/ (start from agent.py lines 176-234 for ComputerAgent.__init__ **additional_generation_kwargs; explore loops/gemini.py lines 643-665 for existing thinking_level kwarg pattern)"
+      },
+      "acceptanceCriteria": [
+        "Level 1: Lint passes (uv run ruff check .)",
+        "Level 1: ThinkingConfig dataclass exists in agents/openclaw/ with mode enum (off, light, standard, deep) and budget_tokens field",
+        "Level 1: solver.py accepts --thinking-mode and --thinking-budget CLI flags and passes them to agent kwargs",
+        "Level 1: OpenClawAgent.__init__ reads thinking_mode/thinking_budget from kwargs and stores a ThinkingConfig",
+        "Level 1: ThinkingConfig.to_api_params() returns correct dict for Anthropic extended thinking API ({thinking: {type: enabled, budget_tokens: N}})",
+        "Level 1: Mode presets: off → disabled, light → 5000 tokens, standard → 10000, deep → 25000; explicit --thinking-budget overrides preset",
+        "Level 1: ComputerAgent is created with thinking API params in **additional_generation_kwargs when mode is not off",
+        "Level 1: _compact_and_rebuild also passes thinking params to the rebuilt ComputerAgent",
+        "Level 2: run_magic_tower.sh 50 with --thinking-mode standard — trajectory logs contain reasoning message types",
+        "Level 2: run_magic_tower.sh 50 with default (off) — no reasoning blocks in trajectory logs",
+        "Level 2: grep -r '\"reasoning\"' trycua/cua-bench/mota_24_easy/task_0_agent_logs/trajectories/ confirms presence/absence"
+      ],
+      "priority": 16,
+      "passes": false,
+      "notes": "ThinkingConfig defines mode presets that map to budget_tokens values. Explicit --thinking-budget overrides the preset. ComputerAgent passes **additional_generation_kwargs through to the Anthropic loop's predict_step, which spreads **kwargs into litellm.acompletion() — so passing thinking={type: enabled, budget_tokens: N} flows through without CUA SDK changes. Both initial ComputerAgent (line 250) and post-compaction rebuild (line 631) must receive the same thinking params. ThinkingConfig also has optional flush_mode and compaction_mode fields (default 'off') consumed by US-OC-020."
+    },
+    {
+      "id": "US-OC-020",
+      "title": "Thinking Mode: Wire into Memory Flush and Compaction",
+      "description": "As a benchmark operator, I want per-call-site thinking config for memory flush and compaction LLM calls so that these auxiliary summarization calls can use a different (typically lighter) thinking mode than the main loop.",
+      "context": {
+        "existingFiles": [
+          "submodules/cua/libs/cua-bench/cua_bench/agents/openclaw_agent.py (_run_memory_flush line 528 — direct litellm.acompletion; _compact_and_rebuild line 601 — calls compact_messages)",
+          "submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/context.py (_summarize_chunk line 609, _final_summary line 669 — both call litellm.acompletion)"
+        ],
+        "depends": "US-OC-019 must be done first (provides ThinkingConfig with flush_mode/compaction_mode fields)",
+        "reference": "submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/context.py (start from _summarize_chunk at line 573 for the litellm.acompletion call pattern)"
+      },
+      "acceptanceCriteria": [
+        "Level 1: Lint passes (uv run ruff check .)",
+        "Level 1: _run_memory_flush passes thinking API params to litellm.acompletion when flush_mode is not off",
+        "Level 1: compact_messages and its _summarize_chunk/_final_summary accept and pass thinking params when compaction_mode is not off",
+        "Level 1: Unit test: ThinkingConfig(mode='deep', flush_mode='light', compaction_mode='off') produces correct API params for each call site",
+        "Level 2: run_magic_tower.sh 50 with --thinking-mode deep and CONTEXT_WINDOW_OVERRIDE=50000 — compaction triggers and completes without error"
+      ],
+      "priority": 17,
+      "passes": false,
+      "notes": "Memory flush and compaction are summarization tasks that typically benefit less from deep thinking. Both default to 'off' even when the main loop uses thinking. CLI flags --flush-thinking-mode and --compaction-thinking-mode are not needed now — code-level config via ThinkingConfig fields is sufficient. The key change is threading thinking params through compact_messages → _summarize_chunk/_final_summary, which currently only accept model and max_tokens."
     }
   ]
 }
