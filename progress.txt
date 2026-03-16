@@ -442,3 +442,31 @@
   - When dropping a story, document the rationale in `prd.json` notes + a dedicated plan doc (`docs/plan/US-OC-011-abort-resume-dropped.md`) so future engineers understand why it was skipped without needing to re-analyze the OpenClaw source.
   - The SID/timestamp dual-track comparison in OpenClaw is Twilio-specific (Twilio message SIDs are globally ordered). Our UUID-based transcript entries have no analogous ordering property.
 ---
+
+## 2026-03-16 - US-OC-013: Budget-Aware Compaction Split
+- Replaced naive half-split in `compact_messages()` with budget-aware splitting
+  - Budget formula: `context_window * max_history_share - instructions_tokens - SUMMARIZATION_OVERHEAD_TOKENS - preserved_tokens`
+  - Iterative pruning: while kept portion exceeds budget, split kept in half and move older half to compact
+  - Overflow fallback: when all messages land in preserved (CUA-style conversations) and still exceed budget, force half into pruneable
+- Added `split_preserved_recent_turns()` — splits out last N turns (counting assistant messages, not user messages) so they are never pruned or summarized
+  - Turn counting by assistant messages works for both chat-style (alternating user/assistant) and CUA-style (1 user + N assistant/tool pairs) conversations
+  - Capped at `MAX_RECENT_TURNS_PRESERVE = 12`
+- Added `repair_tool_use_result_pairing()` — three-pass repair for orphaned tool_use/tool_result pairs at split boundaries
+  - Pass 1: collect call IDs and result IDs
+  - Pass 2: drop orphaned results (no matching call) and duplicates (same ID seen twice)
+  - Pass 3: insert synthetic error results for calls with no matching result (skips if stop_reason is "error"/"aborted")
+- Updated `_extract_messages_for_compaction()` in `openclaw_agent.py` to propagate `stop_reason` from transcript entries (needed for repair to skip synthesis on aborted turns)
+- Wired `instructions_tokens` into `compact_messages()` call in agent loop (estimated as `len(original_instructions) // 4`)
+- Added `ToolPairingRepairReport` dataclass + exports in `__init__.py`
+- 74 unit tests — all pass
+- **Files changed:**
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/context.py` (budget-aware compaction, repair, recent turns split)
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/__init__.py` (new exports)
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw_agent.py` (instructions_tokens, stop_reason propagation)
+  - `tests/test_openclaw_compaction.py` (27 new tests for US-OC-013 features)
+- **Learnings for future iterations:**
+  - CUA-style conversations have 1 user message + N assistant/tool pairs. Turn counting MUST use assistant messages (not user messages) or everything is preserved and compaction never runs.
+  - Overflow fallback is necessary when preserved set itself exceeds budget — can happen in tight budget scenarios even after capping preserve_count.
+  - `repair_tool_use_result_pairing` must run on both the iteratively-pruned `to_keep` and the final `final_kept` portions — split boundaries can create orphans at each stage.
+  - `stop_reason` must be propagated from TranscriptEntry through `_extract_messages_for_compaction` — repair skips synthesis for error/aborted turns, so losing stop_reason causes spurious synthetic results.
+---
