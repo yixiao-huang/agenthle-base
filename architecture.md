@@ -1,4 +1,4 @@
-<!-- Last updated: 2026-03-11 -->
+<!-- Last updated: 2026-03-16 -->
 # AgentHLE Architecture
 
 ## Overview
@@ -117,7 +117,9 @@ agenthle-base/
 │       │   └── som/             # Screen Objects Model
 │       └── cua-bench/           # Benchmark orchestration
 │           └── cua_bench/
-│               ├── agents/openclaw_agent.py  # Our agent harness
+│               ├── agents/openclaw_agent.py  # Our agent harness (OpenClawAgent)
+│               │           openclaw/          # OpenClaw modules
+│               │           ├── agent_loop.py # OpenClawComputerAgent — custom run() with in-place compaction (US-OC-017)
 │               ├── batch/solver.py           # Batch orchestrator
 │               ├── computers/remote.py       # RemoteDesktopSession
 │               └── decorators.py             # @cb.tasks_config, etc.
@@ -136,7 +138,7 @@ agenthle-base/
   - Builds structured system prompt via `PromptBuilder` (US-OC-001):
     - Identity, Tools (derived from registered tools), Memory Recall (conditional), Project Context (AGENTS.md + task.md)
     - Injects context files as bootstrap (never truncated from context via `instructions=` parameter)
-  - Creates `ComputerAgent` from CUA SDK with tools: Computer, MilestoneTool
+  - Creates `OpenClawComputerAgent` (US-OC-017) — `ComputerAgent` subclass with mutable items list and in-place compaction
   - Memory tools (MemorySearchTool, MemoryGetTool, MemoryWriteTool) are implemented but not yet wired in
   - Model: configurable, default `anthropic/claude-sonnet-4-20250514`
   - Only keeps 3 most recent images in context
@@ -181,11 +183,12 @@ Task Description
       ▼
 Agent.perform_task()
       │
-      ├─── ComputerAgent.run(instruction)
+      ├─── OpenClawComputerAgent.run(instruction)  ← mutable items + in-place compaction
       │       │
       │       ├── Take screenshot (Computer tool)
       │       ├── Perform mouse/keyboard action
-      │       └── Save milestone screenshot (MilestoneTool)
+      │       ├── Save milestone screenshot (MilestoneTool)
+      │       └── On overflow: _compact_in_place() rewrites items, loop continues
       │
       ▼
 AgentResult (tokens, steps, failure_mode)

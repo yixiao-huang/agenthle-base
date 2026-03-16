@@ -8,7 +8,7 @@ Covers:
   - compact_messages() entry point (budget-aware, US-OC-013)
   - Tool pairing repair (US-OC-013)
   - Recent turns preservation (US-OC-013)
-  - Agent loop helpers (_extract_messages_for_compaction, _create_compacted_instruction)
+  - Agent loop helpers (_extract_messages_for_compaction)
 """
 
 import asyncio
@@ -41,8 +41,7 @@ from cua_bench.agents.openclaw.context import (
     summarize_chunks_iterative,
     summarize_with_fallback,
 )
-from cua_bench.agents.openclaw_agent import (
-    _create_compacted_instruction,
+from cua_bench.agents.openclaw.agent_loop import (
     _extract_messages_for_compaction,
 )
 
@@ -562,32 +561,6 @@ class TestExtractMessagesForCompaction:
 
         messages = _extract_messages_for_compaction(mock_mgr)
         assert len(messages) == 0
-
-
-class TestCreateCompactedInstruction:
-    def test_no_summaries_returns_original(self):
-        result = _create_compacted_instruction("Do the task", [])
-        assert result == "Do the task"
-
-    def test_includes_summary_and_task(self):
-        result = _create_compacted_instruction(
-            "Do the task",
-            ["Agent explored floor 1 and found a key."],
-        )
-        assert "Prior Context (Compacted)" in result
-        assert "Agent explored floor 1" in result
-        assert "Do the task" in result
-        assert "Current Task" in result
-
-    def test_multiple_summaries(self):
-        result = _create_compacted_instruction(
-            "Continue exploring",
-            ["First compaction summary.", "Second compaction summary."],
-        )
-        assert "Compaction 1" in result
-        assert "Compaction 2" in result
-        assert "First compaction summary." in result
-        assert "Second compaction summary." in result
 
 
 # ===========================================================================

@@ -533,3 +533,24 @@
   - `_ensure_tool_adjacency` is needed because memory flush messages (user + assistant) are logged between a tool call and its result during the same step. The Anthropic API requires tool_result immediately after tool_use — deferred flush items must move past the output.
   - `id` → `call_id` key rename must happen at this stage (not earlier, since `sanitize_history`'s orphan repair uses the `id` key for matching).
 ---
+
+## 2026-03-16 - US-OC-017: Custom Loop Architecture: Replace Stop-Compact-Resume
+- Introduced `OpenClawComputerAgent` subclass in `openclaw/agent_loop.py` that overrides `ComputerAgent.run()` with a mutable items list + in-place compaction
+- Eliminates the stop-compact-resume pattern (breaking out of the generator, rebuilding the agent, restarting) in favor of a single continuous loop where `_compact_in_place()` rewrites the items list mid-loop
+- Moved `_extract_messages_for_compaction()` from `openclaw_agent.py` into `agent_loop.py` alongside the new class
+- Removed `_compact_and_rebuild()`, `_create_compacted_instruction()`, and all `max_compactions`/`compaction_triggered`/`compaction_count` loop variables from `openclaw_agent.py` (now tracked by `OpenClawComputerAgent._compaction_count`)
+- Removed reactive overflow try/except from the outer `openclaw_agent.py` loop — reactive overflow is now handled inside `OpenClawComputerAgent.run()` via try/except around `predict_step()`
+- Removed prior-run compaction summary pre-loading at session start (cross-run continuity via `_create_compacted_instruction`) — compaction is now in-loop only
+- Memory flush hook wired through `on_memory_flush` callback to `OpenClawComputerAgent._compact_in_place()`
+- `ComputerAgent` import in `openclaw_agent.py` retained only for package validation (noqa: F401); all agent instantiation uses `OpenClawComputerAgent`
+- **Files changed:**
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/agent_loop.py` (new file — OpenClawComputerAgent + _extract_messages_for_compaction)
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/__init__.py` (add OpenClawComputerAgent export)
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw_agent.py` (simplified to single-loop, removed stop-compact-resume)
+  - `tests/test_openclaw_compaction.py` (update imports, remove TestCreateCompactedInstruction tests)
+- **Learnings for future iterations:**
+  - Overriding `ComputerAgent.run()` requires replicating the full lifecycle (callbacks, tool dispatch, `_on_run_start/end`, `_handle_item`). Check `agent/agent.py:658-808` line range before changing — parent implementation may shift across versions.
+  - `items` is mutated in-place via `items.clear(); items.extend(...)` rather than reassignment, because the outer `while` loop references the same list. Clear + extend instead of `items = new_list` to avoid stale reference bugs.
+  - The stop-compact-resume pattern forced clearing `replay_messages` after compaction (the compacted instruction contained prior context). The new approach builds the compacted items list directly from transcript entries and passes them forward — no separate instruction modification needed.
+  - Removing `_create_compacted_instruction` also removes cross-run compaction pre-loading. If cross-run context continuity is needed in future, it can be injected as an initial user message in `_build_compacted_items()` rather than as a modified instruction string.
+---
