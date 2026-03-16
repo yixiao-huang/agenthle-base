@@ -27,10 +27,14 @@ export EVALUATION_OUTPUT_DIR="./trycua/cua-bench/${task}"
 #     --wait
 
 MAX_STEPS="${1:-500}"
-# model_id="anthropic/claude-sonnet-4-20250514"
-model_id="openai/computer-use-preview"
+model_id="anthropic/claude-sonnet-4-20250514"
+# model_id="anthropic/claude-opus-4-6"
+# model_id="anthropic/claude-haiku-4-5-20251001"
+# model_id="openai/computer-use-preview"
 # model_id="openai/gpt-5.4"
-summary_model_id="gpt-5-mini" # mini
+# summary_model_id="gpt-5-mini" # mini
+# summary_model_id="anthropic/claude-haiku-4-5-20251001"
+summary_model_id="anthropic/claude-sonnet-4-20250514"
 # Optional: use a cheaper model for summarization and memory flush
 # summary_model_id="anthropic/claude-haiku-4-5-20251001"
 # summary_model_id="${SUMMARY_MODEL:-}"

@@ -470,3 +470,19 @@
   - `repair_tool_use_result_pairing` must run on both the iteratively-pruned `to_keep` and the final `final_kept` portions — split boundaries can create orphans at each stage.
   - `stop_reason` must be propagated from TranscriptEntry through `_extract_messages_for_compaction` — repair skips synthesis for error/aborted turns, so losing stop_reason causes spurious synthetic results.
 ---
+
+## 2026-03-16 - US-OC-018: Structured Summarization Format
+- Adopted OpenClaw's actual summarization prompts from `@mariozechner/pi-coding-agent` (SUMMARIZATION_SYSTEM_PROMPT, SUMMARIZATION_PROMPT, UPDATE_SUMMARIZATION_PROMPT)
+- Replaced freeform prose prompts with structured checkpoint format: Goal, Constraints & Preferences, Progress (Done/In Progress/Blocked), Key Decisions, Next Steps, Critical Context
+- Two distinct user-turn prompts: `SUMMARIZATION_PROMPT` for initial summaries, `UPDATE_SUMMARIZATION_PROMPT` for updates with explicit rules (preserve/add/move items)
+- Added `<conversation>` and `<previous-summary>` XML tag wrapping in user messages
+- Removed `MERGE_SUMMARIES_INSTRUCTIONS` and `_merge_summaries()` — no longer needed with structured format
+- `IDENTIFIER_PRESERVATION_INSTRUCTIONS` always appended to system prompt (OpenClaw conditionally includes it via identifierPolicy — we simplify)
+- **Files changed:**
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/context.py` (prompt constants, summarize_chunk update)
+  - `tests/test_openclaw_compaction.py` (new tests for structured prompts, removed symbols)
+- **Learnings for future iterations:**
+  - Recommended VM test for memory/compaction stories: `CONTEXT_WINDOW_OVERRIDE=50000 bash run_magic_tower.sh 50` — triggers 1-2 compaction cycles, exercises memory tools, replay, and structured summarization in ~7 min / ~$2
+  - Structured summaries are dramatically more useful for cross-run continuity than freeform prose — the agent can parse Goal/Progress/Next Steps sections reliably
+  - `reasoning: "high"` intentionally skipped (cost concern) — consider as a config option in a future story
+---
