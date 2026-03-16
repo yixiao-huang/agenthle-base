@@ -373,7 +373,7 @@
         "Level 3: Two sequential 50-step runs on mota_24_easy \u2014 session 2 agent has access to session 1's full conversation context, not just memory tool results"
       ],
       "priority": 8.1,
-      "passes": false,
+      "passes": true,
       "notes": "Closes four gaps vs OpenClaw: (1) Prior messages not replayed \u2014 currently each ComputerAgent.run() starts with only the instruction string; OpenClaw replays full transcript as API messages. Fix: load_history() \u2192 build_replay_messages() \u2192 pass as messages arg to agent.run(). CUA's ComputerAgent.run(messages) already accepts a message list that becomes old_items in the loop. (2) Compaction summary as instruction vs message \u2014 currently summaries are prepended to instruction string via _create_compacted_instruction(); OpenClaw injects them as real messages replacing pre-compaction entries. Fix: convert compaction entries to assistant messages in the replay. (3) Cross-run relies on memory system only \u2014 TASK_MEMORY.md bootstrap + memory_search/get are the only bridges; the model never sees prior turns as conversation. Fix: transcript replay gives the model actual prior context. (4) No history sanitization \u2014 OpenClaw has a pipeline (repair tool pairings, drop thinking blocks, strip stale usage, validate images, limit turns). Fix: implement sanitize_history() + limit_history_turns() applied before replay. Key files: agents/openclaw/session.py (add build_replay_messages, sanitize_history, limit_history_turns), openclaw_agent.py (wire replay into perform_task before agent.run())."
     },
     {

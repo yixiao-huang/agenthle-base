@@ -408,3 +408,27 @@
   - System prompt report should be stored immediately after building instructions, before the agent loop starts — it captures the initial state, not per-step state
   - Plan documents written in planning mode exist only in ephemeral conversation context — always write to disk before exiting planning mode or implementing
 ---
+
+## 2026-03-16 - US-OC-012: Transcript Replay for Cross-Run Continuity
+- Implemented transcript replay pipeline in `agents/openclaw/session.py`:
+  - `build_replay_messages(entries)` — converts TranscriptEntry list to API message dicts; handles message, compaction (collapse to summary), and session (skip) entry types
+  - `sanitize_history(messages)` — five passes: strip base64 images, strip thinking blocks, repair orphaned tool pairs, strip stale usage keys, ensure user-first ordering
+  - `limit_history_turns(messages, limit)` — keeps last N user turns (and their associated assistant/tool responses); None/0 returns all
+  - `_sanitize_single_message` / `_repair_orphaned_tool_pairs` as private helpers
+- Wired replay into `openclaw_agent.py`:
+  - At startup: `load_history()` → `build_replay_messages()` → `sanitize_history()` → `limit_history_turns()` → re-sanitize (repairs orphans created at truncation boundary)
+  - `replay_messages + [{"role": "user", "content": instruction}]` passed as `messages` arg to `agent.run()` (CUA SDK accepts message list as old_items)
+  - After compaction: `replay_messages = []` — compacted instruction already contains prior context
+  - `max_history_turns` kwarg on `OpenClawAgent` (default: None = all turns)
+- Exported `build_replay_messages`, `sanitize_history`, `limit_history_turns` via `openclaw/__init__.py`
+- **Files changed:**
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/session.py` (build_replay_messages, sanitize_history, limit_history_turns + helpers)
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/__init__.py` (exports)
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw_agent.py` (replay wiring)
+  - `tests/test_openclaw_replay.py` (new, 34 tests — all pass)
+- **Learnings for future iterations:**
+  - Re-sanitize after limit_history_turns: truncation at a turn boundary can orphan tool results (e.g., a function_call was cut but its tool_result is still present). Double-sanitization is cheap and ensures correctness.
+  - CUA's `agent.run(messages)` accepts a message list as `old_items` — prepending replay messages to the instruction is the correct way to pass prior context; no SDK changes needed.
+  - After compaction, replay_messages must be cleared — the compacted instruction already embeds prior context via `_create_compacted_instruction()`, and leaving replay_messages would double-inject it.
+  - Compaction entries in the transcript collapse all prior messages to a single summary — `firstKeptEntryId` is the anchor; without it, prepend the summary to the front.
+---
