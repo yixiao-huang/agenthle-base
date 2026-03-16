@@ -25,6 +25,7 @@ from cua_bench.agents.openclaw.context import (
     MIN_CHUNK_RATIO,
     SAFETY_MARGIN,
     SUMMARIZATION_OVERHEAD_TOKENS,
+    SUMMARIZATION_SYSTEM_PROMPT,
     SYNTHETIC_TOOL_RESULT_CONTENT,
     CompactionResult,
     chunk_messages_by_max_tokens,
@@ -262,7 +263,28 @@ class TestSummarizeChunk:
             system_msg = call_args.kwargs["messages"][0]["content"]
             assert "opaque identifiers" in system_msg
 
-    def test_passes_previous_summary(self):
+    def test_system_prompt_matches_openclaw(self):
+        """System prompt must match OpenClaw's strict framing."""
+        assert "context summarization assistant" in SUMMARIZATION_SYSTEM_PROMPT
+        assert "Do NOT continue the conversation" in SUMMARIZATION_SYSTEM_PROMPT
+        assert "ONLY output the structured summary" in SUMMARIZATION_SYSTEM_PROMPT
+
+    def test_initial_prompt_uses_summarization_prompt(self):
+        """When no previous_summary, SUMMARIZATION_PROMPT should be in user message."""
+        mock_resp = _mock_litellm_response("Summary")
+        with patch("litellm.acompletion", new_callable=AsyncMock, return_value=mock_resp) as mock_acomp:
+            asyncio.get_event_loop().run_until_complete(
+                summarize_chunk(_make_messages(3), "test-model")
+            )
+            user_msg = mock_acomp.call_args.kwargs["messages"][1]["content"]
+            assert "## Goal" in user_msg
+            assert "## Progress" in user_msg
+            assert "## Next Steps" in user_msg
+            # Should NOT contain update prompt text
+            assert "NEW conversation messages" not in user_msg
+
+    def test_update_prompt_uses_update_summarization_prompt(self):
+        """When previous_summary is set, UPDATE_SUMMARIZATION_PROMPT should be used."""
         mock_resp = _mock_litellm_response("Updated summary")
         with patch("litellm.acompletion", new_callable=AsyncMock, return_value=mock_resp) as mock_acomp:
             asyncio.get_event_loop().run_until_complete(
@@ -271,9 +293,47 @@ class TestSummarizeChunk:
                     previous_summary="Earlier context here",
                 )
             )
-            call_args = mock_acomp.call_args
-            user_msg = call_args.kwargs["messages"][1]["content"]
-            assert "Earlier context here" in user_msg
+            user_msg = mock_acomp.call_args.kwargs["messages"][1]["content"]
+            assert "NEW conversation messages" in user_msg
+            assert "PRESERVE all existing information" in user_msg
+            # Should NOT contain initial prompt text
+            assert "Use this EXACT format:" not in user_msg
+
+    def test_conversation_wrapped_in_xml_tags(self):
+        """Conversation text must be wrapped in <conversation> tags."""
+        mock_resp = _mock_litellm_response("Summary")
+        with patch("litellm.acompletion", new_callable=AsyncMock, return_value=mock_resp) as mock_acomp:
+            asyncio.get_event_loop().run_until_complete(
+                summarize_chunk(_make_messages(3), "test-model")
+            )
+            user_msg = mock_acomp.call_args.kwargs["messages"][1]["content"]
+            assert "<conversation>" in user_msg
+            assert "</conversation>" in user_msg
+
+    def test_previous_summary_wrapped_in_xml_tags(self):
+        """Previous summary must be wrapped in <previous-summary> tags."""
+        mock_resp = _mock_litellm_response("Updated")
+        with patch("litellm.acompletion", new_callable=AsyncMock, return_value=mock_resp) as mock_acomp:
+            asyncio.get_event_loop().run_until_complete(
+                summarize_chunk(
+                    _make_messages(3), "test-model",
+                    previous_summary="Prior summary content",
+                )
+            )
+            user_msg = mock_acomp.call_args.kwargs["messages"][1]["content"]
+            assert "<previous-summary>" in user_msg
+            assert "</previous-summary>" in user_msg
+            assert "Prior summary content" in user_msg
+
+    def test_no_previous_summary_tags_when_initial(self):
+        """Initial summarization should not contain <previous-summary> tags."""
+        mock_resp = _mock_litellm_response("Summary")
+        with patch("litellm.acompletion", new_callable=AsyncMock, return_value=mock_resp) as mock_acomp:
+            asyncio.get_event_loop().run_until_complete(
+                summarize_chunk(_make_messages(3), "test-model")
+            )
+            user_msg = mock_acomp.call_args.kwargs["messages"][1]["content"]
+            assert "<previous-summary>" not in user_msg
 
     def test_passes_custom_instructions(self):
         mock_resp = _mock_litellm_response("Summary")
@@ -378,6 +438,22 @@ class TestSummarizeWithFallback:
 
 
 # ---------------------------------------------------------------------------
+# US-OC-018: Verify removed symbols
+# ---------------------------------------------------------------------------
+
+class TestRemovedSymbols:
+    def test_merge_summaries_instructions_removed(self):
+        """MERGE_SUMMARIES_INSTRUCTIONS should no longer exist in context module."""
+        import cua_bench.agents.openclaw.context as ctx
+        assert not hasattr(ctx, "MERGE_SUMMARIES_INSTRUCTIONS")
+
+    def test_merge_summaries_function_removed(self):
+        """_merge_summaries should no longer exist in context module."""
+        import cua_bench.agents.openclaw.context as ctx
+        assert not hasattr(ctx, "_merge_summaries")
+
+
+# ---------------------------------------------------------------------------
 # compact_messages (main entry point)
 # ---------------------------------------------------------------------------
 
@@ -451,16 +527,10 @@ class TestIdentifierPreservation:
     def test_preservation_text_mentions_ips(self):
         assert "IPs" in IDENTIFIER_PRESERVATION_INSTRUCTIONS
 
-    def test_injected_into_summarization_prompt(self):
+    def test_injected_into_summarization_system_prompt(self):
         """Verify identifier instructions appear in the system prompt sent to LLM."""
-        mock_resp = _mock_litellm_response("Summary")
-        with patch("litellm.acompletion", new_callable=AsyncMock, return_value=mock_resp) as mock_acomp:
-            asyncio.get_event_loop().run_until_complete(
-                summarize_chunk(_make_messages(3), "test-model")
-            )
-            system_content = mock_acomp.call_args.kwargs["messages"][0]["content"]
-            assert "opaque identifiers" in system_content
-            assert "UUIDs" in system_content
+        assert "opaque identifiers" in SUMMARIZATION_SYSTEM_PROMPT
+        assert "UUIDs" in SUMMARIZATION_SYSTEM_PROMPT
 
 
 # ---------------------------------------------------------------------------

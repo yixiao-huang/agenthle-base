@@ -27,13 +27,26 @@ export EVALUATION_OUTPUT_DIR="./trycua/cua-bench/${task}"
 #     --wait
 
 MAX_STEPS="${1:-500}"
+# model_id="anthropic/claude-sonnet-4-20250514"
+model_id="openai/computer-use-preview"
+# model_id="openai/gpt-5.4"
+summary_model_id="gpt-5-mini" # mini
+# Optional: use a cheaper model for summarization and memory flush
+# summary_model_id="anthropic/claude-haiku-4-5-20251001"
+# summary_model_id="${SUMMARY_MODEL:-}"
+
+SUMMARY_MODEL_ARG=""
+if [ -n "$summary_model_id" ]; then
+    SUMMARY_MODEL_ARG="--summary-model $summary_model_id"
+fi
 
 uv run python -m cua_bench.batch.solver ./tasks/game/${task} \
     --eval \
     --agent openclaw-agent \
-    --model anthropic/claude-sonnet-4-20250514 \
+    --model $model_id \
     --max-steps "$MAX_STEPS" \
-    --output-dir $EVALUATION_OUTPUT_DIR
+    --output-dir $EVALUATION_OUTPUT_DIR \
+    $SUMMARY_MODEL_ARG
 
 
 
