@@ -432,3 +432,13 @@
   - After compaction, replay_messages must be cleared — the compacted instruction already embeds prior context via `_create_compacted_instruction()`, and leaving replay_messages would double-inject it.
   - Compaction entries in the transcript collapse all prior messages to a single summary — `firstKeptEntryId` is the anchor; without it, prepend the summary to the front.
 ---
+
+## 2026-03-16 - US-OC-011 (DROPPED)
+- Story dropped: Abort/Resume Tracking is not applicable to the CUA harness.
+- OpenClaw's abort cutoff is an inbound message queue gate for external channels (Telegram, Discord) — it skips queued messages received after a `/stop` command. CUA has no inbound message queue, no `/stop` command, and no concept of mid-session abort with queued external messages.
+- US-OC-012's `limit_history_turns` already bounds transcript replay, making this story redundant.
+- **Files changed:** `.current-story` (cleared), `prd.json` (unicode normalization only; `passes: true` was already set when story was dropped)
+- **Learnings for future iterations:**
+  - When dropping a story, document the rationale in `prd.json` notes + a dedicated plan doc (`docs/plan/US-OC-011-abort-resume-dropped.md`) so future engineers understand why it was skipped without needing to re-analyze the OpenClaw source.
+  - The SID/timestamp dual-track comparison in OpenClaw is Twilio-specific (Twilio message SIDs are globally ordered). Our UUID-based transcript entries have no analogous ordering property.
+---
