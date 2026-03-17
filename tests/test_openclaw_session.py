@@ -32,7 +32,6 @@ class TestTokenUsage:
         assert t.output_tokens == 0
         assert t.cache_read == 0
         assert t.cache_write == 0
-        assert t.context_tokens == 0
 
     def test_accumulation(self):
         t = TokenUsage(input_tokens=100, output_tokens=50)
@@ -42,26 +41,24 @@ class TestTokenUsage:
 
     def test_accumulation_with_cache(self):
         t = TokenUsage()
-        t.accumulate(100, 50, cache_read=1000, cache_write=200, context_tokens=1500)
+        t.accumulate(100, 50, cache_read=1000, cache_write=200)
         assert t.input_tokens == 100
         assert t.output_tokens == 50
         assert t.cache_read == 1000
         assert t.cache_write == 200
-        assert t.context_tokens == 1500
 
         t.accumulate(50, 25, cache_read=500)
         assert t.cache_read == 1500
         assert t.cache_write == 200  # unchanged
 
     def test_roundtrip(self):
-        t = TokenUsage(input_tokens=42, output_tokens=7, cache_read=100, cache_write=20, context_tokens=500)
+        t = TokenUsage(input_tokens=42, output_tokens=7, cache_read=100, cache_write=20)
         d = t.to_dict()
         t2 = TokenUsage.from_dict(d)
         assert t2.input_tokens == 42
         assert t2.output_tokens == 7
         assert t2.cache_read == 100
         assert t2.cache_write == 20
-        assert t2.context_tokens == 500
 
     def test_from_dict_missing_keys(self):
         t = TokenUsage.from_dict({})
@@ -69,14 +66,12 @@ class TestTokenUsage:
         assert t.output_tokens == 0
         assert t.cache_read == 0
         assert t.cache_write == 0
-        assert t.context_tokens == 0
 
     def test_backward_compat_old_format(self):
         """Old state.json without cache fields loads correctly."""
         t = TokenUsage.from_dict({"input_tokens": 100, "output_tokens": 50})
         assert t.cache_read == 0
         assert t.cache_write == 0
-        assert t.context_tokens == 0
 
 
 # ---------------------------------------------------------------------------
@@ -93,6 +88,7 @@ class TestSessionState:
             compaction_count=1,
             compaction_summaries=["Agent navigated floor 2"],
             model="claude-sonnet",
+            contextTokens=200000,
             created_at="2026-03-11T10:00:00Z",
             updated_at="2026-03-11T10:15:00Z",
         )
@@ -104,12 +100,14 @@ class TestSessionState:
         assert restored.compaction_count == 1
         assert restored.compaction_summaries == ["Agent navigated floor 2"]
         assert restored.model == "claude-sonnet"
+        assert restored.contextTokens == 200000
 
     def test_defaults(self):
         state = SessionState(task_id="test")
         assert state.step_count == 0
         assert state.compaction_summaries == []
         assert state.model == ""
+        assert state.contextTokens == 0
         assert state.system_prompt_report is None
 
     def test_backward_compat_old_state(self):

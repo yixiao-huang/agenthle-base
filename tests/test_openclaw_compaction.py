@@ -26,6 +26,7 @@ from cua_bench.agents.openclaw.context import (
     SAFETY_MARGIN,
     SUMMARIZATION_OVERHEAD_TOKENS,
     SUMMARIZATION_SYSTEM_PROMPT,
+    SUMMARIZATION_TIMEOUT,
     SYNTHETIC_TOOL_RESULT_CONTENT,
     CompactionResult,
     chunk_messages_by_max_tokens,
@@ -365,6 +366,36 @@ class TestSummarizeChunk:
                         summarize_chunk(_make_messages(3), "test-model")
                     )
         assert mock_acomp.call_count == 3
+
+    def test_passes_timeout_to_litellm(self):
+        """Default call passes timeout=120 (SUMMARIZATION_TIMEOUT) to litellm."""
+        mock_resp = _mock_litellm_response("Summary")
+        with patch("litellm.acompletion", new_callable=AsyncMock, return_value=mock_resp) as mock_acomp:
+            asyncio.get_event_loop().run_until_complete(
+                summarize_chunk(_make_messages(3), "test-model")
+            )
+            assert mock_acomp.call_args.kwargs["timeout"] == SUMMARIZATION_TIMEOUT
+
+    def test_custom_timeout(self):
+        """Custom timeout value is forwarded to litellm."""
+        mock_resp = _mock_litellm_response("Summary")
+        with patch("litellm.acompletion", new_callable=AsyncMock, return_value=mock_resp) as mock_acomp:
+            asyncio.get_event_loop().run_until_complete(
+                summarize_chunk(_make_messages(3), "test-model", timeout=30)
+            )
+            assert mock_acomp.call_args.kwargs["timeout"] == 30
+
+    def test_timeout_fallback_via_summarize_with_fallback(self):
+        """Timeout errors trigger Tier 3 static fallback via summarize_with_fallback."""
+        timeout_error = Exception("Request timed out")
+        with patch("litellm.acompletion", new_callable=AsyncMock, side_effect=timeout_error):
+            with patch("asyncio.sleep", new_callable=AsyncMock):
+                result = asyncio.get_event_loop().run_until_complete(
+                    summarize_with_fallback(
+                        _make_messages(5), "test-model", 200_000, 50_000,
+                    )
+                )
+        assert "5 messages could not be summarized" in result
 
 
 # ---------------------------------------------------------------------------

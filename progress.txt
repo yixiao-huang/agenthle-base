@@ -556,17 +556,17 @@
 ---
 
 ## 2026-03-16 - US-OC-014: Transcript Fidelity: Capture on_llm_start Messages
-- Verified our session JSONL format against OpenClaw's golden reference (`docs/openclaw_session.jsonl`)
+- Verified our session JSONL format against OpenClaw's golden reference (`docs/openclaw_ref/openclaw_session.jsonl`)
 - Confirmed our transcript already faithfully reproduces the bidirectional message logging pattern — no code changes needed
 - Golden reference has 5 entry types (`session`, `model_change`, `thinking_level_change`, `custom`, `message`) and 3 message roles (`user`, `assistant`, `toolResult`)
 - Our format differences are CUA naming conventions (function_call/computer_call vs toolCall; `tool` role vs `toolResult` role) and CUA-specific additions (compaction entries), not missing data
 - Full API payload logging (ImageRetentionCallback-preprocessed messages) is a SEPARATE mechanism in OpenClaw (`anthropic-payload.jsonl`, only when `OPENCLAW_ANTHROPIC_PAYLOAD_LOG=true`) — NOT part of the session JSONL. The PRD description was misleading; the acceptance criteria were revised post-investigation.
 - Documented format comparison in `docs/plan/US-OC-014-transcript-fidelity.md`
-- Added Session Store Entry (real example) to `docs/openclaw-source-analysis.md` from captured `docs/openclaw_state.json`
+- Added Session Store Entry (real example) to `docs/openclaw-source-analysis.md` from captured `docs/openclaw_ref/openclaw_state.json`
 - **Files changed:**
   - `docs/plan/US-OC-014-transcript-fidelity.md` (new — design doc comparing our format against OpenClaw golden reference)
-  - `docs/openclaw_session.jsonl` (new — golden reference from real OpenClaw instance)
-  - `docs/openclaw_state.json` (new — captured session store state from live OpenClaw instance)
+  - `docs/openclaw_ref/openclaw_session.jsonl` (new — golden reference from real OpenClaw instance)
+  - `docs/openclaw_ref/openclaw_state.json` (new — captured session store state from live OpenClaw instance)
   - `docs/openclaw-source-analysis.md` (added Session Store Entry section with real example)
   - `docs/judges/judge_2026-03-16_1412_US-OC-014.md` (judge audit report)
   - No source code changes to context.py, session.py, or openclaw_agent.py
@@ -575,4 +575,27 @@
   - OpenClaw's session JSONL is ONLY bidirectional conversation messages — NOT the preprocessed API payload. Full API payload is a separate optional debug log (`anthropic-payload.jsonl`). Do NOT try to embed API payload in the session transcript.
   - PRD story notes/descriptions can be misleading before investigation. Always verify against golden reference before implementing.
   - Our `_unnest_tool_blocks()` (US-OC-022) handles the toolResult vs tool role difference for replay — this is by design.
+---
+
+## 2026-03-16 - US-OC-015: Summarization Safety Timeout
+- Added `SUMMARIZATION_TIMEOUT = 120` constant to `context.py` as explicit timeout for litellm.acompletion calls
+- Added `timeout: int = SUMMARIZATION_TIMEOUT` parameter to `summarize_chunk`, `summarize_chunks_iterative`, `summarize_with_fallback`, and `compact_messages` — timeout is threaded through all callers
+- Removed `context_tokens` from `TokenUsage` (moved to `SessionState.contextTokens` as top-level field matching OpenClaw's schema — this was part of US-OC-004a work bundled here)
+- Added `contextTokens: int = 0` to `SessionState` with serialization roundtrip support
+- Updated `docs/openclaw-source-analysis.md` (removed stale Session Store Entry that referenced deleted JSON files)
+- Updated golden reference paths in `docs/plan/US-OC-014-transcript-fidelity.md` and `progress.txt` to `docs/openclaw_ref/`
+- Updated `prd.json`: added `goldenReference` field to US-OC-004a story
+- **Files changed:**
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/context.py` (SUMMARIZATION_TIMEOUT constant + timeout param on 4 functions)
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/session.py` (remove context_tokens from TokenUsage; add contextTokens to SessionState)
+  - `tests/test_openclaw_compaction.py` (3 new timeout tests; import SUMMARIZATION_TIMEOUT)
+  - `tests/test_openclaw_session.py` (remove context_tokens assertions; add contextTokens to SessionState tests)
+  - `docs/openclaw-source-analysis.md` (removed stale Session Store Entry section)
+  - `docs/plan/US-OC-014-transcript-fidelity.md` (updated path references)
+  - `prd.json` (goldenReference added; passes=true for US-OC-015)
+  - `docs/openclaw_ref/` (new dir — golden reference files moved from docs/ root)
+- **Learnings for future iterations:**
+  - When OpenClaw separates contextTokens (model capacity) from TokenUsage (API usage), keep them separate too. TokenUsage tracks cumulative API calls; contextTokens is a static model-capability field on the session.
+  - `SUMMARIZATION_TIMEOUT = 120` seconds is the right default — long enough for slow LLM calls, explicit enough to prevent indefinite hangs.
+  - Timeout in litellm is passed as a simple `timeout=N` kwarg to `acompletion`. Timeouts trigger exceptions that fall through the existing three-tier fallback to a static note.
 ---

@@ -8,7 +8,7 @@ actual OpenClaw session JSONL and documents the differences.
 
 ## Golden Reference
 
-`docs/openclaw_session.jsonl` — real OpenClaw session file captured from a live instance.
+`docs/openclaw_ref/openclaw_session.jsonl` — real OpenClaw session file captured from a live instance.
 
 ### OpenClaw Session JSONL Format (from golden reference)
 
@@ -87,5 +87,5 @@ file, not embedded in the session transcript. Tracked as potential future story.
 
 ## Files
 
-- `docs/openclaw_session.jsonl` — golden reference (real OpenClaw session)
+- `docs/openclaw_ref/openclaw_session.jsonl` — golden reference (real OpenClaw session)
 - `docs/plan/US-OC-014-transcript-fidelity.md` — this design doc

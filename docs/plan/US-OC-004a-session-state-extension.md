@@ -21,11 +21,13 @@ Compared our `state.json` schema against OpenClaw's `SessionEntry` (60+ fields).
 
 ### 2. Add cache token fields to TokenUsage
 
-Add `cache_read: int = 0`, `cache_write: int = 0`, `context_tokens: int = 0`. Update `accumulate()` with optional kwargs (backward-compatible defaults), `to_dict()`, `from_dict()`.
+Add `cache_read: int = 0`, `cache_write: int = 0` to TokenUsage. Update `accumulate()` with optional kwargs (backward-compatible defaults), `to_dict()`, `from_dict()`.
 
-### 3. Add `model` to SessionState
+**Note:** `contextTokens` (context window size / model capacity) is a top-level SessionState field, NOT in TokenUsage. This matches OpenClaw's `contextTokens: 200000` on the session entry. TokenUsage tracks only cumulative API usage.
 
-Add `model: str = ""`. Set in `init_session(model=...)`. Update serialization.
+### 3. Add `model` and `contextTokens` to SessionState
+
+Add `model: str = ""` and `contextTokens: int = 0`. Set in `init_session(model=...)`. `contextTokens` stores the model's context window size (e.g. 200000), matching OpenClaw's top-level `contextTokens` field on the session entry. Update serialization.
 
 ### 4. Add `system_prompt_report` to SessionState
 

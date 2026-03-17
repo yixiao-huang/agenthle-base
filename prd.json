@@ -115,11 +115,12 @@
         ],
         "depends": "US-OC-004 must be done first (extends the session schema it created)",
         "reference": "openclaw/src/config/sessions/types.ts (SessionEntry \u2014 token fields, systemPromptReport type); openclaw/src/agents/system-prompt-report.ts (buildSystemPromptReport \u2014 CUA adaptation reference)",
+        "goldenReference": "docs/openclaw_ref/openclaw_state.json (real session state dump from a live OpenClaw instance \u2014 shows full SessionEntry structure including token usage, skillsSnapshot, systemPromptReport, routing metadata, and lifecycle flags)",
         "planFile": "docs/plan/US-OC-004a-session-state-extension.md"
       },
       "acceptanceCriteria": [
         "Level 1: Lint passes (uv run ruff check .)",
-        "Level 1: Unit tests pass \u2014 run_number removed from SessionState; TokenUsage includes cache_read, cache_write, context_tokens; SessionState includes model field; system_prompt_report stored and loaded correctly",
+        "Level 1: Unit tests pass \u2014 run_number removed from SessionState; TokenUsage includes cache_read, cache_write; SessionState includes model and contextTokens (context window size) fields; system_prompt_report stored and loaded correctly",
         "Level 1: SessionState.to_dict()/from_dict() round-trips all new fields correctly",
         "Level 1: system_prompt_report schema includes: system_prompt (chars, project_context_chars, non_project_context_chars), injected_files (name, raw_chars, injected_chars, truncated), tools (name, summary_chars, schema_chars, properties_count)",
         "Level 1: init_session() no longer uses run_number; session boundaries are tracked only via JSONL session header entries",
@@ -433,7 +434,7 @@
       ],
       "priority": 19,
       "passes": true,
-      "notes": "PRD Group B (from US-OC-006 design review). CUA's PromptInstructionsCallback and ImageRetentionCallback modify messages before API calls. Our transcript captures what CUA yields (output items), not what it sends (preprocessed messages). For replay fidelity, we need the actual API-facing messages. The ContextOverflowCallback already receives the full payload in on_llm_start \u2014 extend it to persist these messages. OUTCOME: Verification story — our session JSONL already stores bidirectional messages matching OpenClaw's format. Full API payload (preprocessed messages) is a separate optional debug log in OpenClaw, NOT part of the session JSONL. No code changes needed. See docs/plan/US-OC-014-transcript-fidelity.md."
+      "notes": "PRD Group B (from US-OC-006 design review). CUA's PromptInstructionsCallback and ImageRetentionCallback modify messages before API calls. Our transcript captures what CUA yields (output items), not what it sends (preprocessed messages). For replay fidelity, we need the actual API-facing messages. The ContextOverflowCallback already receives the full payload in on_llm_start \u2014 extend it to persist these messages. OUTCOME: Verification story \u2014 our session JSONL already stores bidirectional messages matching OpenClaw's format. Full API payload (preprocessed messages) is a separate optional debug log in OpenClaw, NOT part of the session JSONL. No code changes needed. See docs/plan/US-OC-014-transcript-fidelity.md."
     },
     {
       "id": "US-OC-015",
@@ -451,7 +452,7 @@
         "Level 1: Unit test \u2014 timeout triggers fallback to static summary note"
       ],
       "priority": 20,
-      "passes": false,
+      "passes": true,
       "notes": "PRD Group B (from US-OC-006 design review). Minor gap: add explicit timeout=60 to litellm.acompletion() in summarize_chunk(). Currently relying on litellm defaults which may be very long or unset. If timeout triggers, should fall through to the existing three-tier fallback (static note)."
     },
     {
