@@ -554,3 +554,25 @@
   - The stop-compact-resume pattern forced clearing `replay_messages` after compaction (the compacted instruction contained prior context). The new approach builds the compacted items list directly from transcript entries and passes them forward — no separate instruction modification needed.
   - Removing `_create_compacted_instruction` also removes cross-run compaction pre-loading. If cross-run context continuity is needed in future, it can be injected as an initial user message in `_build_compacted_items()` rather than as a modified instruction string.
 ---
+
+## 2026-03-16 - US-OC-014: Transcript Fidelity: Capture on_llm_start Messages
+- Verified our session JSONL format against OpenClaw's golden reference (`docs/openclaw_session.jsonl`)
+- Confirmed our transcript already faithfully reproduces the bidirectional message logging pattern — no code changes needed
+- Golden reference has 5 entry types (`session`, `model_change`, `thinking_level_change`, `custom`, `message`) and 3 message roles (`user`, `assistant`, `toolResult`)
+- Our format differences are CUA naming conventions (function_call/computer_call vs toolCall; `tool` role vs `toolResult` role) and CUA-specific additions (compaction entries), not missing data
+- Full API payload logging (ImageRetentionCallback-preprocessed messages) is a SEPARATE mechanism in OpenClaw (`anthropic-payload.jsonl`, only when `OPENCLAW_ANTHROPIC_PAYLOAD_LOG=true`) — NOT part of the session JSONL. The PRD description was misleading; the acceptance criteria were revised post-investigation.
+- Documented format comparison in `docs/plan/US-OC-014-transcript-fidelity.md`
+- Added Session Store Entry (real example) to `docs/openclaw-source-analysis.md` from captured `docs/openclaw_state.json`
+- **Files changed:**
+  - `docs/plan/US-OC-014-transcript-fidelity.md` (new — design doc comparing our format against OpenClaw golden reference)
+  - `docs/openclaw_session.jsonl` (new — golden reference from real OpenClaw instance)
+  - `docs/openclaw_state.json` (new — captured session store state from live OpenClaw instance)
+  - `docs/openclaw-source-analysis.md` (added Session Store Entry section with real example)
+  - `docs/judges/judge_2026-03-16_1412_US-OC-014.md` (judge audit report)
+  - No source code changes to context.py, session.py, or openclaw_agent.py
+  - `submodules/cua/libs/cua-bench/uv.lock` (updated after uv sync --reinstall)
+- **Learnings for future iterations:**
+  - OpenClaw's session JSONL is ONLY bidirectional conversation messages — NOT the preprocessed API payload. Full API payload is a separate optional debug log (`anthropic-payload.jsonl`). Do NOT try to embed API payload in the session transcript.
+  - PRD story notes/descriptions can be misleading before investigation. Always verify against golden reference before implementing.
+  - Our `_unnest_tool_blocks()` (US-OC-022) handles the toolResult vs tool role difference for replay — this is by design.
+---
