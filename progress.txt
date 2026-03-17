@@ -599,3 +599,25 @@
   - `SUMMARIZATION_TIMEOUT = 120` seconds is the right default — long enough for slow LLM calls, explicit enough to prevent indefinite hangs.
   - Timeout in litellm is passed as a simple `timeout=N` kwarg to `acompletion`. Timeouts trigger exceptions that fall through the existing three-tier fallback to a static note.
 ---
+
+## 2026-03-16 - US-OC-028: Agent Loop Refactor — Clean Separation of Concerns
+- Moved memory flush logic from `OpenClawAgent._run_memory_flush()` method into standalone `run_memory_flush()` in new `openclaw/memory_flush.py` module
+- Moved `group_step_output()` and `_find_latest_screenshot()` from `openclaw_agent.py` into new `openclaw/transcript.py` module
+- Moved transcript logging per-step from `perform_task()` into `OpenClawComputerAgent._log_step_to_transcript()` (called inside `run()`)
+- Moved memory flush check from dual locations (perform_task + _memory_flush_hook closure) into single `OpenClawComputerAgent._maybe_flush_memory()` (called pre-API in `run()`)
+- `overflow_cb` is now auto-injected into callbacks by `OpenClawComputerAgent.__init__()` — no longer passed twice
+- `perform_task()` async for loop body reduced to ~15 lines (usage tracking, max_steps check, tracer, DONE check)
+- Added `_record_tracer_step()` and `_check_done()` as standalone helpers at module level in `openclaw_agent.py`
+- **Files changed:**
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/memory_flush.py` (new — extracted from openclaw_agent.py)
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/transcript.py` (new — extracted from openclaw_agent.py)
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/agent_loop.py` (added _maybe_flush_memory, _log_step_to_transcript, removed on_memory_flush hook, overflow_cb auto-inject)
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/__init__.py` (export run_memory_flush, group_step_output)
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw_agent.py` (removed ~350 lines, reduced loop body, added _record_tracer_step/_check_done)
+  - `prd.json` (passes=true for US-OC-028)
+- **Learnings for future iterations:**
+  - Moving logic INTO the agent loop (pre-API vs per-step-in-caller) is cleaner: avoids dual call sites and closure variable capture. Match OpenClaw's single-call-site pattern (runMemoryFlushIfNeeded before runAgentTurnWithFallback in agent-runner-memory.ts).
+  - Auto-injecting callbacks in the constructor (instead of the caller passing them) eliminates an entire category of wiring bugs. The agent owns its own dependencies.
+  - Extracting agent methods to standalone module-level functions improves testability — no class instantiation needed to test the logic.
+  - When multiple files import from each other (agent_loop imports from openclaw_agent), moving shared code into a third module (transcript.py, memory_flush.py) is the clean solution.
+---
