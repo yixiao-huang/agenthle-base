@@ -49,9 +49,13 @@ test_eval.sh
 helloworld/
 
 # Runtime memory data
+memory/
 memory_data/
 memory_data_legacy/
 openclaw_memory/
+
+# OpenClaw reference source (not part of this repo)
+openclaw/
 
 # Runtime session data
 openclaw_sessions/
