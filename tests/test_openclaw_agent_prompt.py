@@ -1,8 +1,12 @@
 """Integration test: simulate an OpenClaw agent run and capture the system prompt.
 
-Mocks the CUA SDK (ComputerAgent, MilestoneTool, session) so no VM is needed.
-The test captures the `instructions` string passed to ComputerAgent and prints it,
-verifying that MemoryStore, PromptBuilder, and bootstrap injection are wired correctly.
+Mocks the CUA SDK (OpenClawComputerAgent, MilestoneTool, session) so no VM is needed.
+The test captures the `instructions` string passed to OpenClawComputerAgent and prints
+it, verifying that MemoryStore, PromptBuilder, and bootstrap injection are wired
+correctly.
+
+Note: After US-OC-028, perform_task() instantiates OpenClawComputerAgent directly
+(not the base ComputerAgent), so we patch OpenClawComputerAgent in the openclaw package.
 """
 
 import asyncio
@@ -53,16 +57,20 @@ def _run_agent(logging_dir, mem_base, task_description="Navigate to floor 3 and 
     """Run the agent with mocks, return the captured instructions string."""
     captured = {}
 
-    def fake_computer_agent(**kwargs):
+    def fake_openclaw_computer_agent(**kwargs):
         captured["instructions"] = kwargs.get("instructions", "")
-        agent = MagicMock()
-        agent.run = MagicMock(return_value=_empty_async_gen())
-        return agent
+        agent_mock = MagicMock()
+        agent_mock.run = MagicMock(return_value=_empty_async_gen())
+        agent_mock.compaction_count = 0
+        return agent_mock
 
     session = _make_mock_session()
 
     with (
-        patch("agent.ComputerAgent", side_effect=fake_computer_agent),
+        patch(
+            "cua_bench.agents.openclaw.OpenClawComputerAgent",
+            side_effect=fake_openclaw_computer_agent,
+        ),
         patch("agent.tools.MilestoneTool", return_value=_make_mock_milestone()),
         patch.object(MemoryStore, "DEFAULT_BASE_DIR", str(mem_base)),
     ):

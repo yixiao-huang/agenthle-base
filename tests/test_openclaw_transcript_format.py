@@ -1,12 +1,12 @@
 """Tests for transcript JSONL format correctness (US-OC-004b).
 
 Exercises the group_step_output() and _find_latest_screenshot() helpers from
-openclaw_agent.py without requiring a VM. All tests are pure unit tests.
+openclaw/transcript.py without requiring a VM. All tests are pure unit tests.
 """
 
 import time
 
-from cua_bench.agents.openclaw_agent import _find_latest_screenshot, group_step_output
+from cua_bench.agents.openclaw.transcript import _find_latest_screenshot, group_step_output
 from cua_bench.agents.openclaw.session import SessionManager
 
 
