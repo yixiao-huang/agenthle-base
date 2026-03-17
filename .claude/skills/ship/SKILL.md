@@ -76,20 +76,29 @@ prompt: |
 
   Set `passes: true` for the completed story in `prd.json`.
 
-  ### 5. Check for submodule changes
+  ### 5. Sync design docs to CUA submodule
 
-  If any files under `submodules/cua/` were modified:
+  If any files under `docs/plan/`, top-level markdown files in `docs/`, `prd.json`, or `progress.txt` were modified (check with `git diff --name-only HEAD`):
+  1. Copy updated plan files: `cp docs/plan/*.md submodules/cua/design-docs/plans/`
+  2. Copy updated top-level docs: `for f in docs/*.md; do cp "$f" submodules/cua/design-docs/; done`
+  3. Copy PRD and progress: `cp prd.json progress.txt submodules/cua/design-docs/`
+
+  This ensures the CUA submodule's `design-docs/` stays in sync with the parent repo's docs.
+
+  ### 6. Check for submodule changes
+
+  If any files under `submodules/cua/` were modified (including from the design-docs sync above):
   1. `cd submodules/cua && git add -A && git commit -m "feat: [Story ID] - [description]"`
   2. `git push` (pushes to fork, not upstream)
   3. `cd` back to project root
 
   This must happen BEFORE the parent repo commit.
 
-  ### 6. Update architecture.md (if needed)
+  ### 7. Update architecture.md (if needed)
 
   If the story added/removed components, changed data flow, or added config — update architecture.md. Skip for internal-only refactors.
 
-  ### 7. Commit and push
+  ### 8. Commit and push
 
   ```bash
   git add -A
@@ -97,11 +106,11 @@ prompt: |
   git push
   ```
 
-  ### 8. Clear story lock
+  ### 9. Clear story lock
 
   Write an empty string to `.current-story`.
 
-  ### 9. Final verification
+  ### 10. Final verification
 
   Run `git status` and `git log --oneline -3` to confirm the commit landed cleanly.
 

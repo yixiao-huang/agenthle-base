@@ -1,6 +1,6 @@
 # AgentHLE — OpenClaw Reproduction Development Map
 
-> Auto-generated 2026-03-16. 16/28 stories done (57%).
+> Auto-generated 2026-03-17. 22/33 stories done (67%).
 
 ```
 ═══ PHASE 1: Independent Modules ════════════════════════════════════
@@ -20,7 +20,7 @@
        │                               │                   Transcript Replay
        │                               │                         │
        │                               │                         ▼
-       │                               │                   ✗ US-OC-022 (P8.2)
+       │                               │                   ✓ US-OC-022 (P8.2)
        │                               │                   Replay → Responses API
        │                               │
        ▼                               ▼
@@ -33,8 +33,8 @@
        │    Wire Memory Flush           │
        │         │                      │
        │         ▼                      │
-       │    ✗ US-OC-025 (P5.2) ◄───────┘   ← CURRENT STORY
-       │    Fix Memory Flush Timing         (highest priority failing)
+       │    ✓ US-OC-025 (P5.2) ◄───────┘
+       │    Fix Memory Flush Timing
        │                                │
        ▼                                │
   ✓ US-OC-006 (P6)                     │
@@ -48,7 +48,7 @@
        │    Structured Summarization    │
        │         │                      │
        │         ▼                      │
-       │    ✗ US-OC-015 (P13.1)        │
+       │    ✓ US-OC-015 (P13.1)        │
        │    Summarization Timeout       │
        │         │                      │
        │         ▼                      │
@@ -65,9 +65,14 @@
                      ├──────────────────────────────┐
                      │                              │
                      ▼                              ▼
-         ✗ US-OC-014 (P13)              ✓ US-OC-021 (P18)
+         ✓ US-OC-014 (P13)              ✓ US-OC-021 (P18)
          Transcript Fidelity            CLI: --summary-model
          (on_llm_start capture)
+                     │
+                     ▼
+         ✓ US-OC-017 (P15)              ✓ US-OC-028 (P24)
+         Custom Loop Architecture        Agent Loop Refactor
+                                         (perform_task boundary)
 
 
 ═══ CROSS-CUTTING / ENHANCEMENTS ════════════════════════════════════
@@ -75,23 +80,29 @@
   ┌─────────────────────────┐   ┌─────────────────────────┐
   │  Thinking Mode          │   │  Audits & Reviews       │
   │                         │   │                         │
-  │  ✗ US-OC-019 (P16)     │   │  ✗ US-OC-009 (P9)      │
+  │  ✗ US-OC-019 (P25)     │   │  ✗ US-OC-009 (P27)     │
   │  Config + CLI + Loop    │   │  CUA SDK Audit          │
   │         │               │   │                         │
-  │         ▼               │   │  ✗ US-OC-010 (P10)     │
-  │  ✗ US-OC-020 (P17)     │   │  Skipped Component      │
+  │         ▼               │   │  ✗ US-OC-010 (P28)     │
+  │  ✗ US-OC-020 (P26)     │   │  Skipped Component      │
   │  Wire into Flush &      │   │  Review                 │
   │  Compaction             │   │                         │
   └─────────────────────────┘   └─────────────────────────┘
 
   ┌─────────────────────────┐   ┌─────────────────────────┐
-  │  Architecture           │   │  Content                │
+  │  Content & Tools        │   │  Compatibility          │
   │                         │   │                         │
-  │  ✗ US-OC-017 (P15)     │   │  ✗ US-OC-024 (P15.1)   │
-  │  Custom Loop Explore    │   │  AGENTS.md Enrichment   │
+  │  ✗ US-OC-024 (P21)     │   │  ✗ US-OC-023 (P22)     │
+  │  AGENTS.md Enrichment   │   │  Opus 4.6 Tool Compat   │
   │                         │   │                         │
-  │  ✗ US-OC-023 (P23)     │   └─────────────────────────┘
-  │  Opus 4.6 Tool Compat   │
+  │  ✗ US-OC-029 (P29)     │   │  ✗ US-OC-032 (P32)     │
+  │  Subagent Delegation    │   │  Cross-Model Message    │
+  │                         │   │  Format Compat          │
+  │  ✗ US-OC-030 (P30)     │   │                         │
+  │  Visual Analysis Tool   │   └─────────────────────────┘
+  │                         │
+  │  ✗ US-OC-031 (P31)     │
+  │  Tool Audit: Migratable │
   └─────────────────────────┘
 ```
 
@@ -111,29 +122,29 @@ openclaw_agent.py ──┬──→ prompt.py (System Prompt)
 
 | Status  | Count | Bar |
 |---------|-------|-----|
-| Done    | 16    | ████████████████░░░░░░░░░░░░ 57% |
-| Failing | 12    | ████████████░░░░░░░░░░░░░░░░ 43% |
+| Done    | 22    | ██████████████████████░░░░░░░░░░░ 67% |
+| Pending | 11    | ███████████░░░░░░░░░░░░░░░░░░░░░ 33% |
 
 ## Priority Queue (Next Up)
 
 | Priority | ID | Title |
 |----------|----|-------|
-| 5.2 | US-OC-025 | Fix Memory Flush Timing: Pre-Turn Check |
-| 8.2 | US-OC-022 | Replay Message Format: Unnest to Responses API |
-| 9 | US-OC-009 | Post-Eval: CUA SDK Component Audit |
-| 10 | US-OC-010 | Post-Eval: Skipped Component Review |
-| 13 | US-OC-014 | Transcript Fidelity: Capture on_llm_start |
-| 13.1 | US-OC-015 | Summarization Safety Timeout |
-| 14 | US-OC-016 | Multi-Stage Summarization for Scale |
-| 15 | US-OC-017 | Custom Loop Architecture Exploration |
-| 15.1 | US-OC-024 | AGENTS.md Memory Guidance Enrichment |
-| 16 | US-OC-019 | Thinking Mode: Config, CLI, Main Agent Loop |
-| 17 | US-OC-020 | Thinking Mode: Wire into Memory Flush & Compaction |
-| 23 | US-OC-023 | CUA Anthropic Loop: Opus 4.6 Tool Version Compat |
+| 21 | US-OC-024 | AGENTS.md Memory Guidance Enrichment |
+| 22 | US-OC-023 | CUA Anthropic Loop: Opus 4.6 Tool Version Compat |
+| 23 | US-OC-016 | Multi-Stage Summarization for Scale |
+| 25 | US-OC-019 | Thinking Mode: Config, CLI, Main Agent Loop |
+| 26 | US-OC-020 | Thinking Mode: Wire into Memory Flush & Compaction |
+| 27 | US-OC-009 | Post-Eval: CUA SDK Component Audit |
+| 28 | US-OC-010 | Post-Eval: Skipped Component Review |
+| 29 | US-OC-029 | Tool: Subagent Delegation |
+| 30 | US-OC-030 | Tool: Visual Analysis (Figure/Image Reading) |
+| 31 | US-OC-031 | Tool Audit: Identify Migratable OpenClaw Tools |
+| 32 | US-OC-032 | Cross-Model Message Format Compatibility |
 
 ## Key Takeaways
 
-- **Phase 1** (independent modules) is fully complete — prompt, memory, session all done
-- **Phase 2** (context management) is mostly done, with US-OC-025 (memory flush timing) being the current blocker
-- **Phase 3** (integration) core is done, but refinements remain (transcript fidelity, replay format)
-- **Cross-cutting** work (thinking mode, audits, architecture exploration) is all still pending — lower priority polish/exploration items
+- **Phase 1** (independent modules) is fully complete — prompt, memory, session, replay all done
+- **Phase 2** (context management) is nearly complete — only US-OC-016 (multi-stage summarization) remains
+- **Phase 3** (integration) is complete — agent loop, transcript fidelity, custom loop architecture, and the perform_task refactor are all shipped
+- **New stories** added since last update: US-OC-028 (agent loop refactor), US-OC-029–032 (tools, audits, cross-model compat)
+- **Remaining work** is cross-cutting: thinking mode, tool additions (subagent, visual analysis), audits, and compatibility fixes
