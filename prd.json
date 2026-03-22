@@ -898,7 +898,7 @@
         "Level 2: CONTEXT_WINDOW_OVERRIDE=35000 bash run_magic_tower.sh 50 anthropic/claude-opus-4-6 — completes all 50 steps including compaction without 'assistant message prefill' errors"
       ],
       "priority": 10,
-      "passes": false,
+      "passes": true,
       "notes": "Discovered 2026-03-22: after fixing US-OC-023 (ImageRetentionCallback tool pairing), the agent runs past the original crash point but hits a new error after compaction: 'This model does not support assistant message prefill. The conversation must end with a user message.' Root cause: ImageRetentionCallback removes old computer_call + computer_call_output pairs from the kept messages, leaving only assistant text. After compaction, the reconstructed message list can end with role=assistant (msg[30] in the failing trace). Opus 4.6 rejects this because it doesn't support prefill. Fix options: (a) append a synthetic user message after compaction if the last message is assistant, (b) ensure _compact_in_place always adds a continuation prompt, or (c) fix in the Anthropic loop's predict_step before calling the API."
     }
   ]

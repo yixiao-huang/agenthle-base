@@ -3,14 +3,18 @@
 # First run includes setup (opens game); subsequent runs skip it.
 #
 # Usage:
-#   bash run_magic_tower_loop.sh [max_steps] [max_attempts]
-#   bash run_magic_tower_loop.sh 50        # 50 steps, unlimited attempts
-#   bash run_magic_tower_loop.sh 50 10     # 50 steps, max 10 attempts
+#   bash run_magic_tower_loop.sh [max_steps] [max_attempts] [model] [summary_model]
+#   bash run_magic_tower_loop.sh 50                          # 50 steps, unlimited attempts, default models
+#   bash run_magic_tower_loop.sh 50 10                       # 50 steps, max 10 attempts
+#   bash run_magic_tower_loop.sh 200 5 anthropic/claude-opus-4-6
+#   bash run_magic_tower_loop.sh 200 5 anthropic/claude-opus-4-6 anthropic/claude-opus-4-6
 
 set -euo pipefail
 
 MAX_STEPS="${1:-50}"
 MAX_ATTEMPTS="${2:-999}"
+model_id="${3:-anthropic/claude-haiku-4-5-20251001}"
+summary_model_id="${4:-$model_id}"
 
 # --- Same env config as run_magic_tower.sh ---
 export CUA_ENV_API_URL="http://${VM_IP}:5000"
@@ -21,9 +25,6 @@ export XDG_DATA_HOME="./trycua"
 task="mota_24_easy"
 export MEMORY_TASK_ID="${task}"
 export EVALUATION_OUTPUT_DIR="./trycua/cua-bench/${task}"
-
-model_id="anthropic/claude-haiku-4-5-20251001"
-summary_model_id="anthropic/claude-haiku-4-5-20251001"
 
 SUMMARY_MODEL_ARG=""
 if [ -n "$summary_model_id" ]; then
@@ -36,7 +37,8 @@ TASK_TAG="GAME_MOTA_24_EZ"
 # --- Logging: tee all output to logs/loop_run/<timestamp>.log ---
 LOG_DIR="./logs/loop_run"
 mkdir -p "$LOG_DIR"
-LOG_FILE="$LOG_DIR/$(date '+%Y%m%d_%H%M%S')_steps${MAX_STEPS}_attempts${MAX_ATTEMPTS}.log"
+model_short=$(echo "$model_id" | sed 's|.*/||; s|-[0-9]*$||')
+LOG_FILE="$LOG_DIR/$(date '+%Y%m%d_%H%M%S')_steps${MAX_STEPS}_attempts${MAX_ATTEMPTS}_${model_short}.log"
 exec > >(tee -a "$LOG_FILE") 2>&1
 echo "Log file: $LOG_FILE"
 
@@ -52,7 +54,7 @@ run_solver() {
         "$@"
 }
 
-echo "=== Run Loop: max_steps=$MAX_STEPS, max_attempts=$MAX_ATTEMPTS ==="
+echo "=== Run Loop: max_steps=$MAX_STEPS, max_attempts=$MAX_ATTEMPTS, model=$model_id, summary=$summary_model_id ==="
 
 attempt=0
 while [ "$attempt" -lt "$MAX_ATTEMPTS" ]; do
