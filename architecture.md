@@ -1,4 +1,4 @@
-<!-- Last updated: 2026-03-16 -->
+<!-- Last updated: 2026-03-22 -->
 # AgentHLE Architecture
 
 ## Overview
@@ -57,14 +57,6 @@ agenthle-base/
 ├── pyproject.toml               # Python config (uv workspace)
 ├── .current-story               # Story lock file (active story ID)
 │
-├── memory/                      # Memory system (available, not yet wired into agent)
-│   ├── __init__.py              # Exports: MemoryStore, MemorySearchTool, MemoryGetTool, MemoryWriteTool
-│   ├── store.py                 # MemoryStore — markdown file storage layer
-│   └── tools.py                 # Memory tools (BaseTool subclasses)
-│
-├── memory_data/                 # Runtime memory storage
-│   └── memory_logs/             # Daily logs (YYYY-MM-DD.md)
-│
 ├── utils/
 │   └── evaluation.py            # VLM judge, EvaluationContext, scoring modes
 │
@@ -75,10 +67,6 @@ agenthle-base/
 │       ├── mota_24/main.py
 │       └── mota_24_easy/main.py # Magic Tower easy task
 │
-├── tests/
-│   ├── test_memory_store.py     # MemoryStore tests
-│   └── test_memory_tools.py     # Memory tool tests
-│
 ├── docs/                        # Reference docs & audit reports
 │   ├── openclaw-context-flow.html    # Interactive OpenClaw pipeline visual
 │   ├── openclaw-source-analysis.md   # OpenClaw TypeScript source analysis
@@ -86,14 +74,14 @@ agenthle-base/
 │   ├── judges/                       # /judge audit reports (timestamped)
 │   └── review-judges/                # /review-judge action plans (timestamped)
 │
-├── openclaw/                    # OpenClaw source (reference implementation)
-│   ├── src/                     # TypeScript source — primary reproduction reference
-│   │   ├── agents/              # Agent loop, tools, compaction, system prompt
-│   │   ├── memory/              # Memory system (SQLite + embeddings)
-│   │   └── sessions/            # Session persistence
-│   └── docs/concepts/           # Component-level docs (memory, compaction, etc.)
-│
 ├── logs/                        # Raw audit logs from /judge runs
+│
+│   # External reference (NOT in this repo — sibling directory)
+│   # ../openclaw/                 # OpenClaw source (TypeScript reference implementation)
+│   #   ├── src/agents/            # Agent loop, tools, compaction, system prompt
+│   #   ├── src/memory/            # Memory system (SQLite + embeddings)
+│   #   ├── src/sessions/          # Session persistence
+│   #   └── docs/concepts/         # Component-level docs (memory, compaction, etc.)
 │
 ├── .claude/skills/              # Claude Code skills
 │   ├── onboard/SKILL.md        # /onboard — session startup
@@ -169,11 +157,14 @@ Tasks extend `GeneralTaskConfig` (`tasks/common_config.py`) which provides:
 - **`evaluate_milestone_mode()`** — Compares agent milestone screenshots vs. references
 - **`evaluate_deliverable_mode()`** — Replays trajectory, screenshots at action points
 
-### 4. Memory System (stale — to be replaced)
+### 4. Memory System (`openclaw/memory.py` + `memory_flush.py`)
 
-> **Note**: The current `memory/` module is a legacy prototype from an earlier design iteration. The OpenClaw reproduction work should create a new memory system based on the OpenClaw source at `openclaw/src/memory/` and `openclaw/src/agents/memory-search.ts`. Do not build on the existing code — treat it as reference only.
+Lives in the CUA submodule at `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/`:
 
-**Current contents** (`memory/`): MemoryStore, MemorySearchTool, MemoryGetTool, MemoryWriteTool — not wired into the agent.
+- **`memory.py`** — `MemoryStore` with per-task workspace storage (`<base_dir>/tasks/<task_id>/`), plus `MemorySearchTool`, `MemoryGetTool`, `MemoryWriteTool` (BaseTool subclasses)
+- **`memory_flush.py`** — Pre-compaction memory persistence (standalone module following OpenClaw's `agent-runner-memory.ts` pattern)
+
+OpenClaw reference source: `../openclaw/src/memory/`, `../openclaw/src/auto-reply/reply/agent-runner-memory.ts`
 
 ## Data Flow
 

@@ -22,7 +22,7 @@ export EVALUATION_OUTPUT_DIR="./helloworld"
 
 uv run python -m cua_bench.batch.solver ./tasks/helloworld \
     --eval \
-    --agent agenthle-agent \
+    --agent openclaw-agent \
     --model openai/computer-use-preview \
     --max-steps 50 \
     --output-dir $EVALUATION_OUTPUT_DIR

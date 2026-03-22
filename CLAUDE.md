@@ -41,15 +41,15 @@ Use **progressive exposure** — load only what the current story requires. `/on
 |------|-------------|
 | `docs/openclaw-context-flow.html` | Stories involving the context pipeline (open in browser) |
 | `docs/openclaw-source-analysis.md` | Stories reproducing specific OpenClaw components |
-| `openclaw/docs/concepts/<topic>.md` | The specific concept your story targets — pick 1-2, not all |
+| `../openclaw/docs/concepts/<topic>.md` | The specific concept your story targets — pick 1-2, not all (external sibling dir) |
 | `docs/testing-feedback-loops.md` | Writing acceptance criteria (`/prd`) or reviewing (`/judge`) |
 
 ### Layer 2 — Read when modifying (source code)
 
 | File | When to read |
 |------|-------------|
-| `openclaw/src/` | The OpenClaw module your story reproduces — read first to understand target behavior |
-| `memory/` | Stories touching the memory system |
+| `../openclaw/src/` | The OpenClaw module your story reproduces — read first to understand target behavior (external sibling dir) |
+| `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/` | Agent harness OpenClaw modules (memory, session, context, etc.) |
 | `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw_agent.py` | Agent harness changes |
 | `submodules/cua/libs/python/agent/` | CUA SDK internals — only when changing framework interaction |
 
@@ -100,7 +100,7 @@ Review changes for learnings worth preserving:
 
 Read `architecture.md` for the full picture. Available architecture files:
 - `architecture.md` — AgentHLE benchmark framework
-- `openclaw/architecture.md` — OpenClaw personal AI assistant
+- `../openclaw/architecture.md` — OpenClaw personal AI assistant (external sibling dir)
 
 ### Creating architecture.md
 When a codebase lacks one, create it (<150 lines) covering:
