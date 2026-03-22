@@ -34,7 +34,7 @@ Goal: Launch Magic Tower and navigate to the 3rd floor.
 2. Wait for the game to load and enter the game.
 3. Navigate to the 3rd floor.
 
-Verification: 
+Verification:
 1. When steps in each new floor, you should save milestone screenshot with `save_milestone_screenshot(path="{self.remote_output_dir}\$FLOOR_NUMBER$.png")`, where $FLOOR_NUMBER$ is the floor number you reached.
 2. The task is successful if the screenshots exists and it demonstrates the floor you reached.
 """

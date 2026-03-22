@@ -820,7 +820,7 @@
         "Level 2: AGENTS.md updated with guidance to verify milestones using analyze_image after saving"
       ],
       "priority": 33,
-      "passes": false,
+      "passes": true,
       "notes": "Modeled after OpenClaw's image tool (../openclaw/src/agents/tools/image-tool.ts). Core pattern: read image → send to VLM with prompt → return text analysis. Key advantage over raw image return: no context bloat (text response ~100-200 tokens vs ~1500 tokens for an image). IMPORTANT: Dual-path image loading — the tool must handle both remote VM paths (Windows, read via interface.read_bytes) and local paths (Unix, read via open()). The agent primarily uses remote paths (milestone screenshots), but local paths enable analyzing reference images or trajectory screenshots saved by TrajectorySaverCallback. Path detection: Windows-style (C:\\..., backslashes) = remote VM, Unix-style (/...) = local. Same heuristic as MilestoneTool._is_windows_path(). Uses litellm.completion() for VLM calls (same as compaction pipeline in context.py). Model defaults to summary_model from agent config. No agent loop changes needed — tool returns text, existing str(result) path works. Supersedes US-OC-030 (Visual Analysis) which was broader but unimplemented. Motivation: logs/loop_run/report.md documents systematic milestone verification failures in Magic Tower."
     },
     {
@@ -846,7 +846,7 @@
         "Level 2: Agent can call analyze_image with a local trajectory path from a previous turn and receive valid analysis"
       ],
       "priority": 34,
-      "passes": false,
+      "passes": true,
       "notes": "Currently, computer_call_output returns {\"type\": \"input_image\", \"image_url\": \"data:image/png;base64,...\"} — just the raw image, no file path. TrajectorySaverCallback saves the same screenshot to disk (turn_NNN/NNNN_screenshot_after.png) via on_screenshot callback, but this path is never communicated back to the agent. \n\nImplementation approaches (choose one):\n1. **Callback approach**: Create a new callback (or extend ToolLoggingCallback) that tracks the last screenshot path from on_screenshot, then on on_computer_call_end injects metadata into the result. Pro: no CUA core changes. Con: callback ordering matters — must run after TrajectorySaverCallback.\n2. **Override approach**: Override _handle_item in OpenClawComputerAgent to append the path after the parent builds call_output. Pro: explicit control. Con: tighter coupling to parent internals.\n3. **Modify TrajectorySaverCallback**: Make it store the last saved screenshot path as an attribute, then read it from the agent loop after _handle_item returns. Pro: simple. Con: modifies CUA code.\n\nRecommended: Approach 1 (callback). Create a ScreenshotPathCallback that:\n- on_screenshot: records the artifact path that TrajectorySaverCallback just saved\n- on_computer_call_end: appends a text note to the result like \"[Screenshot saved to: /local/path/turn_005/0003_screenshot_after.png]\"\n\nThe path should be injected as text metadata, NOT by modifying the image_url field. This way the agent sees both the image (for immediate use) and the path (for later analyze_image calls). After compaction removes the base64 image from context, the text path remains in the summary, allowing the agent to re-examine old screenshots via analyze_image(image=\"/local/path/...\")."
     }
   ]
