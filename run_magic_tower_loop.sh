@@ -22,8 +22,8 @@ task="mota_24_easy"
 export MEMORY_TASK_ID="${task}"
 export EVALUATION_OUTPUT_DIR="./trycua/cua-bench/${task}"
 
-model_id="anthropic/claude-sonnet-4-20250514"
-summary_model_id="anthropic/claude-sonnet-4-20250514"
+model_id="anthropic/claude-haiku-4-5-20251001"
+summary_model_id="anthropic/claude-haiku-4-5-20251001"
 
 SUMMARY_MODEL_ARG=""
 if [ -n "$summary_model_id" ]; then

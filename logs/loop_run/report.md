@@ -2,6 +2,84 @@
 
 ---
 
+## 2026-03-21 20:30 — Analysis: Loop Run 100 steps × 10 attempts (clean memory)
+
+**Result**: FAIL — best score 1/3 (floor 1 only), 4 real attempts before API auth failure
+**Model**: `anthropic/claude-sonnet-4-20250514`
+**Config**: 100 steps, 10 attempts, 100K context window, clean memory (deprecated prior sessions)
+
+### Attempt Summary
+
+| Attempt | Trajectory | Turns | Score | Failure Mode |
+|---------|-----------|-------|-------|-------------|
+| 1 | `194758_d034` | 42 | 0/3 | MAX_STEPS_EXCEEDED; off-by-one (saved 2.png while on Prologue) |
+| 2 | `195320_a5bc` | 47 | 0/3 | MAX_STEPS_EXCEEDED; still on Floor 1 |
+| 3 | `200018_c95a` | 39 | 1/3 | Floor 1 correct, never reached Floor 2 |
+| 4 | `200726_bca4` | 35 | 1/3 | Floor 1 correct, never reached Floor 2 |
+| 5-10 | various | 0 | 1/3 | 401 Unauthorized — API key expired mid-run |
+
+### Critical Finding: analyze_image Never Called
+
+**`analyze_image` was invoked 0 times across all 4 real attempts**, despite:
+- Being registered as a tool in the API request
+- AGENTS.md explicitly instructing: "After saving a milestone, verify it with `analyze_image`"
+- The tool being designed specifically for floor verification
+
+The agent has the tool available but never uses it. This means:
+- Milestones are saved without verification
+- Off-by-one floor counting goes undetected
+- The agent trusts its own reasoning over visual evidence
+
+### Floor Progression Analysis
+
+**Attempt 1** (42 turns, scored 0/3):
+- Turn 1: Saved 1.png (claimed Floor 1, actually Prologue — "序 章" visible)
+- Turns 2-36: Navigated Prologue area
+- Turn 37: Saved 2.png claiming "reached 2nd floor" — screenshot shows "序 章" still (Prologue!)
+- Turns 38-41: Still on Prologue, agent noticed "1 级" inconsistency but dismissed it
+- **Never actually left the Prologue**
+
+**Attempt 3** (39 turns, scored 1/3):
+- Turn 1: Saved 1.png correctly (Floor 1 — "第 1 层" visible)
+- Turns 2-38: Explored Floor 1 extensively, fought monsters, collected items
+- **Never reached Floor 2** — ran out of steps exploring Floor 1
+- Last screenshot: Still on "第 1 层" with the agent fighting green slimes
+
+### Root Causes
+
+1. **analyze_image not used**: The agent never verifies its milestones. AGENTS.md says to do it but the instruction isn't strong enough to override the agent's default behavior of just continuing navigation.
+
+2. **Off-by-one persists**: Attempt 1 treated Prologue as Floor 1. The game starts on "序 章" (Prologue), not "第 1 层" (Floor 1). Without analyze_image verification, the agent doesn't catch this.
+
+3. **Inefficient navigation**: Even when correctly on Floor 1 (attempts 3-4), the agent spends ~35 turns exploring and fighting but never reaches the stairs to Floor 2. It moves one tile per turn with no strategic planning.
+
+4. **API key expiration**: Key expired after attempt 4, wasting attempts 5-10.
+
+### Recommendations
+
+1. **Force analyze_image usage**: Strengthen AGENTS.md or system prompt to make analyze_image verification mandatory after milestone saves. Consider: "You MUST call analyze_image after every save_milestone_screenshot. If you don't verify, the milestone is invalid."
+
+2. **Seed TASK_MEMORY.md** with:
+   - "序 章 = Prologue (NOT Floor 1). 第 1 层 = Floor 1. Always read the floor indicator text."
+   - "Use analyze_image to verify every milestone screenshot before moving on."
+   - Navigation strategy for the game
+
+3. **More steps needed**: Floor 1 alone takes ~35 turns. Reaching Floor 3 likely needs 200+ steps.
+
+4. **Monitor API key**: Add a pre-flight API check to the loop script to fail fast on auth errors.
+
+---
+
+## 2026-03-21 20:45 — Note: analyze_image adoption problem
+
+**Observation**: AGENTS.md already has a "Verifying Milestones" section (lines 71-77) that instructs the agent to call `analyze_image` after saving milestones. The agent ignores it completely — 0 calls across 4 real attempts.
+
+**Decision**: Do NOT strengthen the AGENTS.md wording further. The current instruction is clear enough. The problem is that the agent doesn't follow it, which suggests the issue is model-level compliance, not instruction clarity. Solving this by making the text louder would be a band-aid.
+
+**Alternative angle to explore**: Investigate why the agent doesn't follow the instruction — is it compacted away? Is the model deprioritizing it? Could a different mechanism (e.g., a post-milestone hook, a tool-level enforcement, or a callback that auto-triggers analyze_image after save_milestone) ensure verification happens without relying on the agent's compliance?
+
+---
+
 ## 2026-03-21 17:04 — Loop Run: 50 steps, 2 attempts
 
 **Result**: FAILED 0.0 / 3 on both attempts
