@@ -7,6 +7,7 @@
 - CUA trajectory reasoning summaries: `turn_NNN/NNNN_agent_response.json → response.output[].summary[].text`
 - Turn count ≠ step count: each turn can contain multiple API calls (~2 steps/turn for openai/computer-use-preview)
 - Trajectory tool verification: `turn_000/0000_api_start.json → kwargs.tools[].name` for registered tools; `*_agent_response.json → response.output[] where type=="function_call"` for invocations
+- OpenClaw source (TypeScript reference implementation) lives at `../openclaw/` (sibling directory to agenthle-base). Key paths: `../openclaw/src/agents/` (agent loop, tools, compaction), `../openclaw/src/memory/` (memory system), `../openclaw/docs/concepts/` (component docs)
 
 ---
 
