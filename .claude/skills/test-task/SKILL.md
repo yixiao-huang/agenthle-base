@@ -40,19 +40,29 @@ Parse arguments from the input. Arguments can be positional or use key=value syn
 
 ### Interactive mode
 
-If `/test-task` is invoked with **no arguments**, prompt the user for parameters. Use AskUserQuestion:
+If `/test-task` is invoked with **no arguments** (or only partial arguments), prompt the user for missing parameters using AskUserQuestion. Use up to 4 questions per call (AskUserQuestion limit):
 
+**Call 1** — Task and model:
 ```
-Please provide the run parameters (press Enter to accept defaults):
-- Task path [./tasks/game/mota_24_easy]:
-- Steps per run [500]:
-- Max attempts [5]:
-- Model [anthropic/claude-sonnet-4-20250514]:
-- Summary model [same as model]:
-- Context window override [none]:
+Q1: "Which task do you want to test?"
+  options: mota_24_easy, mota_24, helloworld, Other
+Q2: "Which model for the agent (CUA loop)?"
+  options: openai/gpt-5.4, anthropic/claude-sonnet-4-20250514, anthropic/claude-opus-4-6, Other
+Q3: "Which model for summarization/compaction?"
+  options: Same as agent model (Recommended), openai/gpt-5.4, anthropic/claude-sonnet-4-20250514, Other
+Q4: "Steps per run and max attempts?"
+  options: 500 steps / 5 attempts, 200 steps / 3 attempts, 50 steps / 1 attempt, Other
 ```
 
-Parse the user's response — accept blank/empty for defaults. Then proceed to Step 1.
+**Call 2** (only if needed) — Context window:
+```
+Q1: "Context window override?"
+  options: None (model default), 100000, 50000, Other
+```
+
+Parse responses — map option labels to values. Then proceed to Step 1.
+
+If arguments are provided inline, skip interactive prompts and use them directly.
 
 ---
 
@@ -69,26 +79,40 @@ Extract the task name from the task path:
 task_id=$(basename "$task_path")   # e.g. mota_24_easy, helloworld
 ```
 
-### 3. Deprecate current memory and session
+### 3. Session mode: fresh or continue?
 
-Move existing memory and session data to deprecated directories with a timestamp suffix:
+Check if prior memory/session data exists for this task:
+```bash
+ls openclaw_memory/tasks/${task_id}/memory/ 2>/dev/null | wc -l   # session count
+test -f openclaw_memory/tasks/${task_id}/TASK_MEMORY.md && echo "has TASK_MEMORY"
+test -f openclaw_sessions/${task_id}/state.json && echo "has session state"
+```
 
+If prior data exists, ask the user with AskUserQuestion:
+
+```
+question: "Prior memory/session found for ${task_id} (<N> sessions, TASK_MEMORY: yes/no). Start fresh or continue?"
+options:
+  - label: "Fresh session"
+    description: "Deprecate existing memory and session — agent starts with no prior context"
+  - label: "Continue previous session"
+    description: "Keep existing memory and session — agent resumes with accumulated knowledge"
+```
+
+**If fresh** (or no prior data exists): deprecate by moving to `deprecated/` with timestamp:
 ```bash
 timestamp=$(date +%Y%m%d_%H%M)
-# Move memory
 if [ -d "openclaw_memory/tasks/${task_id}" ]; then
     mkdir -p openclaw_memory/deprecated
     mv "openclaw_memory/tasks/${task_id}" "openclaw_memory/deprecated/${task_id}_${timestamp}"
 fi
-# Move session
 if [ -d "openclaw_sessions/${task_id}" ]; then
     mkdir -p openclaw_sessions/deprecated
     mv "openclaw_sessions/${task_id}" "openclaw_sessions/deprecated/${task_id}_${timestamp}"
 fi
 ```
 
-Report what was deprecated (number of session files, whether TASK_MEMORY.md existed).
-If no prior data exists, report "No prior memory/session to deprecate."
+**If continue**: leave memory and session in place. The agent will load TASK_MEMORY.md into its system prompt and replay prior transcript on startup.
 
 ### 4. Verify environment
 
@@ -133,7 +157,7 @@ Invoke `/analyze` once right away (don't wait for the first cron tick).
 **Summary model**: <summary_model>
 
 ### Actions taken
-- Deprecated prior memory (<N> sessions) and session state
+- Session mode: <Fresh (deprecated N sessions) | Continue (N prior sessions)>
 - Started loop in background (job ID: <id>)
 - Scheduled /analyze every 10 min (cron ID: <cron_id>)
 - First analysis: <brief status>
