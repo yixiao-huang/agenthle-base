@@ -21,6 +21,7 @@ class TaskConfig(GeneralTaskConfig):
     TASK_CATEGORY: str = "game"
     TASK_TAG: str = "GAME_MOTA_24_EZ"
     GAME_TAG: str = "mota-24"
+    TARGET_FLOOR: int = int(os.environ.get("MOTA_TARGET_FLOOR", "3"))
 
     @property
     def game_url(self) -> str:
@@ -29,10 +30,10 @@ class TaskConfig(GeneralTaskConfig):
     @property
     def task_description(self) -> str:
         return f"""
-Goal: Launch Magic Tower and navigate to the 3rd floor.
+Goal: Launch Magic Tower and navigate to floor {self.TARGET_FLOOR}.
 1. Open the game at {self.game_url} on Ruffle (the game should be opened automatically).
 2. Wait for the game to load and enter the game.
-3. Navigate to the 3rd floor.
+3. Navigate to floor {self.TARGET_FLOOR}.
 
 Verification:
 1. When steps in each new floor, you should save milestone screenshot with `save_milestone_screenshot(path="{self.remote_output_dir}\$FLOOR_NUMBER$.png")`, where $FLOOR_NUMBER$ is the floor number you reached.

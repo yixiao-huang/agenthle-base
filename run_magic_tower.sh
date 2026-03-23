@@ -29,10 +29,16 @@ export EVALUATION_OUTPUT_DIR="./trycua/cua-bench/${task}"
 MAX_STEPS="${1:-500}"
 model_id="${2:-anthropic/claude-sonnet-4-20250514}"
 summary_model_id="${3:-anthropic/claude-sonnet-4-20250514}"
+thinking_level="${4:-}"
 
 SUMMARY_MODEL_ARG=""
 if [ -n "$summary_model_id" ]; then
     SUMMARY_MODEL_ARG="--summary-model $summary_model_id"
+fi
+
+THINKING_ARG=""
+if [ -n "$thinking_level" ]; then
+    THINKING_ARG="--thinking-level $thinking_level"
 fi
 
 uv run python -m cua_bench.batch.solver ./tasks/game/${task} \
@@ -41,7 +47,8 @@ uv run python -m cua_bench.batch.solver ./tasks/game/${task} \
     --model $model_id \
     --max-steps "$MAX_STEPS" \
     --output-dir $EVALUATION_OUTPUT_DIR \
-    $SUMMARY_MODEL_ARG
+    $SUMMARY_MODEL_ARG \
+    $THINKING_ARG
 
 
 

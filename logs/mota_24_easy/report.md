@@ -95,3 +95,89 @@ The milestone files accumulated across multiple session trajectories on the pers
 4. **Prevent backwards navigation saving**: The agent went down stairs from Floor 1 to Prologue and saved it as progress. The prompt should note that going down stairs means going to a lower floor, not a higher one.
 5. **Fix compaction**: The fallback message ("57 messages could not be summarized") means the agent starts each session blind. Either fix the summarizer or ensure TASK_MEMORY.md captures essential state between sessions.
 6. **Single-session evaluation**: The current multi-session approach allows milestone files from different sessions to mix on the VM. Consider clearing the output directory at the start of each evaluation run, or evaluating per-session.
+
+---
+
+## 2026-03-22 17:25 — Analysis: 2026-03-22_gpt54_171842_d48c (IN PROGRESS)
+
+**Result**: IN PROGRESS — no evaluation yet
+**Trajectory**: `2026-03-22_gpt54_171842_d48c` (33+ turns, still running)
+**Model**: gpt-5.4 (openai/gpt-5.4)
+**Config**: 200 steps, 3 attempts, context_window=50000, MOTA_TARGET_FLOOR=10
+**Session mode**: Fresh (deprecated prior memory/session)
+
+### What Happened
+First attempt of a new test run targeting Floor 10 (previously Floor 3). Agent started from the Prologue ("序 章"), spent ~8 turns clearing NPC dialogue via SPACE spam, navigated to Floor 1 ("第 1 层") around turn 009-010. Saved milestone for Floor 1 at turn 011. Spent turns 012-022 navigating Floor 1 without reaching Floor 2. **Compaction hit at turn 023** — all prior tool results were lost and replaced with synthetic error placeholders. Agent spent turns 023-026 re-orienting post-compaction. Currently at 33+ turns, still on Floor 1.
+
+### Floor Progression
+| Turn | Agent Claimed | Actual (from UI) | Action |
+|------|--------------|-------------------|--------|
+| 000 | "Floor 1 at game start" | Prologue (序 章) | Saved milestone `1.png` (wrong floor) |
+| 009-010 | — | Transition to Floor 1 | Climbed stairs |
+| 011 | "Floor 1" | Floor 1 (第 1 层) | Re-saved `1.png` (correct) |
+| 014 | — | Floor 1 (第 1 层) | Saved `2_reestablished_floor1.png` after overwrite |
+| 023 | — | Floor 1 (第 1 层) | **COMPACTION** — lost all tool results |
+| 024-026 | "Re-establishing state" | Floor 1 (第 1 層) | Post-compaction re-orientation |
+| 033+ | — | Floor 1 (likely) | Still navigating |
+
+### Failure Patterns (recurring from prior runs)
+
+1. **Same premature milestone save**: Agent saved `1.png` on Prologue before reaching Floor 1 (identical to all prior runs).
+2. **Same compaction failure**: Tool results replaced with synthetic errors at turn 023, same pattern as prior runs.
+3. **Stuck on Floor 1**: After 33+ turns, no progress beyond Floor 1. Agent lacks strategic game understanding (key conservation, enemy stat comparison, optimal routing).
+4. **Floor 10 is extremely ambitious**: Prior runs couldn't reliably reach Floor 3. Floor 10 requires navigating through 10 distinct floors with increasingly difficult enemies, more locked doors, and complex routing. The agent's current navigation strategy (semi-random arrow keys) is fundamentally insufficient.
+5. **No game strategy**: Agent never discusses Magic Tower mechanics. Stats remain at starting values (Level 1, HP 1000, ATK 10, DEF 10, Gold 0, EXP 0) — barely any items collected or enemies fought.
+
+### Recommendations
+1. **Floor 10 is likely unreachable with current approach**: The agent cannot solve Floor 1 in 33 turns. Floor 10 requires hundreds of strategic decisions. Consider reducing to Floor 3 or adding extensive game strategy guidance.
+2. **Game strategy in prompt**: Add Magic Tower strategy: pick up all keys before opening doors, fight only enemies you can beat (compare ATK/DEF/HP), always collect potions, find stairs up.
+3. **Reasoning must be enabled**: Every analysis has flagged `reasoning.effort: "none"`. This is the single biggest blocker for strategic gameplay.
+4. **Fix compaction**: Lost tool results at turn 023 waste turns on re-orientation. Either increase context_window or fix the compaction to preserve essential state.
+5. **Navigation teaching**: The agent needs explicit guidance on how to read the game map — enemies are sprite characters blocking paths, keys are pickup items, doors require matching colored keys.
+
+---
+
+## 2026-03-22 17:45 — Analysis: Attempt 1 + Attempt 2 (Floor 10 run)
+
+**Result**: FAIL — 0 milestones verified, stuck on Floor 1
+**Trajectory 1**: `2026-03-22_gpt54_171842_d48c` (43 turns, completed)
+**Trajectory 2**: `2026-03-22_gpt54_172948_596f` (21 turns, completed)
+**Model**: openai/gpt-5.4
+**Config**: 200 steps, 3 attempts, context_window=50000, MOTA_TARGET_FLOOR=10
+
+### What Happened
+**Attempt 1** (43 turns): Agent navigated Prologue correctly (SPACE through NPC dialog), reached Floor 1 around turn 12. Saved milestone `1.png`. Spent turns 15-22 on Floor 1 with zero in-game progress — character did not move, stats unchanged (HP 1000, ATK 10, DEF 10). Compaction hit at turn 23, destroying tool results and triggering a **20-turn replay loop** (turns 23-41) where every turn replayed identical compacted context + identical memory writes. Around turn 40, a **Windows file "Open" dialog** appeared (from Ruffle's "Select File" button), completely blocking game interaction.
+
+**Attempt 2** (21 turns): Inherited compacted context from attempt 1. The file dialog was still present. Agent spent ALL 21 turns trying to regain focus — clicking canvas, avatar, Tab/Shift+Tab, WASD, double-clicking, trying to reload. None worked. Zero game progress.
+
+### New Failure Patterns (not seen in prior runs)
+
+1. **File dialog hijack (NEW)**: The Ruffle "Select File" button was clicked (by agent or accidentally), opening a Windows file dialog that completely blocked game interaction. The agent could not dismiss it. This is a **trap** that needs to be warned about in the task prompt.
+
+2. **Post-compaction infinite replay loop (NEW)**: After compaction at turn 23, the agent entered a degenerate loop replaying identical actions for ~20 turns. The `[compaction] missing tool result` synthetic errors broke the agent's ability to reason about actual state. This is a compaction repair bug, not just a context loss issue.
+
+3. **Keyboard inputs not registering**: Even before the file dialog (turns 15-22), the game character did not move despite arrow key inputs. Screenshots are pixel-identical. Either keyboard events weren't reaching the Ruffle canvas, or movements were into walls/invalid tiles.
+
+### Floor Progression
+| Phase | Turns | Floor | Notes |
+|-------|-------|-------|-------|
+| Prologue dialog | 0-10 | Prologue (序 章) | SPACE through NPC dialog |
+| Floor 1 entry | 11-14 | Floor 1 (第 1 层) | Milestone saved |
+| Stuck on Floor 1 | 15-22 | Floor 1 | No movement, stats unchanged |
+| Compaction loop | 23-41 | Floor 1 | Identical actions repeated |
+| File dialog trap | 40-42 | Floor 1 | Game blocked |
+| Attempt 2 recovery | 0-20 | Floor 1 | Spent entirely fighting dialog |
+
+### Key Evidence
+- Game stats never changed from starting values across 64 total turns (both trajectories)
+- Compaction summary: "Durable state: reached floor label 第1层" — same line repeated in 20 consecutive memory writes
+- Traj2 agent text: correctly identified focus problem ("click_and_hold on canvas area to regain focus") but all recovery attempts failed
+- Zero milestones for any floor above 1
+
+### Recommendations
+1. **Warn about Ruffle UI traps**: Add to task prompt: "DO NOT click the 'Select File' or 'Browse' buttons in Ruffle's toolbar. If a file dialog appears, press Escape or Alt+F4 to close it."
+2. **Fix compaction replay loop**: The synthetic `[compaction] missing tool result` errors create a degenerate loop. The compaction repair needs to produce usable state summaries, not error placeholders.
+3. **Verify keyboard input delivery**: The agent's arrow keys may not be reaching the Flash game. Consider adding a click-to-focus step before keyboard input, or use mouse clicks on tiles instead of arrow keys.
+4. **Reduce target floor**: Floor 10 is not achievable — the agent cannot even navigate Floor 1. Revert to Floor 3 and focus on solving the input delivery and compaction bugs first.
+5. **Enable reasoning**: Still flagged — every run has `reasoning.effort: "none"`.
+6. **Add game recovery instructions**: If focus is lost, instruct the agent to click the center of the game canvas (not any UI buttons) before resuming keyboard input.
