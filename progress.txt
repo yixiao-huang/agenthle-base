@@ -908,3 +908,23 @@
   - `_normalize_messages_for_gpt54()` runs BEFORE `_repair_orphaned_calls()`, so it must produce correctly-typed outputs or the repair function will create duplicates.
   - Background Bash tasks cannot run `uv run` — the subprocess environment doesn't resolve the project venv correctly. Long-running agent loops must be started from the user's terminal.
 ---
+
+## 2026-03-24 - Compaction fix: output type and format for GPT 5.4 Responses API (partial US-OC-038)
+- **Bug 1 (session.py)**: `_unnest_tool_blocks()` always emitted `function_call_output` for all tool results, even those matching a `computer_call`. Fixed by threading a `call_type_map` (call_id → "function_call"|"computer_call") built in `convert_to_responses_api_items()` and passing it to `_unnest_tool_blocks()` so the correct output type is emitted.
+- **Bug 2 (openai.py — computer_call in role-based messages)**: Role-based `computer_call` blocks from compaction/replay were emitted as top-level `computer_call` items requiring a valid screenshot, which OpenAI validates and rejects for placeholder PNGs. Fixed by converting them to `output_text` descriptions instead. Fresh `computer_call` items from the current run still pass through unchanged as top-level items (handled by existing code path at line 108).
+- **Bug 3 (openai.py — `role: "tool"` normalization)**: The Responses API only accepts roles `assistant/system/developer/user`. When compaction produces role-based `tool` messages, they were emitted with `role: "tool"` causing API errors. Fixed by normalizing to `role: "user"`.
+- **Bug 4 (openai.py — `_repair_orphaned_calls`)**: Was synthesizing invalid placeholder PNGs for orphaned `computer_call` items. Now drops orphaned computer_calls entirely (can't synthesize valid screenshots) while still adding synthetic `function_call_output` for orphaned `function_call` items.
+- **Test fixes**: Updated 4 tests in `test_normalize_messages_gpt54.py` and `test_openclaw_replay.py` that reflected old behavior (role-based computer_calls → top-level items). Updated to assert new text-description behavior.
+- **Verified**: 100-step VM run triggered 2 compactions successfully without API errors.
+- Files changed:
+  - submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/session.py
+  - submodules/cua/libs/python/agent/agent/loops/openai.py
+  - tests/test_normalize_messages_gpt54.py
+  - tests/test_openclaw_replay.py
+  - .gitignore (add traces/ to ignore)
+- **Learnings for future iterations:**
+  - OpenAI Responses API validates `computer_call_output` image data — placeholder 1x1 PNGs are rejected. The only safe option for compacted/replayed computer_call results is to omit image data entirely (convert both call and result to text).
+  - role: "tool" is NOT a valid Responses API role. Always normalize to "user" before sending. The Anthropic SDK emits "tool" role for tool results; OpenAI does not accept it.
+  - Two separate compaction repair paths exist: `convert_to_responses_api_items()` in session.py (role-based → Responses API flat items, used for replay) and `_normalize_messages_for_gpt54()` in openai.py (mixed format → GPT 5.4 format, used at send time). Both must be correct — a bug in either causes API failures.
+  - `_repair_orphaned_calls` runs after `_normalize_messages_for_gpt54`, so the normalization step must not introduce new orphaned calls (previously it would expand role-based computer_calls to top-level items that then needed orphan repair, creating a repair loop).
+---

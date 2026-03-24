@@ -802,8 +802,10 @@ class TestConvertToResponsesApiItems:
 
         # Find the computer_call item
         cc_idx = next(i for i, it in enumerate(items) if it.get("type") == "computer_call")
-        # The very next item must be the function_call_output (not flush messages)
-        assert items[cc_idx + 1]["type"] == "function_call_output"
+        # The very next item must be the computer_call_output (not flush messages).
+        # session.py uses call_type_map to emit the correct output type:
+        # computer_call → computer_call_output (not function_call_output).
+        assert items[cc_idx + 1]["type"] == "computer_call_output"
         assert items[cc_idx + 1]["call_id"] == "cc-1"
 
         # Flush messages should come AFTER the tool output

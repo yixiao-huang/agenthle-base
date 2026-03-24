@@ -129,7 +129,14 @@ class TestTextBlocks:
 
 
 class TestComputerCallExpansion:
-    def test_single_action_expanded(self):
+    def test_single_action_converted_to_text(self):
+        """Role-based computer_call blocks are converted to text descriptions.
+
+        Fresh computer_call items from the current run pass through as top-level
+        Responses API items. Role-based ones come from compaction/replay where
+        the original screenshot is gone; they are serialised as text to avoid
+        needing a placeholder image that OpenAI would reject.
+        """
         msg = {
             "role": "assistant",
             "content": [
@@ -138,11 +145,15 @@ class TestComputerCallExpansion:
         }
         result = _normalize_messages_for_gpt54([msg])
         assert len(result) == 1
-        assert result[0]["type"] == "computer_call"
-        assert result[0]["call_id"] == "cc1"
-        assert result[0]["action"] == {"type": "click", "x": 10, "y": 20}
+        assert result[0]["role"] == "assistant"
+        content = result[0]["content"]
+        assert len(content) == 1
+        assert content[0]["type"] == "output_text"
+        assert "[computer action:" in content[0]["text"]
+        assert "click" in content[0]["text"]
 
-    def test_batched_actions_expanded(self):
+    def test_batched_actions_converted_to_text(self):
+        """Role-based computer_call blocks with actions list → text description."""
         msg = {
             "role": "assistant",
             "content": [
@@ -155,7 +166,11 @@ class TestComputerCallExpansion:
         }
         result = _normalize_messages_for_gpt54([msg])
         assert len(result) == 1
-        assert result[0]["actions"] == [{"type": "click"}, {"type": "type"}]
+        assert result[0]["role"] == "assistant"
+        content = result[0]["content"]
+        assert len(content) == 1
+        assert content[0]["type"] == "output_text"
+        assert "[computer action:" in content[0]["text"]
 
     def test_stale_empty_action_becomes_text(self):
         """computer_call with no valid action/actions → serialized as text."""
@@ -173,8 +188,12 @@ class TestComputerCallExpansion:
         assert content[0]["type"] == "output_text"
         assert "details unavailable" in content[0]["text"]
 
-    def test_text_before_computer_call_flushed(self):
-        """Text blocks before a computer_call are flushed as a separate message."""
+    def test_text_before_computer_call_merged(self):
+        """Text blocks before a computer_call are merged into the same message.
+
+        Previously computer_call was flushed as a separate top-level item.
+        Now all blocks in a role-based message stay together as output_text.
+        """
         msg = {
             "role": "assistant",
             "content": [
@@ -183,10 +202,13 @@ class TestComputerCallExpansion:
             ],
         }
         result = _normalize_messages_for_gpt54([msg])
-        assert len(result) == 2
+        assert len(result) == 1
         assert result[0]["role"] == "assistant"
-        assert result[0]["content"] == [{"type": "output_text", "text": "I will click"}]
-        assert result[1]["type"] == "computer_call"
+        content = result[0]["content"]
+        assert len(content) == 2
+        assert content[0] == {"type": "output_text", "text": "I will click"}
+        assert content[1]["type"] == "output_text"
+        assert "[computer action:" in content[1]["text"]
 
 
 # ---------------------------------------------------------------------------

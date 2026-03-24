@@ -60,6 +60,9 @@ openclaw/
 # Runtime session data
 openclaw_sessions/
 
+# Agent run traces
+traces/
+
 # Claude Code local settings
 .claude/settings.local.json
 .claude/anthropic_key.sh
