@@ -9,6 +9,33 @@
 - Trajectory tool verification: `turn_000/0000_api_start.json → kwargs.tools[].name` for registered tools; `*_agent_response.json → response.output[] where type=="function_call"` for invocations
 - OpenClaw source (TypeScript reference implementation) lives at `../openclaw/` (sibling directory to agenthle-base). Key paths: `../openclaw/src/agents/` (agent loop, tools, compaction), `../openclaw/src/memory/` (memory system), `../openclaw/docs/concepts/` (component docs)
 - GPT-5.4/OpenAI Responses may emit opaque top-level `reasoning` items with `summary: []`; those items can be persisted in trajectory artifacts without any transcript-safe text payload, so replay fixes need provider-specific handling and cannot rely on transcript text alone
+- OpenAI Responses API enforces **bidirectional reasoning↔call coupling**: `function_call` items require their paired `reasoning` item (by server-side ID), and vice versa. You cannot strip, modify, or replay reasoning items independently — the API validates by internal ID against server state. OpenClaw solves this via dual-ID format (`call_XXX|fc_XXX`) + `downgradeOpenAIFunctionCallReasoningPairs()` which strips the `|fc_*` suffix when reasoning is absent, plus `previous_response_id` chaining within a WS session run (intra-run only, not cross-session)
+
+---
+
+## 2026-03-23 - US-OC-020: Deep investigation of OpenAI reasoning replay constraints
+- Investigated and reverted overly aggressive `_drop_opaque_reasoning_segments` in openai.py:
+  - Original code dropped everything from opaque reasoning until next user message — catastrophic for CUA (single user message → wipes entire history)
+  - Attempted fix 1 (drop only reasoning item): API rejects orphaned function_calls that require their paired reasoning
+  - Attempted fix 2 (patch reasoning with placeholder summary): API validates reasoning by server-side ID, rejects modified items
+  - Attempted fix 3 (strip all reasoning): function_calls still reference their reasoning by server-side coupling
+- **Root cause**: OpenAI Responses API enforces bidirectional reasoning↔call coupling at the server level. Cannot strip, modify, or replay reasoning independently.
+- **OpenClaw's solution** (confirmed via source analysis):
+  - Dual-ID tool call format: `call_XXX|fc_XXX` — the `fc_*` suffix is the Responses API item ID coupled to reasoning
+  - `downgradeOpenAIFunctionCallReasoningPairs()` strips `|fc_*` when reasoning is absent, breaking server-side association
+  - `downgradeOpenAIReasoningBlocks()` removes orphaned reasoning blocks
+  - `previous_response_id` chaining via WebSocket (intra-run optimization, NOT cross-session)
+  - `thinkingSignature` stores provider-specific reasoning metadata for reconstruction
+- **Decision**: Defer GPT-5.4 replay fix to US-OC-038/039/041 (canonical format + sanitize pipeline). These stories will implement:
+  - Dual-ID tool call format matching OpenClaw
+  - Provider-aware reasoning downgrade passes
+  - `thinkingSignature` storage in transcript
+- Reverted all interim openai.py changes (strip/repair/drop functions) — clean slate for US-OC-038
+- **Learnings for future iterations:**
+  - OpenAI Responses API reasoning items are server-validated by ID — no client-side patching works
+  - The bidirectional coupling means you must handle reasoning+calls as an atomic unit
+  - OpenClaw's dual-ID format is specifically designed for this — storing both Chat Completions ID and Responses API ID allows selective downgrade
+  - `previous_response_id` is intra-run only (WS session released at run end), not a cross-session mechanism
 
 ---
 
