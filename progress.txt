@@ -895,3 +895,16 @@
   - OpenClaw keeps thinking blocks in context by default — dropThinkingBlocks() is only for specific providers (GitHub Copilot Claude). Our system matches this default.
   - thinkingSignature is a tamper-proof token validated by the API on re-submission — if missing/malformed/cross-provider, the API rejects the request. Downgrade to empty text is the safety valve.
 ---
+
+## 2026-03-23 - Compaction output type mismatch fix (openai.py)
+- **Bug**: After compaction, `repair_tool_use_result_pairing()` creates synthetic `tool_result` entries (Anthropic format). `_normalize_messages_for_gpt54()` converted ALL of them to `function_call_output`, but OpenAI's Responses API requires `computer_call_output` for `computer_call` items → API error: "No tool output found for computer call".
+- **Fix**: Added `_call_type_map` dict to `_normalize_messages_for_gpt54()` that tracks whether each call_id is a `computer_call` or `function_call`. Modified `tool_result` conversion to emit `computer_call_output` (with 1x1 placeholder PNG) when the original call was a `computer_call`, matching the format `_repair_orphaned_calls()` already uses.
+- Files changed:
+  - submodules/cua/libs/python/agent/agent/loops/openai.py
+- **Status**: Unit tested (call/output types pair correctly). VM test pending — needs venv rebuild first.
+- **Learnings for future iterations:**
+  - The compaction pipeline has TWO parallel repair paths: `repair_tool_use_result_pairing()` (Anthropic role-based format, in context.py) and `_repair_orphaned_calls()` (OpenAI flat items format, in openai.py). Both must produce format-correct output for their respective APIs.
+  - `computer_call_output` requires a `computer_screenshot` object with `image_url` (base64 PNG), not a text string. Use the same 1x1 white PNG placeholder as `_repair_orphaned_calls()`.
+  - `_normalize_messages_for_gpt54()` runs BEFORE `_repair_orphaned_calls()`, so it must produce correctly-typed outputs or the repair function will create duplicates.
+  - Background Bash tasks cannot run `uv run` — the subprocess environment doesn't resolve the project venv correctly. Long-running agent loops must be started from the user's terminal.
+---

@@ -181,3 +181,52 @@ First attempt of a new test run targeting Floor 10 (previously Floor 3). Agent s
 4. **Reduce target floor**: Floor 10 is not achievable — the agent cannot even navigate Floor 1. Revert to Floor 3 and focus on solving the input delivery and compaction bugs first.
 5. **Enable reasoning**: Still flagged — every run has `reasoning.effort: "none"`.
 6. **Add game recovery instructions**: If focus is lost, instruct the agent to click the center of the game canvas (not any UI buttons) before resuming keyboard input.
+
+---
+
+## 2026-03-23 20:45 — Analysis: Floor 10 run (fresh session, 4 trajectories)
+
+**Result**: FAIL — 0.33 / 3 (best eval), stuck on Floor 1 across all attempts
+**Trajectories**: 4 total from this run session
+- `2026-03-23_gpt54_190858_8037` (2 turns, completed — instant milestone from inherited VM state)
+- `2026-03-23_gpt54_191008_e68c` (status unknown)
+- `2026-03-23_gpt54_191658_d01c` (85 turns, running — main gameplay attempt)
+- `2026-03-23_gpt54_202619_709c` (22 turns, completed — post-compaction continuation)
+**Model**: openai/gpt-5.4
+**Config**: 200 steps, 10 attempts, context_window=100000, MOTA_TARGET_FLOOR=10
+**Eval file**: `GAME_MOTA_24_EZ_evaluation_20260323_203422.json`
+
+### What Happened
+Fresh session (prior memory/session deprecated). The agent was tasked with reaching Floor 10. Across 4 trajectories and 100+ total turns, the agent never progressed beyond Floor 1. The main gameplay trajectory (191658_d01c, 85 turns) spent ~40 turns on the Prologue navigating NPC dialogs, reached Floor 1, then spent the remaining ~45 turns stuck on Floor 1 with stats unchanged (Level 1, HP 1000, ATK 10, DEF 10). The final trajectory (202619_709c) started post-compaction, searched memory for prior session context, saved a milestone for Floor 1, then spent 20 turns still on Floor 1 before completing.
+
+### Floor Progression
+| Turn (traj) | Agent Claimed | Actual (from UI) | Screenshot |
+|-------------|--------------|-------------------|------------|
+| 000 (191658) | — | Prologue (序 章) | Game loaded, starting area |
+| 042 (191658) | — | Prologue (序 章) | Still Prologue, picked up 1 blue + 1 red key |
+| 084 (191658) | — | Floor 1 (第 1 层) | Reached Floor 1, 1 blue + 1 red key, no enemies fought |
+| 020 (202619) | — | Floor 1 (第 1 层) | Same Floor 1 position, identical stats |
+
+### Failure Mode
+**Navigation failure — stuck on Floor 1**. Identical to all prior runs. The agent can navigate the Prologue (SPACE + arrow keys) but cannot solve Floor 1's puzzle layout. Key observations:
+
+1. **No strategic gameplay**: Agent has 1 blue key and 1 red key at end of run but never used them to open doors. Stats remain at starting values — no enemies fought, no items collected beyond initial keys.
+2. **40 turns wasted on Prologue**: The agent spent nearly half its turns on NPC dialog and Prologue navigation before even reaching Floor 1.
+3. **Memory system active but unhelpful**: Agent uses `memory_search`, `memory_get`, `memory_write` extensively but stored observations don't translate into better navigation strategy.
+4. **Compaction hit again**: Between trajectories 191658 and 202619, compaction occurred. The continuation trajectory spent most turns re-establishing context from memory rather than making game progress.
+
+### Key Evidence
+- Turn 000 screenshot: Prologue (序 章), standard starting state
+- Turn 042 screenshot: Still Prologue, collected keys (0 door keys, 1 blue, 1 red)
+- Turn 084 screenshot: Floor 1 (第 1 层), same keys, hero surrounded by enemies/doors/items but no progress
+- Turn 020 (final traj) screenshot: Identical Floor 1 state — pixel-similar to turn 084
+- Milestone saves: Only `1.png` (Floor 1) saved, twice — no higher floor milestones
+- Latest eval: 1/3 reference files matched (Floor 1 only)
+
+### Recommendations
+1. **Floor 10 remains unreachable**: 4th consecutive analysis confirming the agent cannot solve Floor 1 with any configuration tested so far.
+2. **Root cause is gameplay strategy, not steps or memory**: Even with 100K context window and 10 attempts, the agent makes zero strategic progress. It collects keys but never opens doors, never fights enemies, never plans a route.
+3. **Enable reasoning**: Still `reasoning.effort: "none"` in all runs. This is the #1 recommendation across all analyses.
+4. **Add explicit Magic Tower strategy to prompt**: The agent needs: "Open doors with matching colored keys. Fight enemies only if your ATK > enemy DEF. Collect all free items before fighting. Find stairs up to reach the next floor."
+5. **Reduce Prologue time**: Consider starting the game on Floor 1 directly, or adding prompt guidance to quickly navigate through Prologue.
+6. **Consider reducing target back to Floor 3**: Solve Floor 1 navigation first before attempting Floor 10.
