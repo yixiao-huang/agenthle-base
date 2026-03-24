@@ -67,3 +67,4 @@ traces/
 .claude/settings.local.json
 .claude/anthropic_key.sh
 .claude/statusline-command.sh
+.claude/scheduled_tasks.lock
