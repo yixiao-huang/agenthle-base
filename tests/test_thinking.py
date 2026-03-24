@@ -164,3 +164,15 @@ class TestThinkingConfig:
         assert cfg.flush_params("anthropic/claude-sonnet-4-6-20260101") == {
             "thinking": {"type": "enabled", "budget_tokens": 5000}
         }
+
+    def test_flush_and_compaction_can_inherit_main_level(self):
+        """When set to the same level, auxiliary call sites match the main params."""
+        cfg = ThinkingConfig(
+            level=ThinkLevel.MEDIUM,
+            flush_level=ThinkLevel.MEDIUM,
+            compaction_level=ThinkLevel.MEDIUM,
+        )
+        expected = {"thinking": {"type": "enabled", "budget_tokens": 10000}}
+        assert cfg.to_api_params("anthropic/claude-sonnet-4-6-20260101") == expected
+        assert cfg.flush_params("anthropic/claude-sonnet-4-6-20260101") == expected
+        assert cfg.compaction_params("anthropic/claude-sonnet-4-6-20260101") == expected

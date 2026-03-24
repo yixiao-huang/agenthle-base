@@ -385,6 +385,22 @@ class TestSummarizeChunk:
             )
             assert mock_acomp.call_args.kwargs["timeout"] == 30
 
+    def test_passes_thinking_params(self):
+        """Compaction summarization forwards provider-specific thinking params."""
+        mock_resp = _mock_litellm_response("Summary")
+        with patch("litellm.acompletion", new_callable=AsyncMock, return_value=mock_resp) as mock_acomp:
+            asyncio.get_event_loop().run_until_complete(
+                summarize_chunk(
+                    _make_messages(3),
+                    "test-model",
+                    thinking_params={"reasoning": {"effort": "medium", "summary": "concise"}},
+                )
+            )
+            assert mock_acomp.call_args.kwargs["reasoning"] == {
+                "effort": "medium",
+                "summary": "concise",
+            }
+
     def test_timeout_fallback_via_summarize_with_fallback(self):
         """Timeout errors trigger Tier 3 static fallback via summarize_with_fallback."""
         timeout_error = Exception("Request timed out")

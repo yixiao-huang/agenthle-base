@@ -56,6 +56,27 @@ class TestAssistantTurnGrouping:
         assert assistant_content[1]["type"] == "computer_call"
         assert assistant_content[1]["action"]["type"] == "click"
 
+    def test_reasoning_item_preserved_as_thinking_block(self):
+        """Top-level reasoning items should be persisted into assistant content."""
+        output_items = [
+            {
+                "type": "reasoning",
+                "id": "rs_1",
+                "summary": [{"type": "summary_text", "text": "Check the floor label first."}],
+                "thinkingSignature": '{"id":"sig_1","type":"reasoning"}',
+            }
+        ]
+        assistant_content, tool_results = group_step_output(output_items)
+        assert tool_results == []
+        assert assistant_content == [
+            {
+                "type": "thinking",
+                "thinking": "Check the floor label first.",
+                "id": "rs_1",
+                "thinkingSignature": '{"id":"sig_1","type":"reasoning"}',
+            }
+        ]
+
 
 class TestToolResultGrouping:
     def test_two_function_call_outputs_batch_into_one_tool_entry(self):

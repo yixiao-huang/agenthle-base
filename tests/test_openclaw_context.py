@@ -75,6 +75,14 @@ class TestEstimateMessageTokens:
         tokens = estimate_message_tokens(msg)
         assert tokens >= FIXED_IMAGE_TOKENS * 2
 
+    def test_thinking_blocks_are_counted(self):
+        """Thinking content should contribute to token estimation."""
+        msg = {
+            "role": "assistant",
+            "content": [{"type": "thinking", "thinking": "x" * 200}],
+        }
+        assert estimate_message_tokens(msg) > 0
+
 
 class TestEstimateMessagesTokens:
     def test_sum_of_messages(self):

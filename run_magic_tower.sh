@@ -30,6 +30,8 @@ MAX_STEPS="${1:-500}"
 model_id="${2:-anthropic/claude-sonnet-4-20250514}"
 summary_model_id="${3:-anthropic/claude-sonnet-4-20250514}"
 thinking_level="${4:-}"
+flush_thinking_level="${5:-}"
+compaction_thinking_level="${6:-}"
 
 SUMMARY_MODEL_ARG=""
 if [ -n "$summary_model_id" ]; then
@@ -41,6 +43,16 @@ if [ -n "$thinking_level" ]; then
     THINKING_ARG="--thinking-level $thinking_level"
 fi
 
+FLUSH_THINKING_ARG=""
+if [ -n "$flush_thinking_level" ]; then
+    FLUSH_THINKING_ARG="--flush-thinking-level $flush_thinking_level"
+fi
+
+COMPACTION_THINKING_ARG=""
+if [ -n "$compaction_thinking_level" ]; then
+    COMPACTION_THINKING_ARG="--compaction-thinking-level $compaction_thinking_level"
+fi
+
 uv run python -m cua_bench.batch.solver ./tasks/game/${task} \
     --eval \
     --agent openclaw-agent \
@@ -48,7 +60,8 @@ uv run python -m cua_bench.batch.solver ./tasks/game/${task} \
     --max-steps "$MAX_STEPS" \
     --output-dir $EVALUATION_OUTPUT_DIR \
     $SUMMARY_MODEL_ARG \
-    $THINKING_ARG
-
+    $THINKING_ARG \
+    $FLUSH_THINKING_ARG \
+    $COMPACTION_THINKING_ARG
 
 

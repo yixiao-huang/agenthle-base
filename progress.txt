@@ -8,7 +8,61 @@
 - Turn count ≠ step count: each turn can contain multiple API calls (~2 steps/turn for openai/computer-use-preview)
 - Trajectory tool verification: `turn_000/0000_api_start.json → kwargs.tools[].name` for registered tools; `*_agent_response.json → response.output[] where type=="function_call"` for invocations
 - OpenClaw source (TypeScript reference implementation) lives at `../openclaw/` (sibling directory to agenthle-base). Key paths: `../openclaw/src/agents/` (agent loop, tools, compaction), `../openclaw/src/memory/` (memory system), `../openclaw/docs/concepts/` (component docs)
+- GPT-5.4/OpenAI Responses may emit opaque top-level `reasoning` items with `summary: []`; those items can be persisted in trajectory artifacts without any transcript-safe text payload, so replay fixes need provider-specific handling and cannot rely on transcript text alone
 
+---
+
+## 2026-03-23 - US-OC-020: Thinking wiring + GPT-5.4 replay investigation
+- Implemented per-call-site thinking wiring for OpenClaw main loop, memory flush, and compaction:
+  - `solver.py` now accepts `--thinking-level`, `--flush-thinking-level`, and `--compaction-thinking-level`
+  - `OpenClawAgent` now defaults flush/compaction thinking to the main level unless explicitly overridden
+  - `run_magic_tower.sh` forwards the three thinking flags
+- Wired auxiliary thinking params through the actual LLM call sites:
+  - memory flush passes thinking params into `litellm.acompletion`
+  - compaction/summarization passes thinking params through all summarization helpers
+- Preserved transcript-side thinking where textual payload exists:
+  - `group_step_output()` now keeps `thinking` blocks from message content
+  - top-level CUA/OpenAI `reasoning` items are converted to transcript `thinking` blocks only when `summary_text` or explicit reasoning text exists
+  - token estimation tests now explicitly cover thinking-block characters
+- Added focused test coverage:
+  - thinking config inheritance
+  - flush/compaction pass-through
+  - transcript thinking capture
+  - solver CLI parsing
+  - GPT-5.4 replay normalization / reasoning repair behavior
+  - MLX import stubs in `tests/conftest.py` to keep pytest collection pure-Python on this machine
+- Investigated GPT-5.4/OpenAI Responses replay failures under real VM runs:
+  - clean sessions with thinking enabled work and produce reasoning items in trajectory logs
+  - persisted/replayed sessions can still fail with `reasoning ... without its required following item`
+  - added interim OpenAI-specific replay guards in `agent/loops/openai.py`:
+    - repair ordering for `reasoning -> assistant-segment`
+    - drop opaque replayed reasoning segments that have no usable text payload
+  - current status: clean-session VM runs succeed; replayed opaque reasoning is improved but not fully resolved for long-running reuse
+- Updated `docs/plan/US-OC-019-020-thinking-system.md` with the sequencing decision:
+  - land US-OC-020 before canonical-format/sanitize stories
+  - defer provider-safe reasoning replay to US-OC-038/039/041
+- **Files changed:**
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw_agent.py`
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/agent_loop.py`
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/context.py`
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/memory_flush.py`
+  - `submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/transcript.py`
+  - `submodules/cua/libs/cua-bench/cua_bench/batch/solver.py`
+  - `submodules/cua/libs/python/agent/agent/loops/openai.py`
+  - `run_magic_tower.sh`
+  - `tests/test_thinking.py`
+  - `tests/test_openclaw_transcript_format.py`
+  - `tests/test_openclaw_context.py`
+  - `tests/test_openclaw_compaction.py`
+  - `tests/test_normalize_messages_gpt54.py`
+  - `tests/test_openclaw_memory_flush.py`
+  - `tests/test_solver_args.py`
+  - `tests/conftest.py`
+  - `docs/plan/US-OC-019-020-thinking-system.md`
+- **Learnings for future iterations:**
+  - trajectory artifacts may show `reasoning_tokens > 0` even when the session transcript has no `thinking` block, because OpenAI often returns opaque reasoning items with empty summaries
+  - repeated `memory_search` on replay can be a symptom of lossy OpenAI replay sanitization, not just prompt behavior
+  - a fresh session is a useful control: it separates “thinking generation works” from “reasoning replay is safe”
 ---
 
 ## 2026-03-10 - Prepare harness for OpenClaw reproduction

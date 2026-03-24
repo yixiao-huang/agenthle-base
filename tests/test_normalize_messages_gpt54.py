@@ -14,7 +14,11 @@ Covers the 7+ code paths in the normalization function:
 
 import json
 
-from agent.loops.openai import _normalize_messages_for_gpt54
+from agent.loops.openai import (
+    _drop_opaque_reasoning_segments,
+    _normalize_messages_for_gpt54,
+    _repair_reasoning_item_pairing,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -27,6 +31,114 @@ class TestPassthrough:
         item = {"type": "computer_call", "call_id": "c1", "action": {"type": "click"}}
         result = _normalize_messages_for_gpt54([item])
         assert result == [item]
+
+    def test_top_level_reasoning_item_passes_through_for_pairing_repair(self):
+        """Reasoning survives normalization and is handled by the pairing repair step."""
+        item = {
+            "type": "reasoning",
+            "id": "rs_1",
+            "summary": [{"type": "summary_text", "text": "internal"}],
+        }
+        result = _normalize_messages_for_gpt54([item])
+        assert result == [item]
+
+
+class TestReasoningPairRepair:
+    def test_reasoning_kept_adjacent_to_function_call(self):
+        items = [
+            {"type": "reasoning", "id": "rs_1"},
+            {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "flush"}]},
+            {"type": "function_call", "call_id": "fc_1", "name": "memory_search", "arguments": "{}"},
+        ]
+        result = _repair_reasoning_item_pairing(items)
+        assert result[0]["type"] == "reasoning"
+        assert result[1]["type"] == "function_call"
+        assert result[2]["type"] == "message"
+
+    def test_reasoning_reordered_before_assistant_message_then_computer_call(self):
+        items = [
+            {"type": "reasoning", "id": "rs_1"},
+            {"type": "computer_call", "call_id": "cc_1", "actions": [{"type": "click"}]},
+            {
+                "role": "assistant",
+                "content": [{"type": "output_text", "text": "I will click the game canvas."}],
+            },
+            {
+                "type": "computer_call_output",
+                "call_id": "cc_1",
+                "output": {"type": "computer_screenshot", "image_url": "data:image/png;base64,abc"},
+            },
+        ]
+        result = _repair_reasoning_item_pairing(items)
+        assert result[0]["type"] == "reasoning"
+        assert result[1]["role"] == "assistant"
+        assert result[2]["type"] == "computer_call"
+        assert result[3]["type"] == "computer_call_output"
+
+    def test_reasoning_keeps_multiple_assistant_messages_before_calls(self):
+        items = [
+            {"type": "reasoning", "id": "rs_1"},
+            {"type": "function_call", "call_id": "fc_1", "name": "memory_search", "arguments": "{}"},
+            {"role": "assistant", "content": [{"type": "output_text", "text": "Checking memory first."}]},
+            {"role": "assistant", "content": [{"type": "output_text", "text": "Then I will act."}]},
+            {"type": "function_call_output", "call_id": "fc_1", "output": "ok"},
+        ]
+        result = _repair_reasoning_item_pairing(items)
+        assert result[0]["type"] == "reasoning"
+        assert result[1]["role"] == "assistant"
+        assert result[2]["role"] == "assistant"
+        assert result[3]["type"] == "function_call"
+        assert result[4]["type"] == "function_call_output"
+
+    def test_reasoning_with_assistant_message_is_kept(self):
+        items = [
+            {"type": "reasoning", "id": "rs_1"},
+            {"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": "hello"}]},
+        ]
+        result = _repair_reasoning_item_pairing(items)
+        assert result[0]["type"] == "reasoning"
+        assert result[1]["role"] == "assistant"
+
+    def test_orphaned_reasoning_dropped(self):
+        items = [
+            {"type": "reasoning", "id": "rs_1"},
+            {"type": "function_call_output", "call_id": "fc_1", "output": "ok"},
+        ]
+        result = _repair_reasoning_item_pairing(items)
+        assert all(item.get("type") != "reasoning" for item in result)
+
+
+class TestOpaqueReasoningDrop:
+    def test_drops_opaque_reasoning_and_paired_computer_segment_until_next_user(self):
+        items = [
+            {"role": "user", "content": [{"type": "input_text", "text": "goal"}]},
+            {"type": "reasoning", "id": "rs_1", "summary": []},
+            {"type": "computer_call", "call_id": "cc_1", "actions": [{"type": "click"}]},
+            {
+                "type": "computer_call_output",
+                "call_id": "cc_1",
+                "output": {"type": "computer_screenshot", "image_url": "data:image/png;base64,abc"},
+            },
+            {"role": "user", "content": [{"type": "input_text", "text": "[Screenshot saved to: turn_001.png]"}]},
+        ]
+        result = _drop_opaque_reasoning_segments(items)
+        assert result == [
+            {"role": "user", "content": [{"type": "input_text", "text": "goal"}]},
+            {"role": "user", "content": [{"type": "input_text", "text": "[Screenshot saved to: turn_001.png]"}]},
+        ]
+
+    def test_keeps_reasoning_segment_when_summary_text_exists(self):
+        items = [
+            {
+                "type": "reasoning",
+                "id": "rs_1",
+                "summary": [{"type": "summary_text", "text": "internal summary"}],
+            },
+            {"type": "function_call", "call_id": "fc_1", "name": "memory_search", "arguments": "{}"},
+            {"type": "function_call_output", "call_id": "fc_1", "output": "ok"},
+        ]
+        result = _drop_opaque_reasoning_segments(items)
+        assert result == items
 
     def test_non_dict_passes_through(self):
         result = _normalize_messages_for_gpt54(["raw_string"])
