@@ -435,15 +435,15 @@ class TestSanitizeOpenAI:
         fco_items = [i for i in result if i.get("type") == "function_call_output"]
         assert len(fco_items) == 1
 
-    def test_trailing_assistant_gets_continuation(self):
-        """sanitize_items should add continuation for trailing assistant."""
+    def test_trailing_assistant_no_continuation_for_openai(self):
+        """OpenAI default policy has validate_anthropic_turns=False, so no continuation added."""
         messages: list[CanonicalMessage] = [
             {"role": "assistant", "content": [TextBlock(type="text", text="reply")]},
         ]
         result = sanitize_items(messages, target="openai-responses")
-        # Last item should be a user message
-        user_items = [i for i in result if i.get("role") == "user"]
-        assert len(user_items) >= 1
+        # OpenAI doesn't need user/assistant alternation enforcement
+        types = [i.get("type") for i in result]
+        assert "message" in types
 
 
 # ===========================================================================
@@ -507,7 +507,8 @@ class TestSanitizeAnthropic:
         assert len(tool_msg) == 1
         assert tool_msg[0]["content"][0]["tool_use_id"] == "fc1"
 
-    def test_thinking_block_preserved(self):
+    def test_thinking_block_dropped_by_default_policy(self):
+        """Default Anthropic policy drops thinking blocks (signatures may be invalid on replay)."""
         messages: list[CanonicalMessage] = [
             {"role": "assistant", "content": [
                 ThinkingBlock(type="thinking", thinking="reasoning"),
@@ -518,8 +519,10 @@ class TestSanitizeAnthropic:
         result = sanitize_items(messages, target="anthropic")
         assistant_msg = [m for m in result if m.get("role") == "assistant"][0]
         thinking_blocks = [b for b in assistant_msg["content"] if b.get("type") == "thinking"]
-        assert len(thinking_blocks) == 1
-        assert thinking_blocks[0]["thinking"] == "reasoning"
+        assert len(thinking_blocks) == 0
+        text_blocks = [b for b in assistant_msg["content"] if b.get("type") == "text"]
+        assert len(text_blocks) == 1
+        assert text_blocks[0]["text"] == "visible"
 
     def test_compaction_summary(self):
         messages: list[CanonicalMessage] = [

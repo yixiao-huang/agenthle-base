@@ -1,11 +1,18 @@
-"""Tests for US-OC-038: Canonical internal message format.
+"""Tests for US-OC-038/041: Canonical internal message format + TranscriptPolicy.
 
 Covers:
   - normalize_to_canonical: untyped dicts → CanonicalMessage
   - canonical_to_responses_api: CanonicalMessage → Responses API flat items
   - canonical_to_anthropic_messages: CanonicalMessage → Anthropic completion format
   - _build_compacted_items integration: verify canonical output from compaction
+  - TranscriptPolicy: dataclass defaults, per-provider resolution
+  - drop_thinking_blocks: strip thinking content, preserve turn structure
+  - sanitize_thinking_signatures: remove thinkingSignature fields
+  - downgrade_openai_reasoning: drop orphaned OpenAI reasoning blocks
+  - sanitize_items: policy-driven pipeline integration
 """
+
+import json
 
 from cua_bench.agents.openclaw.canonical import (
     COMPACTION_PREAMBLE,
@@ -16,9 +23,15 @@ from cua_bench.agents.openclaw.canonical import (
     TextBlock,
     ThinkingBlock,
     ToolResultBlock,
+    TranscriptPolicy,
     canonical_to_anthropic_messages,
     canonical_to_responses_api,
+    downgrade_openai_reasoning,
+    drop_thinking_blocks,
+    get_transcript_policy,
     normalize_to_canonical,
+    sanitize_items,
+    sanitize_thinking_signatures,
 )
 
 # ---- Helpers ----
@@ -629,3 +642,407 @@ class TestBuildCompactedItemsCanonical:
 
         # Summary has preamble
         assert COMPACTION_PREAMBLE in items[0]["content"][0]["text"]
+
+
+# =========================================================================
+# TranscriptPolicy (US-OC-041)
+# =========================================================================
+
+
+class TestTranscriptPolicy:
+    """Test TranscriptPolicy dataclass defaults and resolution."""
+
+    def test_defaults(self):
+        policy = TranscriptPolicy()
+        assert policy.drop_thinking_blocks is False
+        assert policy.sanitize_thinking_signatures is False
+        assert policy.downgrade_openai_reasoning is False
+        assert policy.repair_tool_use_result_pairing is True
+        assert policy.validate_anthropic_turns is True
+
+    def test_frozen(self):
+        """TranscriptPolicy is immutable."""
+        policy = TranscriptPolicy()
+        try:
+            policy.drop_thinking_blocks = True  # type: ignore[misc]
+            assert False, "Should have raised"
+        except AttributeError:
+            pass
+
+
+class TestGetTranscriptPolicy:
+    """Test per-provider policy resolution."""
+
+    def test_anthropic_provider_prefix(self):
+        policy = get_transcript_policy("anthropic/claude-sonnet-4-20250514")
+        assert policy.drop_thinking_blocks is True
+        assert policy.validate_anthropic_turns is True
+        assert policy.downgrade_openai_reasoning is False
+
+    def test_anthropic_claude_model(self):
+        policy = get_transcript_policy("claude-opus-4-6")
+        assert policy.drop_thinking_blocks is True
+        assert policy.validate_anthropic_turns is True
+
+    def test_openai_provider_prefix(self):
+        policy = get_transcript_policy("openai/gpt-5.4")
+        assert policy.downgrade_openai_reasoning is True
+        assert policy.drop_thinking_blocks is False
+        assert policy.validate_anthropic_turns is False
+
+    def test_openai_gpt_model(self):
+        policy = get_transcript_policy("gpt-5.4")
+        assert policy.downgrade_openai_reasoning is True
+
+    def test_openai_o_series(self):
+        policy = get_transcript_policy("o3-mini")
+        assert policy.downgrade_openai_reasoning is True
+
+    def test_gemini(self):
+        policy = get_transcript_policy("gemini/gemini-2.5-pro")
+        assert policy.sanitize_thinking_signatures is True
+        assert policy.drop_thinking_blocks is False
+        assert policy.downgrade_openai_reasoning is False
+
+    def test_google_vertex(self):
+        policy = get_transcript_policy("vertex/gemini-2.5-pro")
+        assert policy.sanitize_thinking_signatures is True
+
+    def test_unknown_model_defaults(self):
+        policy = get_transcript_policy("some-unknown-model")
+        assert policy.drop_thinking_blocks is False
+        assert policy.sanitize_thinking_signatures is False
+        assert policy.downgrade_openai_reasoning is False
+        assert policy.repair_tool_use_result_pairing is True
+        assert policy.validate_anthropic_turns is True
+
+
+# =========================================================================
+# drop_thinking_blocks (US-OC-041)
+# =========================================================================
+
+
+class TestDropThinkingBlocks:
+    """Test stripping thinking blocks from assistant messages."""
+
+    def test_strips_thinking_from_assistant(self):
+        msgs: list[CanonicalMessage] = [
+            {"role": "assistant", "content": [
+                ThinkingBlock(type="thinking", thinking="Let me think..."),
+                TextBlock(type="text", text="Hello"),
+            ]},
+        ]
+        result = drop_thinking_blocks(msgs)
+        assert len(result) == 1
+        assert len(result[0]["content"]) == 1
+        assert result[0]["content"][0]["type"] == "text"
+        assert result[0]["content"][0]["text"] == "Hello"
+
+    def test_preserves_turn_with_empty_text(self):
+        """When all blocks are thinking, replace with empty text to preserve turn."""
+        msgs: list[CanonicalMessage] = [
+            {"role": "assistant", "content": [
+                ThinkingBlock(type="thinking", thinking="Deep thought"),
+            ]},
+        ]
+        result = drop_thinking_blocks(msgs)
+        assert len(result) == 1
+        assert len(result[0]["content"]) == 1
+        assert result[0]["content"][0]["type"] == "text"
+        assert result[0]["content"][0]["text"] == ""
+
+    def test_no_op_when_no_thinking(self):
+        msgs: list[CanonicalMessage] = [
+            {"role": "assistant", "content": [
+                TextBlock(type="text", text="Hello"),
+            ]},
+        ]
+        result = drop_thinking_blocks(msgs)
+        assert result is msgs  # Reference equality — nothing changed
+
+    def test_leaves_user_messages_untouched(self):
+        msgs: list[CanonicalMessage] = [
+            {"role": "user", "content": [TextBlock(type="text", text="Hi")]},
+            {"role": "assistant", "content": [
+                ThinkingBlock(type="thinking", thinking="Hmm"),
+                TextBlock(type="text", text="Response"),
+            ]},
+        ]
+        result = drop_thinking_blocks(msgs)
+        assert result[0]["role"] == "user"
+        assert len(result[0]["content"]) == 1  # User message unchanged
+        assert len(result[1]["content"]) == 1  # Thinking stripped
+
+    def test_multiple_thinking_blocks(self):
+        msgs: list[CanonicalMessage] = [
+            {"role": "assistant", "content": [
+                ThinkingBlock(type="thinking", thinking="First"),
+                ThinkingBlock(type="thinking", thinking="Second"),
+                TextBlock(type="text", text="Answer"),
+            ]},
+        ]
+        result = drop_thinking_blocks(msgs)
+        assert len(result[0]["content"]) == 1
+        assert result[0]["content"][0]["text"] == "Answer"
+
+
+# =========================================================================
+# sanitize_thinking_signatures (US-OC-041)
+# =========================================================================
+
+
+class TestSanitizeThinkingSignatures:
+    """Test removing thinkingSignature from thinking blocks."""
+
+    def test_removes_signature(self):
+        msgs: list[CanonicalMessage] = [
+            {"role": "assistant", "content": [
+                ThinkingBlock(
+                    type="thinking",
+                    thinking="reasoning",
+                    thinkingSignature="abc123",
+                ),
+            ]},
+        ]
+        result = sanitize_thinking_signatures(msgs)
+        block = result[0]["content"][0]
+        assert block["type"] == "thinking"
+        assert block["thinking"] == "reasoning"
+        assert "thinkingSignature" not in block
+
+    def test_no_op_without_signature(self):
+        msgs: list[CanonicalMessage] = [
+            {"role": "assistant", "content": [
+                ThinkingBlock(type="thinking", thinking="reasoning"),
+            ]},
+        ]
+        result = sanitize_thinking_signatures(msgs)
+        assert result is msgs  # Reference equality
+
+    def test_leaves_non_thinking_blocks(self):
+        msgs: list[CanonicalMessage] = [
+            {"role": "assistant", "content": [
+                ThinkingBlock(
+                    type="thinking",
+                    thinking="thought",
+                    thinkingSignature="sig",
+                ),
+                TextBlock(type="text", text="Hello"),
+            ]},
+        ]
+        result = sanitize_thinking_signatures(msgs)
+        assert len(result[0]["content"]) == 2
+        assert "thinkingSignature" not in result[0]["content"][0]
+        assert result[0]["content"][1]["text"] == "Hello"
+
+    def test_leaves_user_messages_untouched(self):
+        msgs: list[CanonicalMessage] = [
+            {"role": "user", "content": [TextBlock(type="text", text="Hi")]},
+        ]
+        result = sanitize_thinking_signatures(msgs)
+        assert result is msgs
+
+
+# =========================================================================
+# downgrade_openai_reasoning (US-OC-041)
+# =========================================================================
+
+
+def _openai_sig(item_id: str = "rs_abc123", sig_type: str = "reasoning") -> str:
+    """Build a valid OpenAI reasoning signature JSON string."""
+    return json.dumps({"id": item_id, "type": sig_type})
+
+
+class TestDowngradeOpenaiReasoning:
+    """Test dropping orphaned OpenAI reasoning blocks."""
+
+    def test_drops_orphaned_reasoning(self):
+        """Thinking block with valid OpenAI sig and no following content → dropped."""
+        msgs: list[CanonicalMessage] = [
+            {"role": "assistant", "content": [
+                ThinkingBlock(
+                    type="thinking",
+                    thinking="",
+                    thinkingSignature=_openai_sig(),
+                ),
+            ]},
+        ]
+        result = downgrade_openai_reasoning(msgs)
+        # Entire message removed (all blocks dropped)
+        assert len(result) == 0
+
+    def test_keeps_reasoning_with_following_content(self):
+        """Thinking block with valid sig but followed by text → kept."""
+        msgs: list[CanonicalMessage] = [
+            {"role": "assistant", "content": [
+                ThinkingBlock(
+                    type="thinking",
+                    thinking="reasoning",
+                    thinkingSignature=_openai_sig(),
+                ),
+                TextBlock(type="text", text="Answer"),
+            ]},
+        ]
+        result = downgrade_openai_reasoning(msgs)
+        assert result is msgs  # Nothing changed
+
+    def test_keeps_non_openai_thinking(self):
+        """Thinking block without OpenAI sig → kept (may be Anthropic)."""
+        msgs: list[CanonicalMessage] = [
+            {"role": "assistant", "content": [
+                ThinkingBlock(type="thinking", thinking="deep thought"),
+            ]},
+        ]
+        result = downgrade_openai_reasoning(msgs)
+        assert result is msgs
+
+    def test_keeps_thinking_with_anthropic_signature(self):
+        """Thinking block with non-JSON signature → kept."""
+        msgs: list[CanonicalMessage] = [
+            {"role": "assistant", "content": [
+                ThinkingBlock(
+                    type="thinking",
+                    thinking="thought",
+                    thinkingSignature="base64encodedstring==",
+                ),
+            ]},
+        ]
+        result = downgrade_openai_reasoning(msgs)
+        assert result is msgs
+
+    def test_drops_only_trailing_orphaned(self):
+        """Multiple thinking blocks — only trailing orphaned ones are dropped."""
+        msgs: list[CanonicalMessage] = [
+            {"role": "assistant", "content": [
+                ThinkingBlock(
+                    type="thinking",
+                    thinking="first",
+                    thinkingSignature=_openai_sig("rs_1"),
+                ),
+                TextBlock(type="text", text="middle"),
+                ThinkingBlock(
+                    type="thinking",
+                    thinking="orphaned",
+                    thinkingSignature=_openai_sig("rs_2"),
+                ),
+            ]},
+        ]
+        result = downgrade_openai_reasoning(msgs)
+        assert len(result[0]["content"]) == 2
+        assert result[0]["content"][0]["type"] == "thinking"
+        assert result[0]["content"][1]["type"] == "text"
+
+    def test_leaves_user_messages(self):
+        msgs: list[CanonicalMessage] = [
+            {"role": "user", "content": [TextBlock(type="text", text="Hi")]},
+        ]
+        result = downgrade_openai_reasoning(msgs)
+        assert result is msgs
+
+    def test_dict_signature(self):
+        """Signature as dict (not JSON string) also recognized."""
+        msgs: list[CanonicalMessage] = [
+            {"role": "assistant", "content": [
+                ThinkingBlock(
+                    type="thinking",
+                    thinking="",
+                    thinkingSignature={"id": "rs_x", "type": "reasoning"},  # type: ignore[typeddict-item]
+                ),
+            ]},
+        ]
+        result = downgrade_openai_reasoning(msgs)
+        assert len(result) == 0
+
+    def test_invalid_json_signature_kept(self):
+        """Malformed JSON string in signature → not recognized as OpenAI → kept."""
+        msgs: list[CanonicalMessage] = [
+            {"role": "assistant", "content": [
+                ThinkingBlock(
+                    type="thinking",
+                    thinking="thought",
+                    thinkingSignature="{invalid json",
+                ),
+            ]},
+        ]
+        result = downgrade_openai_reasoning(msgs)
+        assert result is msgs
+
+
+# =========================================================================
+# sanitize_items with policy (US-OC-041)
+# =========================================================================
+
+
+class TestSanitizeItemsPolicy:
+    """Test policy-driven sanitize_items pipeline."""
+
+    def test_default_anthropic_policy_drops_thinking(self):
+        """Default Anthropic policy strips thinking blocks."""
+        msgs: list[CanonicalMessage] = [
+            {"role": "user", "content": [TextBlock(type="text", text="Hi")]},
+            {"role": "assistant", "content": [
+                ThinkingBlock(type="thinking", thinking="hmm"),
+                TextBlock(type="text", text="Hello"),
+            ]},
+        ]
+        result = sanitize_items(msgs, "anthropic")
+        # Thinking should be stripped
+        assistant = [m for m in result if m["role"] == "assistant"]
+        assert len(assistant) == 1
+        assert all(
+            b["type"] != "thinking" for b in assistant[0]["content"]
+        )
+
+    def test_explicit_policy_overrides_default(self):
+        """Explicit policy with all passes disabled → no thinking stripped."""
+        msgs: list[CanonicalMessage] = [
+            {"role": "user", "content": [TextBlock(type="text", text="Hi")]},
+            {"role": "assistant", "content": [
+                ThinkingBlock(type="thinking", thinking="hmm"),
+                TextBlock(type="text", text="Hello"),
+            ]},
+        ]
+        policy = TranscriptPolicy(
+            drop_thinking_blocks=False,
+            repair_tool_use_result_pairing=False,
+            validate_anthropic_turns=False,
+        )
+        result = sanitize_items(msgs, "anthropic", policy=policy)
+        # Anthropic adapter still converts thinking → {type: "thinking", ...}
+        assistant = [m for m in result if m["role"] == "assistant"]
+        assert len(assistant) == 1
+        assert any(
+            b.get("type") == "thinking" for b in assistant[0]["content"]
+        )
+
+    def test_openai_default_policy_no_thinking_drop(self):
+        """Default OpenAI policy does NOT drop thinking (not needed)."""
+        msgs: list[CanonicalMessage] = [
+            {"role": "user", "content": [TextBlock(type="text", text="Hi")]},
+            {"role": "assistant", "content": [
+                ThinkingBlock(type="thinking", thinking="hmm"),
+                TextBlock(type="text", text="Hello"),
+            ]},
+        ]
+        # OpenAI Responses adapter skips thinking blocks at format conversion
+        # time, so drop_thinking_blocks=False is correct
+        result = sanitize_items(msgs, "openai-responses")
+        # Thinking blocks are skipped by the Responses adapter regardless
+        assert isinstance(result, list)
+
+    def test_all_passes_disabled_is_noop(self):
+        """Policy with all passes off → only format conversion runs."""
+        msgs: list[CanonicalMessage] = [
+            {"role": "user", "content": [TextBlock(type="text", text="Hi")]},
+            {"role": "assistant", "content": [
+                TextBlock(type="text", text="Hello"),
+            ]},
+        ]
+        policy = TranscriptPolicy(
+            repair_tool_use_result_pairing=False,
+            validate_anthropic_turns=False,
+        )
+        result = sanitize_items(msgs, "anthropic", policy=policy)
+        assert len(result) == 2
+        assert result[0]["role"] == "user"
+        assert result[1]["role"] == "assistant"
