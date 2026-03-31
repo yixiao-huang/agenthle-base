@@ -1028,3 +1028,16 @@
   - Regex-based config registry (ordered list of (pattern, config), first-match-wins) is simple and flexible — matches OpenClaw's `resolveModel` pattern without needing a class hierarchy
   - `ModelConfig` as a frozen dataclass prevents accidental mutation and enables `config is gpt6_config` identity checks in tests
   - `register_model_config()` prepends to the list so test overrides and runtime extensions take priority over defaults without modifying the module
+---
+
+## 2026-03-30 - US-OC-046
+- Refined PRD scope for the runtime transcript/thinking gap after comparing AgentHLE against OpenClaw and reviewing a GPT-5.4 thinking failure.
+- Added `US-OC-046` as the canonical owner of model-aware thinking-param mapping, helper-call compatibility, runtime sanitize wiring, and reasoning-retention policy in session logs.
+- Narrowed `US-OC-020` to residual cleanup only: transcript capture semantics, ThinkingConfig inheritance coverage, and any remaining legacy helper wiring after `US-OC-046`.
+- Files changed:
+  - prd.json
+  - progress.txt
+  - .current-story
+- **Learnings for future iterations:**
+  - Separate "thinking intent" from transport-specific request params; reusing one OpenAI-style `reasoning` payload across helper paths creates avoidable provider bugs.
+  - PRD cleanup matters when a bug spans multiple stories: assign one story as the canonical owner and demote the others to residual cleanup to avoid ambiguous implementation scope.

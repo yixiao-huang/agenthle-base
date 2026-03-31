@@ -533,8 +533,8 @@
     },
     {
       "id": "US-OC-020",
-      "title": "Thinking Mode: Wire into Memory Flush, Compaction, and Transcript",
-      "description": "As a benchmark operator, I want per-call-site thinking config for memory flush and compaction LLM calls, and thinking blocks captured in the session transcript, so that auxiliary summarization calls can use a different thinking mode than the main loop, and token estimation / compaction correctly account for thinking content.",
+      "title": "Thinking Mode: Residual Transcript Capture and Legacy Helper Cleanup",
+      "description": "As a benchmark operator, I want the remaining non-policy thinking-mode wiring cleaned up after the initial implementation, so that transcript capture, token estimation, and any legacy helper call sites stay aligned with the newer model-aware runtime policy work.",
       "context": {
         "existingFiles": [
           "submodules/cua/libs/cua-bench/cua_bench/agents/openclaw_agent.py (_run_memory_flush line 528 — direct litellm.acompletion; _compact_and_rebuild line 601 — calls compact_messages)",
@@ -545,16 +545,15 @@
       },
       "acceptanceCriteria": [
         "Level 1: Lint passes (uv run ruff check .)",
-        "Level 1: _run_memory_flush passes thinking API params to litellm.acompletion when flush_level is not off",
-        "Level 1: compact_messages and _summarize_chunk accept and pass thinking params when compaction_level is not off",
-        "Level 1: Unit test: ThinkingConfig(level=deep, flush_level=light, compaction_level=off) produces correct API params for each call site",
+        "Level 1: Any remaining legacy helper call sites that still consume ThinkingConfig directly are either removed, delegated to the model-aware adapter introduced by US-OC-046, or explicitly documented as unsupported for provider-specific reasoning params",
+        "Level 1: Unit test coverage remains for per-call-site ThinkingConfig inheritance semantics (main vs flush vs compaction) independent of the transport-specific adapter used at runtime",
         "Level 1: group_step_output() captures thinking blocks from output items as {type: \"thinking\", thinking: \"...\"} in assistant_content",
         "Level 1: Token estimation in context.py counts thinking block characters (tool-result-char-estimator parity with OpenClaw)",
-        "Level 2: run_magic_tower.sh 50 with --thinking-level medium and CONTEXT_WINDOW_OVERRIDE=50000 — compaction triggers and completes without error"
+        "Level 2: A thinking-enabled run still records expected thinking/transcript artifacts after US-OC-046 lands, without reintroducing transport-specific helper failures"
       ],
       "priority": 26,
       "passes": false,
-      "notes": "Implemented most of the story: solver/openclaw agent now support separate main/flush/compaction thinking levels, with flush/compaction inheriting the main level by default; `run_magic_tower.sh` forwards the three flags; memory flush and compaction summarization pass provider-specific thinking params through to `litellm.acompletion`; transcript grouping preserves textual thinking blocks; token-estimation tests now explicitly cover thinking-block chars. Real VM testing with GPT-5.4 shows that clean sessions work with thinking enabled and produce reasoning items in trajectory logs, but replay of opaque OpenAI Responses reasoning items (`type: reasoning`, `summary: []`) is still not fully safe across persisted sessions. Interim guards were added in `agent/loops/openai.py`, but provider-safe replay remains follow-up work for US-OC-038/039/041. KNOWN BUG: thinking_params maps OpenAI to reasoning={effort, summary} which is a Responses API parameter. Compaction/flush use litellm.acompletion() (Chat Completions API) which rejects 'reasoning' as unknown. GPT-5.4 with thinking_level=medium triggers this: compaction and memory flush fail with 'Unknown parameter: reasoning'. Fix: either route compaction/flush through Responses API for OpenAI, or strip reasoning from thinking_params in acompletion() call sites."
+      "notes": "This story is now narrowed. Most of the original implementation landed: solver/openclaw agent support separate main/flush/compaction thinking levels, `run_magic_tower.sh` forwards the flags, transcript grouping preserves textual thinking blocks, and token-estimation tests cover thinking-block chars. The previously open GPT-5.4/OpenAI helper-call bug is no longer owned here; it is superseded by US-OC-046, which now owns model-aware thinking-param mapping, helper-call compatibility, runtime sanitize policy, and reasoning retention behavior. Keep US-OC-020 focused on residual transcript-capture semantics, ThinkingConfig inheritance behavior, and cleanup of any legacy direct helper wiring left after US-OC-046."
     },
     {
       "id": "US-OC-021",
@@ -1133,6 +1132,61 @@
       "priority": 39,
       "passes": false,
       "notes": "Write-time repair is preferred over sanitize-time (repair_orphaned_pairs) because: (1) agent will run in long-lived sessions, not just batch mode, (2) on-disk transcripts should always be valid and readable, (3) crash recovery replays clean history without needing a repair pass, (4) streaming-friendly — synthetic results appear immediately. Once guard is in place, repair_orphaned_pairs(synthesize=True) becomes a safety net. Consider setting synthesize=False in sanitize_items() when guard is active."
+    },
+    {
+      "id": "US-OC-046",
+      "title": "TranscriptPolicy Parity: Sanitize Mode + Runtime Model-Resolved Policy",
+      "description": "As the agent harness, I want transcript sanitization and thinking-parameter handling to resolve from the live model and active transport, so that the runtime pipeline matches OpenClaw's policy-driven behavior instead of relying on target-only defaults or blindly reusing one reasoning payload shape across helper call sites.",
+      "context": {
+        "existingFiles": [
+          "submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/canonical.py (TranscriptPolicy, get_transcript_policy, sanitize_items)",
+          "submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/agent_loop.py (main predict_step call path and compaction rebuild path)"
+        ],
+        "depends": "US-OC-041 must be done first (introduces TranscriptPolicy). US-OC-043 through US-OC-045 may land before or after this story, but any overlapping runtime policy work should be folded into this implementation rather than left ambiguous",
+        "reference": "../openclaw/src/agents/transcript-policy.ts (sanitizeMode and broader policy resolution); ../openclaw/src/agents/pi-embedded-runner/google.ts (sanitizeSessionHistory runtime application of policy-driven passes)"
+      },
+      "acceptanceCriteria": [
+        "Level 1: Lint passes (uv run ruff check .)",
+        "Level 1: TranscriptPolicy extended with sanitize_mode field mirroring OpenClaw's intent ('full'|'images-only') and any remaining flags needed by the current provider set",
+        "Level 1: sanitize_items() accepts model= and resolves policy via get_transcript_policy(model) in production call sites rather than target-only defaults",
+        "Level 1: OpenClawComputerAgent.run() applies canonical normalization + sanitize_items() on the main pre-predict_step send path, not only in the compaction rebuild path",
+        "Level 1: Thinking parameter handling is split into model intent vs transport/call-site mapping, so helper paths do not blindly forward OpenAI Responses-style reasoning payloads into incompatible litellm.acompletion() calls",
+        "Level 1: Memory flush and compaction summarization paths use the same model-aware thinking adapter as the main runtime, or explicitly suppress/remap unsupported reasoning params per transport",
+        "Level 1: Session persistence behavior for reasoning is made explicit and tested: either normalized thinking blocks plus optional provider metadata (for example thinkingSignature) are retained in canonical session logs and sanitized on replay/history surfaces, or reasoning is intentionally dropped with that tradeoff documented in code and PRD notes",
+        "Level 1: Unit tests pass — same canonical transcript sanitizes differently for Anthropic/OpenAI/Gemini when model strings differ, without explicit manual policy injection",
+        "Level 1: Unit tests pass — GPT-5.4/OpenAI thinking-enabled helper calls no longer fail with unknown reasoning parameter errors during memory flush or compaction summarization",
+        "Level 2: bash run_magic_tower.sh 50 openai/gpt-5.4 — transcript replay path still works with runtime-resolved policy",
+        "Level 2: bash run_magic_tower.sh 50 anthropic/claude-sonnet-4-20250514 — transcript send path uses the same sanitize pipeline and does not regress turn ordering"
+      ],
+      "priority": 39.1,
+      "passes": false,
+      "notes": "High-priority follow-up and the canonical owner of the current GPT-5.4/OpenAI gap. This story closes the gap left by US-OC-041 being implemented mostly as a reduced helper layer, and it is the immediate blocker for reliable GPT-5.4/OpenAI thinking support because helper/runtime paths still are not consistently model-aware. Today get_transcript_policy(model) exists but production sanitize dispatch still defaults by target; sanitize_items is not wired on the normal per-turn send path; and helper summarization/memory-flush paths can still forward unsupported reasoning payloads into incompatible transports. The goal here is not to port every OpenClaw flag blindly, but to restore the two architectural invariants: policy is resolved from the live model, and the runtime send path plus helper call sites use a centralized, model-aware sanitize/thinking pipeline. This story also forces an explicit product decision on reasoning retention in session logs, instead of leaving it as an accidental omission. US-OC-020 should be treated as residual cleanup after this story, not as a competing implementation track."
+    },
+    {
+      "id": "US-OC-047",
+      "title": "Model Resolution Parity: Capability-Aware Registry Beyond Format Metadata",
+      "description": "As the agent harness, I want the lightweight ModelConfig registry extended into a capability-aware model resolution layer that captures provider API, context window, transcript policy hints, and forward-compat defaults, so that model/provider behavior is centralized more like OpenClaw's resolveModel() rather than split across litellm assumptions and ad hoc defaults.",
+      "context": {
+        "existingFiles": [
+          "submodules/cua/libs/python/agent/agent/model_config.py (current flat ModelConfig registry)",
+          "submodules/cua/libs/python/agent/agent/loops/openai.py (reads format metadata from ModelConfig)",
+          "submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/context.py (context window fallback via litellm model info)"
+        ],
+      "depends": "US-OC-040 must be done first (provides the initial registry); US-OC-046 is higher priority and should land first so transcript policy can plug into the richer model resolution path",
+        "reference": "../openclaw/src/agents/pi-embedded-runner/model.ts (resolveModel); ../openclaw/src/agents/transcript-policy.ts (policy resolution inputs: modelApi, provider, modelId)"
+      },
+      "acceptanceCriteria": [
+        "Level 1: Lint passes (uv run ruff check .)",
+        "Level 1: Replace or extend ModelConfig with a resolver output that includes at least provider, model_api, adapter_target, tool_schema_type, screenshot_output_type, supports_safety_checks, action_format, and context_window when known",
+        "Level 1: A single resolver function accepts the litellm model string and returns the structured model metadata used by loops, context sizing, and transcript policy resolution",
+        "Level 1: Transcript policy resolution consumes structured model metadata rather than re-parsing model strings independently",
+        "Level 1: Unit tests pass — adding a hypothetical new provider/model entry changes loop/tool/sanitize behavior through data only, with zero conditional code edits in loops",
+        "Level 2: bash run_magic_tower.sh 50 openai/computer-use-preview and bash run_magic_tower.sh 50 openai/gpt-5.4 both pass with the resolver supplying model-specific behavior",
+        "Level 2: CONTEXT_WINDOW_OVERRIDE unset — context window logic prefers resolved model metadata before falling back to raw litellm lookups"
+      ],
+      "priority": 41,
+      "passes": false,
+      "notes": "US-OC-040 intentionally kept the registry narrow, which was correct for initial cleanup, but it stopped short of OpenClaw's broader model-resolution role. This story does not require porting OpenClaw's entire provider catalog or auth stack; it focuses on the missing architectural middle ground: one resolver object that centralizes capability decisions currently scattered across model_config.py, loop code, and context-window fallback logic."
     }
   ]
 }
