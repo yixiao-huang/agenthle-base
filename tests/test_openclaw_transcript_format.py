@@ -116,6 +116,24 @@ class TestToolResultGrouping:
         assert tool_results[0]["type"] == "tool_result"
         assert tool_results[0]["tool_use_id"] == "cc_out_1"
 
+    def test_user_string_message_from_tool_output_is_ignored_by_grouping(self):
+        """Post-tool helper user messages should not be misclassified as assistant text."""
+        output_items = [
+            {
+                "type": "message",
+                "role": "user",
+                "content": "[Screenshot saved to: /tmp/example.png]",
+            },
+            {
+                "type": "computer_call_output",
+                "call_id": "cc_out_1",
+                "output": {"type": "input_image", "image_url": "..."},
+            },
+        ]
+        assistant_content, tool_results = group_step_output(output_items)
+        assert assistant_content == []
+        assert len(tool_results) == 1
+
 
 # ---------------------------------------------------------------------------
 # Usage total field
@@ -207,6 +225,40 @@ class TestNoConsecutiveAssistantEntries:
             assert not (r1 == "assistant" and r2 == "assistant"), (
                 f"Consecutive assistant entries at positions {i} and {i+1}"
             )
+
+
+class TestPartialItemTranscriptLogging:
+    def test_partial_tool_outputs_are_persisted(self, tmp_path):
+        sm = SessionManager("t1", base_dir=tmp_path)
+        sm.init_session()
+
+        from cua_bench.agents.openclaw.agent_loop import OpenClawComputerAgent
+
+        agent = object.__new__(OpenClawComputerAgent)
+        agent.session_mgr = sm
+        agent.trajectory_dir = None
+
+        partial_items = [
+            {
+                "type": "computer_call_output",
+                "call_id": "cc_1",
+                "output": {"type": "input_image", "image_url": "..."},
+            },
+            {
+                "type": "message",
+                "role": "user",
+                "content": "[Screenshot saved to: /tmp/example.png]",
+            },
+        ]
+
+        agent._log_partial_items_to_transcript(partial_items)
+
+        messages = [e.data["message"] for e in sm.load_history() if e.type == "message"]
+        assert any(m["role"] == "tool" for m in messages)
+        assert any(m["role"] == "user" for m in messages)
+        tool_messages = [m for m in messages if m["role"] == "tool"]
+        assert tool_messages[0]["content"][0]["type"] == "tool_result"
+        assert tool_messages[0]["content"][0]["tool_use_id"] == "cc_1"
 
 
 # ---------------------------------------------------------------------------

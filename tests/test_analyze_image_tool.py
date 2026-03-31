@@ -34,11 +34,19 @@ def _run(coro):
     return asyncio.run(coro)
 
 
-def _make_tool(model: str = "test-model") -> AnalyzeImageTool:
+def _make_tool(
+    model: str = "test-model",
+    *,
+    thinking_params: dict | None = None,
+) -> AnalyzeImageTool:
     """Create an AnalyzeImageTool with a mock interface."""
     mock_interface = MagicMock()
     mock_interface.read_bytes = AsyncMock(return_value=b"\x89PNG\r\n\x1a\nfakedata")
-    return AnalyzeImageTool(mock_interface, model=model)
+    return AnalyzeImageTool(
+        mock_interface,
+        model=model,
+        thinking_params=thinking_params,
+    )
 
 
 def _mock_vlm_response(text: str = "Floor 2 is shown"):
@@ -424,6 +432,19 @@ class TestVlmCall:
             tool.call({"image": r"C:\test.png"})
             call_args = mock_litellm.acompletion.call_args
             assert call_args.kwargs["model"] == "my-custom-model"
+
+    def test_thinking_params_forwarded(self):
+        tool = _make_tool(
+            thinking_params={"thinking": {"type": "enabled", "budget_tokens": 5000}}
+        )
+        with patch("agent.tools.analyze_image.litellm") as mock_litellm:
+            mock_litellm.acompletion = AsyncMock(return_value=_mock_vlm_response("OK"))
+            tool.call({"image": r"C:\test.png"})
+            call_args = mock_litellm.acompletion.call_args
+            assert call_args.kwargs["thinking"] == {
+                "type": "enabled",
+                "budget_tokens": 5000,
+            }
 
     def test_vlm_failure_returns_error(self):
         tool = _make_tool()

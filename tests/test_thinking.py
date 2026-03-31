@@ -113,6 +113,14 @@ class TestResolveThinkingParams:
         result = resolve_thinking_params(ThinkLevel.LOW, "openai/computer-use-preview")
         assert result == {"reasoning": {"effort": "low", "summary": "concise"}}
 
+    def test_openai_chat_transport_uses_reasoning_effort(self):
+        result = resolve_thinking_params(
+            ThinkLevel.HIGH,
+            "openai/gpt-5.4",
+            transport="chat",
+        )
+        assert result == {"reasoning_effort": "high"}
+
     # Gemini
     def test_gemini_medium(self):
         result = resolve_thinking_params(ThinkLevel.MEDIUM, "google/gemini-3-pro")
@@ -139,6 +147,7 @@ class TestThinkingConfig:
         assert cfg.level == ThinkLevel.OFF
         assert cfg.flush_level == ThinkLevel.OFF
         assert cfg.compaction_level == ThinkLevel.OFF
+        assert cfg.vision_level == ThinkLevel.OFF
 
     def test_main_level_params(self):
         cfg = ThinkingConfig(level=ThinkLevel.HIGH)
@@ -165,6 +174,22 @@ class TestThinkingConfig:
             "thinking": {"type": "enabled", "budget_tokens": 5000}
         }
 
+    def test_openai_helper_paths_use_reasoning_effort(self):
+        cfg = ThinkingConfig(
+            level=ThinkLevel.HIGH,
+            flush_level=ThinkLevel.HIGH,
+            compaction_level=ThinkLevel.HIGH,
+            vision_level=ThinkLevel.HIGH,
+        )
+        assert cfg.to_api_params("openai/gpt-5.4") == {
+            "reasoning": {"effort": "high", "summary": "concise"}
+        }
+        assert cfg.flush_params("openai/gpt-5.4") == {
+            "reasoning": {"effort": "high", "summary": "concise"}
+        }
+        assert cfg.compaction_params("openai/gpt-5.4") == {"reasoning_effort": "high"}
+        assert cfg.vision_params("openai/gpt-5.4") == {"reasoning_effort": "high"}
+
     def test_flush_and_compaction_can_inherit_main_level(self):
         """When set to the same level, auxiliary call sites match the main params."""
         cfg = ThinkingConfig(
@@ -176,3 +201,7 @@ class TestThinkingConfig:
         assert cfg.to_api_params("anthropic/claude-sonnet-4-6-20260101") == expected
         assert cfg.flush_params("anthropic/claude-sonnet-4-6-20260101") == expected
         assert cfg.compaction_params("anthropic/claude-sonnet-4-6-20260101") == expected
+
+    def test_vision_defaults_off_even_when_main_is_enabled(self):
+        cfg = ThinkingConfig(level=ThinkLevel.HIGH, flush_level=ThinkLevel.HIGH)
+        assert cfg.vision_params("anthropic/claude-sonnet-4-6-20260101") == {}

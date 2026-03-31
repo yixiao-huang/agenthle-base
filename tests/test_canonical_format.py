@@ -654,6 +654,7 @@ class TestTranscriptPolicy:
 
     def test_defaults(self):
         policy = TranscriptPolicy()
+        assert policy.sanitize_mode == "images-only"
         assert policy.drop_thinking_blocks is False
         assert policy.sanitize_thinking_signatures is False
         assert policy.downgrade_openai_reasoning is False
@@ -675,17 +676,20 @@ class TestGetTranscriptPolicy:
 
     def test_anthropic_provider_prefix(self):
         policy = get_transcript_policy("anthropic/claude-sonnet-4-20250514")
+        assert policy.sanitize_mode == "full"
         assert policy.drop_thinking_blocks is True
         assert policy.validate_anthropic_turns is True
         assert policy.downgrade_openai_reasoning is False
 
     def test_anthropic_claude_model(self):
         policy = get_transcript_policy("claude-opus-4-6")
+        assert policy.sanitize_mode == "full"
         assert policy.drop_thinking_blocks is True
         assert policy.validate_anthropic_turns is True
 
     def test_openai_provider_prefix(self):
         policy = get_transcript_policy("openai/gpt-5.4")
+        assert policy.sanitize_mode == "images-only"
         assert policy.downgrade_openai_reasoning is True
         assert policy.drop_thinking_blocks is False
         assert policy.validate_anthropic_turns is False
@@ -700,6 +704,7 @@ class TestGetTranscriptPolicy:
 
     def test_gemini(self):
         policy = get_transcript_policy("gemini/gemini-2.5-pro")
+        assert policy.sanitize_mode == "full"
         assert policy.sanitize_thinking_signatures is True
         assert policy.drop_thinking_blocks is False
         assert policy.downgrade_openai_reasoning is False
@@ -1046,3 +1051,55 @@ class TestSanitizeItemsPolicy:
         assert len(result) == 2
         assert result[0]["role"] == "user"
         assert result[1]["role"] == "assistant"
+
+    def test_model_resolves_anthropic_policy_without_manual_injection(self):
+        msgs: list[CanonicalMessage] = [
+            {"role": "user", "content": [TextBlock(type="text", text="Hi")]},
+            {"role": "assistant", "content": [
+                ThinkingBlock(type="thinking", thinking="hmm"),
+                TextBlock(type="text", text="Hello"),
+            ]},
+        ]
+        result = sanitize_items(
+            msgs,
+            target="anthropic",
+            model="anthropic/claude-sonnet-4-20250514",
+        )
+        assistant = [m for m in result if m["role"] == "assistant"]
+        assert len(assistant) == 1
+        assert all(b["type"] != "thinking" for b in assistant[0]["content"])
+
+    def test_model_resolves_openai_policy_without_manual_injection(self):
+        msgs: list[CanonicalMessage] = [
+            {"role": "user", "content": [TextBlock(type="text", text="Hi")]},
+            {"role": "assistant", "content": [
+                ThinkingBlock(type="thinking", thinking="hmm"),
+                TextBlock(type="text", text="Hello"),
+            ]},
+        ]
+        result = sanitize_items(msgs, model="openai/gpt-5.4")
+        assert isinstance(result, list)
+
+    def test_model_resolves_gemini_policy_without_manual_injection(self):
+        msgs: list[CanonicalMessage] = [
+            {"role": "user", "content": [TextBlock(type="text", text="Hi")]},
+            {"role": "assistant", "content": [
+                ThinkingBlock(
+                    type="thinking",
+                    thinking="hmm",
+                    thinkingSignature="raw-signature",
+                ),
+                TextBlock(type="text", text="Hello"),
+            ]},
+        ]
+        result = sanitize_items(
+            msgs,
+            target="anthropic",
+            model="google/gemini-3-pro",
+        )
+        assistant = [m for m in result if m["role"] == "assistant"]
+        thinking_blocks = [
+            b for b in assistant[0]["content"] if b.get("type") == "thinking"
+        ]
+        assert len(thinking_blocks) == 1
+        assert "thinkingSignature" not in thinking_blocks[0]

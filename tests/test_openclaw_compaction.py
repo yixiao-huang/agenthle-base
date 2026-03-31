@@ -42,9 +42,7 @@ from cua_bench.agents.openclaw.context import (
     summarize_chunks_iterative,
     summarize_with_fallback,
 )
-from cua_bench.agents.openclaw.agent_loop import (
-    _extract_messages_for_compaction,
-)
+from cua_bench.agents.openclaw.agent_loop import _extract_messages_for_compaction
 
 
 # ---------------------------------------------------------------------------
@@ -248,7 +246,7 @@ class TestSummarizeChunk:
     def test_produces_string(self):
         mock_resp = _mock_litellm_response("This is a summary.")
         with patch("litellm.acompletion", new_callable=AsyncMock, return_value=mock_resp):
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.run(
                 summarize_chunk(_make_messages(3), "test-model")
             )
         assert result == "This is a summary."
@@ -256,7 +254,7 @@ class TestSummarizeChunk:
     def test_includes_identifier_preservation(self):
         mock_resp = _mock_litellm_response("Summary")
         with patch("litellm.acompletion", new_callable=AsyncMock, return_value=mock_resp) as mock_acomp:
-            asyncio.get_event_loop().run_until_complete(
+            asyncio.run(
                 summarize_chunk(_make_messages(3), "test-model")
             )
             call_args = mock_acomp.call_args
@@ -273,7 +271,7 @@ class TestSummarizeChunk:
         """When no previous_summary, SUMMARIZATION_PROMPT should be in user message."""
         mock_resp = _mock_litellm_response("Summary")
         with patch("litellm.acompletion", new_callable=AsyncMock, return_value=mock_resp) as mock_acomp:
-            asyncio.get_event_loop().run_until_complete(
+            asyncio.run(
                 summarize_chunk(_make_messages(3), "test-model")
             )
             user_msg = mock_acomp.call_args.kwargs["messages"][1]["content"]
@@ -287,7 +285,7 @@ class TestSummarizeChunk:
         """When previous_summary is set, UPDATE_SUMMARIZATION_PROMPT should be used."""
         mock_resp = _mock_litellm_response("Updated summary")
         with patch("litellm.acompletion", new_callable=AsyncMock, return_value=mock_resp) as mock_acomp:
-            asyncio.get_event_loop().run_until_complete(
+            asyncio.run(
                 summarize_chunk(
                     _make_messages(3), "test-model",
                     previous_summary="Earlier context here",
@@ -303,7 +301,7 @@ class TestSummarizeChunk:
         """Conversation text must be wrapped in <conversation> tags."""
         mock_resp = _mock_litellm_response("Summary")
         with patch("litellm.acompletion", new_callable=AsyncMock, return_value=mock_resp) as mock_acomp:
-            asyncio.get_event_loop().run_until_complete(
+            asyncio.run(
                 summarize_chunk(_make_messages(3), "test-model")
             )
             user_msg = mock_acomp.call_args.kwargs["messages"][1]["content"]
@@ -314,7 +312,7 @@ class TestSummarizeChunk:
         """Previous summary must be wrapped in <previous-summary> tags."""
         mock_resp = _mock_litellm_response("Updated")
         with patch("litellm.acompletion", new_callable=AsyncMock, return_value=mock_resp) as mock_acomp:
-            asyncio.get_event_loop().run_until_complete(
+            asyncio.run(
                 summarize_chunk(
                     _make_messages(3), "test-model",
                     previous_summary="Prior summary content",
@@ -329,7 +327,7 @@ class TestSummarizeChunk:
         """Initial summarization should not contain <previous-summary> tags."""
         mock_resp = _mock_litellm_response("Summary")
         with patch("litellm.acompletion", new_callable=AsyncMock, return_value=mock_resp) as mock_acomp:
-            asyncio.get_event_loop().run_until_complete(
+            asyncio.run(
                 summarize_chunk(_make_messages(3), "test-model")
             )
             user_msg = mock_acomp.call_args.kwargs["messages"][1]["content"]
@@ -338,7 +336,7 @@ class TestSummarizeChunk:
     def test_passes_custom_instructions(self):
         mock_resp = _mock_litellm_response("Summary")
         with patch("litellm.acompletion", new_callable=AsyncMock, return_value=mock_resp) as mock_acomp:
-            asyncio.get_event_loop().run_until_complete(
+            asyncio.run(
                 summarize_chunk(
                     _make_messages(3), "test-model",
                     custom_instructions="Focus on game progress",
@@ -348,11 +346,23 @@ class TestSummarizeChunk:
             system_msg = call_args.kwargs["messages"][0]["content"]
             assert "Focus on game progress" in system_msg
 
+    def test_openai_helper_call_can_omit_reasoning_kwargs(self):
+        mock_resp = _mock_litellm_response("Summary")
+        with patch("litellm.acompletion", new_callable=AsyncMock, return_value=mock_resp) as mock_acomp:
+            asyncio.run(
+                summarize_chunk(
+                    _make_messages(3),
+                    "openai/gpt-5.4",
+                    thinking_params={},
+                )
+            )
+        assert "reasoning" not in mock_acomp.call_args.kwargs
+
     def test_retry_on_failure(self):
         mock_resp = _mock_litellm_response("After retry")
         with patch("litellm.acompletion", new_callable=AsyncMock, side_effect=[Exception("API error"), mock_resp]) as mock_acomp:
             with patch("asyncio.sleep", new_callable=AsyncMock):
-                result = asyncio.get_event_loop().run_until_complete(
+                result = asyncio.run(
                     summarize_chunk(_make_messages(3), "test-model")
                 )
         assert result == "After retry"
@@ -362,7 +372,7 @@ class TestSummarizeChunk:
         with patch("litellm.acompletion", new_callable=AsyncMock, side_effect=Exception("persistent error")) as mock_acomp:
             with patch("asyncio.sleep", new_callable=AsyncMock):
                 with pytest.raises(Exception, match="persistent error"):
-                    asyncio.get_event_loop().run_until_complete(
+                    asyncio.run(
                         summarize_chunk(_make_messages(3), "test-model")
                     )
         assert mock_acomp.call_count == 3
@@ -371,7 +381,7 @@ class TestSummarizeChunk:
         """Default call passes timeout=120 (SUMMARIZATION_TIMEOUT) to litellm."""
         mock_resp = _mock_litellm_response("Summary")
         with patch("litellm.acompletion", new_callable=AsyncMock, return_value=mock_resp) as mock_acomp:
-            asyncio.get_event_loop().run_until_complete(
+            asyncio.run(
                 summarize_chunk(_make_messages(3), "test-model")
             )
             assert mock_acomp.call_args.kwargs["timeout"] == SUMMARIZATION_TIMEOUT
@@ -380,7 +390,7 @@ class TestSummarizeChunk:
         """Custom timeout value is forwarded to litellm."""
         mock_resp = _mock_litellm_response("Summary")
         with patch("litellm.acompletion", new_callable=AsyncMock, return_value=mock_resp) as mock_acomp:
-            asyncio.get_event_loop().run_until_complete(
+            asyncio.run(
                 summarize_chunk(_make_messages(3), "test-model", timeout=30)
             )
             assert mock_acomp.call_args.kwargs["timeout"] == 30
@@ -389,24 +399,21 @@ class TestSummarizeChunk:
         """Compaction summarization forwards provider-specific thinking params."""
         mock_resp = _mock_litellm_response("Summary")
         with patch("litellm.acompletion", new_callable=AsyncMock, return_value=mock_resp) as mock_acomp:
-            asyncio.get_event_loop().run_until_complete(
+            asyncio.run(
                 summarize_chunk(
                     _make_messages(3),
                     "test-model",
-                    thinking_params={"reasoning": {"effort": "medium", "summary": "concise"}},
+                    thinking_params={"reasoning_effort": "medium"},
                 )
             )
-            assert mock_acomp.call_args.kwargs["reasoning"] == {
-                "effort": "medium",
-                "summary": "concise",
-            }
+            assert mock_acomp.call_args.kwargs["reasoning_effort"] == "medium"
 
     def test_timeout_fallback_via_summarize_with_fallback(self):
         """Timeout errors trigger Tier 3 static fallback via summarize_with_fallback."""
         timeout_error = Exception("Request timed out")
         with patch("litellm.acompletion", new_callable=AsyncMock, side_effect=timeout_error):
             with patch("asyncio.sleep", new_callable=AsyncMock):
-                result = asyncio.get_event_loop().run_until_complete(
+                result = asyncio.run(
                     summarize_with_fallback(
                         _make_messages(5), "test-model", 200_000, 50_000,
                     )
@@ -423,14 +430,14 @@ class TestSummarizeChunksIterative:
         mock_resp = _mock_litellm_response("Chunk summary")
         with patch("litellm.acompletion", new_callable=AsyncMock, return_value=mock_resp) as mock_acomp:
             chunks = [_make_messages(3), _make_messages(3)]
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.run(
                 summarize_chunks_iterative(chunks, "test-model")
             )
         assert result == "Chunk summary"
         assert mock_acomp.call_count == 2
 
     def test_empty_chunks_returns_fallback(self):
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.run(
             summarize_chunks_iterative([], "test-model")
         )
         assert result == DEFAULT_SUMMARY_FALLBACK
@@ -451,7 +458,7 @@ class TestSummarizeChunksIterative:
 
         with patch("litellm.acompletion", side_effect=mock_acompletion):
             chunks = [_make_messages(3), _make_messages(3)]
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.run(
                 summarize_chunks_iterative(chunks, "test-model")
             )
         assert result == "Combined summary"
@@ -465,7 +472,7 @@ class TestSummarizeWithFallback:
     def test_tier1_success(self):
         mock_resp = _mock_litellm_response("Full summary")
         with patch("litellm.acompletion", new_callable=AsyncMock, return_value=mock_resp):
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.run(
                 summarize_with_fallback(
                     _make_messages(5), "test-model", 200_000, 50_000,
                 )
@@ -475,7 +482,7 @@ class TestSummarizeWithFallback:
     def test_tier3_fallback_on_all_failures(self):
         with patch("litellm.acompletion", new_callable=AsyncMock, side_effect=Exception("fail")):
             with patch("asyncio.sleep", new_callable=AsyncMock):
-                result = asyncio.get_event_loop().run_until_complete(
+                result = asyncio.run(
                     summarize_with_fallback(
                         _make_messages(5), "test-model", 200_000, 50_000,
                     )
@@ -507,7 +514,7 @@ class TestCompactMessages:
     def test_returns_compaction_result(self):
         mock_resp = _mock_litellm_response("Compacted summary of conversation.")
         with patch("litellm.acompletion", new_callable=AsyncMock, return_value=mock_resp):
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.run(
                 compact_messages(_make_messages(10), "test-model", 200_000)
             )
         assert isinstance(result, CompactionResult)
@@ -519,7 +526,7 @@ class TestCompactMessages:
     def test_tokens_after_less_than_before(self):
         mock_resp = _mock_litellm_response("Short summary.")
         with patch("litellm.acompletion", new_callable=AsyncMock, return_value=mock_resp):
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.run(
                 compact_messages(_make_messages(20, text_size=500), "test-model", 200_000)
             )
         assert result.tokens_after < result.tokens_before
@@ -529,14 +536,14 @@ class TestCompactMessages:
         msgs = _make_messages(10)
         mock_resp = _mock_litellm_response("Summary")
         with patch("litellm.acompletion", new_callable=AsyncMock, return_value=mock_resp):
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.run(
                 compact_messages(msgs, "test-model", 200_000)
             )
         # Verify the split point is reasonable
         assert 0 < result.first_kept_message_index < len(msgs)
 
     def test_empty_messages(self):
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.run(
             compact_messages([], "test-model", 200_000)
         )
         assert result.summary == DEFAULT_SUMMARY_FALLBACK
@@ -548,7 +555,7 @@ class TestCompactMessages:
         """Single message: preserved by recent turns, nothing compacted."""
         mock_resp = _mock_litellm_response("Single msg summary")
         with patch("litellm.acompletion", new_callable=AsyncMock, return_value=mock_resp):
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.run(
                 compact_messages(_make_messages(1), "test-model", 200_000)
             )
         # Single message goes to preserved (fewer user turns than preserve_count)
@@ -608,7 +615,6 @@ class TestExtractMessagesForCompaction:
 
         messages = _extract_messages_for_compaction(mock_mgr)
         assert len(messages) == 0
-
 
 # ===========================================================================
 # US-OC-013: Tool pairing repair
@@ -814,7 +820,7 @@ class TestSplitPreservedRecentTurns:
 
         mock_resp = _mock_litellm_response("Tight budget summary")
         with patch("litellm.acompletion", new_callable=AsyncMock, return_value=mock_resp):
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.run(
                 compact_messages(
                     msgs, "test-model", 10_000,
                     instructions_tokens=3000,  # large instructions eat budget
@@ -839,12 +845,12 @@ class TestBudgetAwareCompaction:
 
         # Small instructions
         with patch("litellm.acompletion", new_callable=AsyncMock, return_value=mock_resp):
-            result_small = asyncio.get_event_loop().run_until_complete(
+            result_small = asyncio.run(
                 compact_messages(msgs, "test-model", 50_000, instructions_tokens=1000)
             )
         # Large instructions
         with patch("litellm.acompletion", new_callable=AsyncMock, return_value=mock_resp):
-            result_large = asyncio.get_event_loop().run_until_complete(
+            result_large = asyncio.run(
                 compact_messages(msgs, "test-model", 50_000, instructions_tokens=15000)
             )
         # Large instructions should compact more (higher first_kept_index)
@@ -863,7 +869,7 @@ class TestBudgetAwareCompaction:
         msgs = _make_messages(4, text_size=100)
         mock_resp = _mock_litellm_response("Summary")
         with patch("litellm.acompletion", new_callable=AsyncMock, return_value=mock_resp):
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.run(
                 compact_messages(
                     msgs, "test-model", context_window,
                     instructions_tokens=instructions_tokens,
@@ -882,7 +888,7 @@ class TestBudgetAwareCompaction:
 
         mock_resp = _mock_litellm_response("Short")
         with patch("litellm.acompletion", new_callable=AsyncMock, return_value=mock_resp):
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.run(
                 compact_messages(
                     msgs, "test-model", context_window,
                     instructions_tokens=instructions_tokens,
@@ -903,7 +909,7 @@ class TestBudgetAwareCompaction:
 
         mock_resp = _mock_litellm_response("Short summary.")
         with patch("litellm.acompletion", new_callable=AsyncMock, return_value=mock_resp):
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.run(
                 compact_messages(
                     msgs, "test-model", context_window,
                     instructions_tokens=instructions_tokens,
@@ -918,7 +924,7 @@ class TestBudgetAwareCompaction:
         msgs = _make_messages(10)
         mock_resp = _mock_litellm_response("Summary")
         with patch("litellm.acompletion", new_callable=AsyncMock, return_value=mock_resp):
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.run(
                 compact_messages(msgs, "test-model", 200_000)
             )
         assert isinstance(result, CompactionResult)
@@ -931,12 +937,12 @@ class TestBudgetAwareCompaction:
 
         # Very small share → more aggressive compaction
         with patch("litellm.acompletion", new_callable=AsyncMock, return_value=mock_resp):
-            result_small = asyncio.get_event_loop().run_until_complete(
+            result_small = asyncio.run(
                 compact_messages(msgs, "test-model", 50_000, max_history_share=0.2)
             )
         # Larger share → less aggressive compaction
         with patch("litellm.acompletion", new_callable=AsyncMock, return_value=mock_resp):
-            result_large = asyncio.get_event_loop().run_until_complete(
+            result_large = asyncio.run(
                 compact_messages(msgs, "test-model", 50_000, max_history_share=0.8)
             )
         assert result_small.first_kept_message_index >= result_large.first_kept_message_index
@@ -948,7 +954,7 @@ class TestBudgetAwareCompaction:
         mock_resp = _mock_litellm_response("Summary")
 
         with patch("litellm.acompletion", new_callable=AsyncMock, return_value=mock_resp):
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.run(
                 compact_messages(
                     msgs, "test-model", 20_000,
                     instructions_tokens=5000,
@@ -980,7 +986,7 @@ class TestCompactAppliesRepairToKept:
 
         mock_resp = _mock_litellm_response("Summary of compacted messages")
         with patch("litellm.acompletion", new_callable=AsyncMock, return_value=mock_resp):
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.run(
                 compact_messages(msgs, "test-model", 50_000)
             )
         # Should complete without error — repair handles any orphans
@@ -1041,7 +1047,7 @@ class TestCuaPatternCompaction:
 
         mock_resp = _mock_litellm_response("Agent navigated to settings")
         with patch("litellm.acompletion", new_callable=AsyncMock, return_value=mock_resp):
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.run(
                 compact_messages(msgs, "test-model", 50_000, recent_turns_preserve=3)
             )
         # Compaction should actually run (not return fallback)
@@ -1059,7 +1065,7 @@ class TestCuaPatternCompaction:
 
         mock_resp = _mock_litellm_response("Overflow summary")
         with patch("litellm.acompletion", new_callable=AsyncMock, return_value=mock_resp):
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.run(
                 compact_messages(
                     msgs, "test-model", 10_000,
                     instructions_tokens=3000,

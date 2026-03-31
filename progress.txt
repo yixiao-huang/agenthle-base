@@ -1041,3 +1041,21 @@
 - **Learnings for future iterations:**
   - Separate "thinking intent" from transport-specific request params; reusing one OpenAI-style `reasoning` payload across helper paths creates avoidable provider bugs.
   - PRD cleanup matters when a bug spans multiple stories: assign one story as the canonical owner and demote the others to residual cleanup to avoid ambiguous implementation scope.
+---
+
+## 2026-03-30 - US-OC-046
+- Shipped the first code checkpoint for runtime model-resolved policy work.
+- CUA changes:
+  - added model-aware runtime sanitize handling in the OpenClaw loop while preserving already-native live Responses item streams
+  - made helper thinking transport-aware, including an OpenAI Responses path for memory flush and suppression of unsupported helper `reasoning` kwargs
+  - extended transcript/session conversion and transcript grouping coverage for the new runtime behavior
+  - added vision-thinking plumbing through solver -> agent -> tool assembly -> `AnalyzeImageTool`
+- Parent repo changes:
+  - added `docs/plan/US-OC-046-runtime-model-resolved-policy.md`
+  - updated focused tests for canonical policy resolution, memory flush, compaction, transcript formatting, solver args, thinking, and analyze-image tool wiring
+- Verification:
+  - `python3 -m compileall submodules/cua/libs/cua-bench/cua_bench/agents/openclaw submodules/cua/libs/cua-bench/cua_bench/agents/openclaw_agent.py submodules/cua/libs/cua-bench/cua_bench/batch/solver.py submodules/cua/libs/python/agent/agent/tools/analyze_image.py`
+  - `UV_CACHE_DIR=/tmp/uv-cache uv run pytest tests/test_thinking.py tests/test_canonical_format.py tests/test_openclaw_memory_flush.py tests/test_openclaw_compaction.py tests/test_openclaw_transcript_format.py tests/test_solver_args.py tests/test_analyze_image_tool.py`
+- **Learnings for future iterations:**
+  - Runtime sanitize should not blindly re-canonicalize already-native OpenAI Responses item streams; doing so can break computer-call continuity and trigger repeated screenshots.
+  - For OpenAI helper calls, there are two viable paths: use Responses when the helper really needs OpenAI reasoning semantics, or suppress `reasoning` entirely on chat-completions-style helpers.
