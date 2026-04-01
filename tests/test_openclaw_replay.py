@@ -585,8 +585,30 @@ class TestConvertToResponsesApiItems:
         assert items[1]["name"] == "memory_search"
         assert items[1]["arguments"] == '{"q": "test"}'
 
+    def test_openai_reasoning_block_replayed_as_reasoning_item(self):
+        messages = [{
+            "role": "assistant",
+            "content": [
+                {
+                    "type": "thinking",
+                    "thinking": "Check the floor label first.",
+                    "thinkingSignature": '{"id":"rs_123","type":"reasoning"}',
+                },
+                {"type": "text", "text": "Now act."},
+            ],
+        }]
+        items = convert_to_responses_api_items(messages)
+
+        assert items[0] == {
+            "type": "reasoning",
+            "id": "rs_123",
+            "summary": [{"type": "summary_text", "text": "Check the floor label first."}],
+        }
+        assert items[1]["type"] == "message"
+        assert items[1]["role"] == "assistant"
+
     def test_assistant_text_plus_computer_call(self):
-        """Assistant text + computer_call → message item + computer_call item."""
+        """Replay computer_call blocks are downgraded to assistant text."""
         action = {"type": "click", "x": 100, "y": 200}
         messages = [{
             "role": "assistant",
@@ -599,9 +621,34 @@ class TestConvertToResponsesApiItems:
         assert len(items) == 2
         assert items[0]["type"] == "message"
         assert items[0]["content"] == [{"type": "output_text", "text": "I'll click the door"}]
-        assert items[1]["type"] == "computer_call"
-        assert items[1]["call_id"] == "cc-1"
-        assert items[1]["action"] == action
+        assert items[1]["type"] == "message"
+        assert items[1]["role"] == "assistant"
+        assert "computer action" in items[1]["content"][0]["text"]
+        assert "click" in items[1]["content"][0]["text"]
+
+    def test_assistant_batched_computer_call_downgraded_to_text(self):
+        """GPT-5.4 batched computer actions replay as descriptive text, not tool calls."""
+        messages = [{
+            "role": "assistant",
+            "content": [
+                {
+                    "type": "computer_call",
+                    "id": "cc-batch",
+                    "actions": [
+                        {"type": "click", "x": 10, "y": 20},
+                        {"type": "keypress", "keys": ["ARROWUP"]},
+                    ],
+                },
+            ],
+        }]
+        items = convert_to_responses_api_items(messages)
+        assert len(items) == 1
+        assert items[0]["type"] == "message"
+        assert items[0]["role"] == "assistant"
+        text = items[0]["content"][0]["text"]
+        assert "computer action" in text
+        assert "click" in text
+        assert "keypress" in text
 
     def test_assistant_only_function_call(self):
         """Assistant with only function_call, no text → single function_call item."""
@@ -648,6 +695,26 @@ class TestConvertToResponsesApiItems:
         assert len(items) == 1
         assert items[0]["type"] == "function_call_output"
         assert items[0]["call_id"] == "cc-1"
+
+    def test_computer_tool_result_replays_as_user_text(self):
+        """Historical computer outputs are downgraded to user text on replay."""
+        messages = [
+            {
+                "role": "assistant",
+                "content": [{"type": "computer_call", "id": "cc-1", "actions": [{"type": "screenshot"}]}],
+            },
+            {
+                "role": "tool",
+                "content": [{"type": "tool_result", "tool_use_id": "cc-1", "content": "image:trajectory"}],
+            },
+        ]
+        items = convert_to_responses_api_items(messages)
+        assert len(items) == 2
+        assert items[0]["type"] == "message"
+        assert items[0]["role"] == "assistant"
+        assert items[1]["type"] == "message"
+        assert items[1]["role"] == "user"
+        assert "computer result" in items[1]["content"][0]["text"]
 
     def test_empty_messages(self):
         """Empty input → empty output."""
@@ -800,13 +867,22 @@ class TestConvertToResponsesApiItems:
         ]
         items = convert_to_responses_api_items(messages)
 
-        # Find the computer_call item
-        cc_idx = next(i for i, it in enumerate(items) if it.get("type") == "computer_call")
-        # The very next item must be the computer_call_output (not flush messages).
-        # session.py uses call_type_map to emit the correct output type:
-        # computer_call → computer_call_output (not function_call_output).
-        assert items[cc_idx + 1]["type"] == "computer_call_output"
-        assert items[cc_idx + 1]["call_id"] == "cc-1"
+        action_idx = next(
+            i for i, it in enumerate(items)
+            if it.get("type") == "message"
+            and it.get("role") == "assistant"
+            and isinstance(it.get("content"), list)
+            and any("computer action" in str(b.get("text", "")) for b in it["content"])
+        )
+        assert all(it.get("type") != "computer_call" for it in items)
+        result_idx = next(
+            i for i, it in enumerate(items)
+            if it.get("type") == "message"
+            and it.get("role") == "user"
+            and isinstance(it.get("content"), list)
+            and any("computer result" in str(b.get("text", "")) for b in it["content"])
+        )
+        assert result_idx > action_idx
 
         # Flush messages should come AFTER the tool output
         flush_idx = next(
@@ -815,4 +891,4 @@ class TestConvertToResponsesApiItems:
             and isinstance(it.get("content"), list)
             and any("flush" in str(b.get("text", "")).lower() for b in it["content"])
         )
-        assert flush_idx > cc_idx + 1
+        assert flush_idx != result_idx

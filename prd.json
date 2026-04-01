@@ -1074,7 +1074,7 @@
         "existingFiles": [
           "submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/canonical.py (TranscriptPolicy to extend with sanitize_tool_call_ids, tool_call_id_mode flags)"
         ],
-        "depends": "US-OC-041 must be done first (provides TranscriptPolicy infrastructure); US-OC-032 (cross-model investigation identifies which providers need it)",
+        "depends": "US-OC-041 must be done first (provides TranscriptPolicy infrastructure); US-OC-032 (cross-model investigation identifies which providers need it). This story is logically independent of helper runtime unification (US-OC-048/US-OC-049) and can proceed in parallel if file ownership is coordinated.",
         "reference": "openclaw/src/agents/tool-call-id.ts (310 lines — full implementation with strict/strict9 modes, occurrence-aware ID resolver, collision handling)"
       },
       "acceptanceCriteria": [
@@ -1086,7 +1086,7 @@
       ],
       "priority": 37,
       "passes": false,
-      "notes": "Port of OpenClaw's sanitizeToolCallIdsForCloudCodeAssist(). Key complexity: sanitization can create ID collisions (e.g., truncating 'call_abc-123' and 'call_abc_456' both to 'callabc'), so the resolver must track used IDs and generate unique alternatives. Tool results must consume rewritten IDs in the same order they were generated for assistant blocks."
+      "notes": "Port of OpenClaw's sanitizeToolCallIdsForCloudCodeAssist(). Key complexity: sanitization can create ID collisions (e.g., truncating 'call_abc-123' and 'call_abc_456' both to 'callabc'), so the resolver must track used IDs and generate unique alternatives. Tool results must consume rewritten IDs in the same order they were generated for assistant blocks. Keep this story scoped to transcript/replay correctness; do not block it on embedded-agent adoption."
     },
     {
       "id": "US-OC-044",
@@ -1096,7 +1096,7 @@
         "existingFiles": [
           "submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/canonical.py (TranscriptPolicy + downgrade_openai_reasoning pass to extend)"
         ],
-        "depends": "US-OC-041 must be done first (provides TranscriptPolicy infrastructure and downgrade_openai_reasoning pass)",
+        "depends": "US-OC-041 must be done first (provides TranscriptPolicy infrastructure and downgrade_openai_reasoning pass). This story is logically independent of helper runtime unification (US-OC-048/US-OC-049) and can proceed in parallel if file ownership is coordinated.",
         "reference": "openclaw/src/agents/pi-embedded-helpers/openai.ts:67-200 (splitOpenAIFunctionCallPairing, downgradeOpenAIFunctionCallReasoningPairs, downgradeOpenAIReasoningBlocks)"
       },
       "acceptanceCriteria": [
@@ -1108,7 +1108,7 @@
       ],
       "priority": 38,
       "passes": false,
-      "notes": "The dual-ID format (call_XXX|fc_YYY) exists because OpenAI Responses API enforces bidirectional reasoning<->call coupling at the server level. The fc_* suffix is the Responses API item ID that pairs with a reasoning item. When reasoning is absent (cross-session replay), the suffix must be stripped so the API doesn't look for the paired reasoning. Tool results referencing the original dual-ID must also be rewritten to use the stripped call-only ID."
+      "notes": "The dual-ID format (call_XXX|fc_YYY) exists because OpenAI Responses API enforces bidirectional reasoning<->call coupling at the server level. The fc_* suffix is the Responses API item ID that pairs with a reasoning item. When reasoning is absent (cross-session replay), the suffix must be stripped so the API doesn't look for the paired reasoning. Tool results referencing the original dual-ID must also be rewritten to use the stripped call-only ID. Keep this story scoped to durable transcript/replay compatibility rather than helper transport architecture."
     },
     {
       "id": "US-OC-045",
@@ -1119,7 +1119,7 @@
           "submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/session.py (SessionManager.append_message to wrap)",
           "submodules/cua/libs/cua-bench/cua_bench/agents/openclaw_agent.py (wire guard into agent lifecycle)"
         ],
-        "depends": "US-OC-041 must be done first (provides TranscriptPolicy infrastructure)",
+        "depends": "US-OC-041 must be done first (provides TranscriptPolicy infrastructure). This story is logically independent of helper runtime unification (US-OC-048/US-OC-049) and can proceed in parallel if file ownership is coordinated.",
         "reference": "openclaw/src/agents/session-tool-result-guard.ts (290 lines — guard implementation); openclaw/src/agents/session-tool-result-state.ts (pending state tracker)"
       },
       "acceptanceCriteria": [
@@ -1131,7 +1131,7 @@
       ],
       "priority": 39,
       "passes": false,
-      "notes": "Write-time repair is preferred over sanitize-time (repair_orphaned_pairs) because: (1) agent will run in long-lived sessions, not just batch mode, (2) on-disk transcripts should always be valid and readable, (3) crash recovery replays clean history without needing a repair pass, (4) streaming-friendly — synthetic results appear immediately. Once guard is in place, repair_orphaned_pairs(synthesize=True) becomes a safety net. Consider setting synthesize=False in sanitize_items() when guard is active."
+      "notes": "Write-time repair is preferred over sanitize-time (repair_orphaned_pairs) because: (1) agent will run in long-lived sessions, not just batch mode, (2) on-disk transcripts should always be valid and readable, (3) crash recovery replays clean history without needing a repair pass, (4) streaming-friendly — synthetic results appear immediately. Once guard is in place, repair_orphaned_pairs(synthesize=True) becomes a safety net. Consider setting synthesize=False in sanitize_items() when guard is active. Keep this story scoped to persistence correctness; embedded-agent adoption should consume the same guard rather than replace it."
     },
     {
       "id": "US-OC-046",
@@ -1142,8 +1142,8 @@
           "submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/canonical.py (TranscriptPolicy, get_transcript_policy, sanitize_items)",
           "submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/agent_loop.py (main predict_step call path and compaction rebuild path)"
         ],
-        "depends": "US-OC-041 must be done first (introduces TranscriptPolicy). US-OC-043 through US-OC-045 may land before or after this story, but any overlapping runtime policy work should be folded into this implementation rather than left ambiguous",
-        "reference": "../openclaw/src/agents/transcript-policy.ts (sanitizeMode and broader policy resolution); ../openclaw/src/agents/pi-embedded-runner/google.ts (sanitizeSessionHistory runtime application of policy-driven passes)"
+        "depends": "US-OC-041 must be done first (introduces TranscriptPolicy). US-OC-043 through US-OC-045 may land before or after this story because they address transcript/replay correctness that remains necessary even if helpers later move into an embedded runtime. Helper runtime unification itself is intentionally out of scope here and belongs to US-OC-048/US-OC-049.",
+        "reference": "../openclaw/src/agents/transcript-policy.ts (sanitizeMode and broader policy resolution); ../openclaw/src/agents/pi-embedded-runner/google.ts (sanitizeSessionHistory runtime application of policy-driven passes); docs/plan/openclaw-embedded-helper-investigation.md (why helper flows split between embedded runtime and utility helper paths)"
       },
       "acceptanceCriteria": [
         "Level 1: Lint passes (uv run ruff check .)",
@@ -1160,33 +1160,84 @@
       ],
       "priority": 39.1,
       "passes": false,
-      "notes": "High-priority follow-up and the canonical owner of the current GPT-5.4/OpenAI gap. This story closes the gap left by US-OC-041 being implemented mostly as a reduced helper layer, and it is the immediate blocker for reliable GPT-5.4/OpenAI thinking support because helper/runtime paths still are not consistently model-aware. Today get_transcript_policy(model) exists but production sanitize dispatch still defaults by target; sanitize_items is not wired on the normal per-turn send path; and helper summarization/memory-flush paths can still forward unsupported reasoning payloads into incompatible transports. The goal here is not to port every OpenClaw flag blindly, but to restore the two architectural invariants: policy is resolved from the live model, and the runtime send path plus helper call sites use a centralized, model-aware sanitize/thinking pipeline. This story also forces an explicit product decision on reasoning retention in session logs, instead of leaving it as an accidental omission. US-OC-020 should be treated as residual cleanup after this story, not as a competing implementation track."
+      "notes": "High-priority bridge story and the canonical owner of the current GPT-5.4/OpenAI runtime gap. This story closes the gap left by US-OC-041 being implemented mostly as a reduced helper layer, and it is the immediate blocker for reliable GPT-5.4/OpenAI thinking support because helper/runtime paths still are not consistently model-aware. Today get_transcript_policy(model) exists but production sanitize dispatch still defaults by target; sanitize_items is not wired on the normal per-turn send path; and helper summarization/memory-flush paths can still forward unsupported reasoning payloads into incompatible transports. The goal here is not to port every OpenClaw flag blindly, but to restore the two architectural invariants needed now: policy is resolved from the live model, and the runtime send path plus helper call sites use a centralized, model-aware sanitize/thinking pipeline. This story also forces an explicit product decision on reasoning retention in session logs, instead of leaving it as an accidental omission. It is not the story for adopting embedded-agent helper execution; that follow-up belongs to US-OC-048/US-OC-049. US-OC-020 should be treated as residual cleanup after this story, not as a competing implementation track."
     },
     {
       "id": "US-OC-047",
-      "title": "Model Resolution Parity: Capability-Aware Registry Beyond Format Metadata",
-      "description": "As the agent harness, I want the lightweight ModelConfig registry extended into a capability-aware model resolution layer that captures provider API, context window, transcript policy hints, and forward-compat defaults, so that model/provider behavior is centralized more like OpenClaw's resolveModel() rather than split across litellm assumptions and ad hoc defaults.",
+      "title": "Model/Runtime Resolution Parity: Capability-Aware Registry Beyond Format Metadata",
+      "description": "As the agent harness, I want the lightweight ModelConfig registry extended into a capability-aware model and runtime resolution layer that captures provider API, transport defaults, context window, transcript policy hints, helper-run capabilities, and forward-compat defaults, so that model/provider behavior is centralized more like OpenClaw's resolveModel() plus runtime wrappers rather than split across litellm assumptions and ad hoc defaults.",
       "context": {
         "existingFiles": [
           "submodules/cua/libs/python/agent/agent/model_config.py (current flat ModelConfig registry)",
           "submodules/cua/libs/python/agent/agent/loops/openai.py (reads format metadata from ModelConfig)",
           "submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/context.py (context window fallback via litellm model info)"
         ],
-      "depends": "US-OC-040 must be done first (provides the initial registry); US-OC-046 is higher priority and should land first so transcript policy can plug into the richer model resolution path",
+        "depends": "US-OC-040 must be done first (provides the initial registry). US-OC-046 must land first, and US-OC-048 plus the US-OC-049 decision should inform this story so the resolver reflects the actual adopted runtime shape rather than a speculative abstraction.",
         "reference": "../openclaw/src/agents/pi-embedded-runner/model.ts (resolveModel); ../openclaw/src/agents/transcript-policy.ts (policy resolution inputs: modelApi, provider, modelId)"
       },
       "acceptanceCriteria": [
         "Level 1: Lint passes (uv run ruff check .)",
-        "Level 1: Replace or extend ModelConfig with a resolver output that includes at least provider, model_api, adapter_target, tool_schema_type, screenshot_output_type, supports_safety_checks, action_format, and context_window when known",
-        "Level 1: A single resolver function accepts the litellm model string and returns the structured model metadata used by loops, context sizing, and transcript policy resolution",
+        "Level 1: Replace or extend ModelConfig with a resolver output that includes at least provider, model_api, adapter_target, tool_schema_type, screenshot_output_type, supports_safety_checks, action_format, context_window, and helper/runtime capability flags when known",
+        "Level 1: A single resolver function accepts the litellm model string and returns the structured model/runtime metadata used by loops, helper execution, context sizing, transport defaults, and transcript policy resolution",
         "Level 1: Transcript policy resolution consumes structured model metadata rather than re-parsing model strings independently",
+        "Level 1: Runtime-specific choices such as transport defaults, reasoning support by call type, and helper execution constraints are derived from resolver data rather than scattered conditionals",
         "Level 1: Unit tests pass — adding a hypothetical new provider/model entry changes loop/tool/sanitize behavior through data only, with zero conditional code edits in loops",
         "Level 2: bash run_magic_tower.sh 50 openai/computer-use-preview and bash run_magic_tower.sh 50 openai/gpt-5.4 both pass with the resolver supplying model-specific behavior",
         "Level 2: CONTEXT_WINDOW_OVERRIDE unset — context window logic prefers resolved model metadata before falling back to raw litellm lookups"
       ],
+      "priority": 43,
+      "passes": false,
+      "notes": "US-OC-040 intentionally kept the registry narrow, which was correct for initial cleanup, but it stopped short of OpenClaw's broader model-resolution role. After adopting or rejecting embedded-helper execution for memory flush/compaction, this story becomes the architectural consolidation step: one resolver object that centralizes capability decisions currently scattered across model_config.py, loop code, context-window fallback logic, and helper transport selection. Do this after US-OC-048/US-OC-049 so the registry matches the chosen runtime architecture."
+    },
+    {
+      "id": "US-OC-048",
+      "title": "Helper Runtime Unification: Route Memory Flush Through OpenClawComputerAgent",
+      "description": "As the agent harness, I want pre-compaction memory flush to run through the same embedded model/runtime stack as the main agent instead of an ad hoc helper completion path, so that thinking, provider routing, transcript policy, and tool-call behavior are unified for memory flush turns.",
+      "context": {
+        "existingFiles": [
+          "submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/memory_flush.py (current helper path with provider branching)",
+          "submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/agent_loop.py (OpenClawComputerAgent runtime behavior)",
+          "submodules/cua/libs/cua-bench/cua_bench/agents/openclaw_agent.py (memory flush orchestration)"
+        ],
+        "depends": "US-OC-046 must be stable first (runtime policy/thinking semantics). US-OC-043 through US-OC-045 can land before or during this work, but they are not blockers. Do not wait for US-OC-047; this story should inform the later resolver shape instead.",
+        "reference": "../openclaw/src/auto-reply/reply/agent-runner-memory.ts (memory flush via runEmbeddedPiAgent); ../openclaw/src/agents/pi-embedded-runner/run/attempt.ts (shared runtime wrappers and transcript policy application); docs/plan/openclaw-embedded-helper-investigation.md (investigation summary and rationale for memory flush unification)"
+      },
+      "acceptanceCriteria": [
+        "Level 1: Lint passes (uv run ruff check .)",
+        "Level 1: Memory flush no longer calls raw litellm helper completions directly for its main model turn; it reuses the embedded agent/runtime path or a constrained equivalent wrapper built on the same policy/model stack",
+        "Level 1: The implementation defines the helper-run profile explicitly: transcript write behavior, tool availability, event emission, and whether the flush run is persisted or ephemeral",
+        "Level 1: Thinking level, provider transport behavior, and transcript sanitize policy for memory flush are inherited from the same runtime machinery used by normal agent turns",
+        "Level 1: Unit tests pass — OpenAI/GPT-5.4 memory flush no longer needs a dedicated helper transport branch to avoid unsupported reasoning parameter errors",
+        "Level 1: Unit tests pass — memory flush tool side effects remain constrained to the intended memory-write behavior and do not pollute unrelated transcript/session state",
+        "Level 2: bash run_magic_tower.sh 50 openai/gpt-5.4 — a pre-compaction memory flush turn completes without helper transport mismatches and transcript replay remains valid",
+        "Level 2: bash run_magic_tower.sh 50 anthropic/claude-sonnet-4-20250514 — memory flush uses the unified runtime path without regressing turn ordering or memory writes"
+      ],
       "priority": 41,
       "passes": false,
-      "notes": "US-OC-040 intentionally kept the registry narrow, which was correct for initial cleanup, but it stopped short of OpenClaw's broader model-resolution role. This story does not require porting OpenClaw's entire provider catalog or auth stack; it focuses on the missing architectural middle ground: one resolver object that centralizes capability decisions currently scattered across model_config.py, loop code, and context-window fallback logic."
+      "notes": "OpenClaw solves memory flush by routing it through runEmbeddedPiAgent rather than by maintaining a separate helper completion transport. This story brings AgentHLE to that architecture, but only for memory flush first because it already behaves like a constrained agentic turn with tool side effects. This is the first embedded-agent architecture story and should land before the broader capability-registry cleanup in US-OC-047."
+    },
+    {
+      "id": "US-OC-049",
+      "title": "Compaction Runtime Strategy: Embedded Turn vs Pure Summarizer",
+      "description": "As the agent harness, I want a deliberate architecture decision for compaction summarization, so that we either route compaction through the shared embedded runtime for capability parity or keep it as a pure summarizer helper with explicit constraints and no accidental feature drift.",
+      "context": {
+        "existingFiles": [
+          "submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/context.py (current summarize_chunk / merge_summaries helper path)",
+          "submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/agent_loop.py (compaction rebuild wiring)"
+        ],
+        "depends": "US-OC-046 must be stable first. US-OC-048 should land first or at minimum produce implementation findings, because memory flush is the first embedded-helper candidate and should inform the compaction decision.",
+        "reference": "../openclaw/src/agents/pi-embedded-runner/compact.ts (compaction through embedded session stack); ../openclaw/src/agents/pi-embedded-runner/extensions.ts (runtime baggage that comes with embedded compaction); docs/plan/openclaw-embedded-helper-investigation.md (investigation summary and the OpenClaw split between embedded compaction and utility vision helpers)"
+      },
+      "acceptanceCriteria": [
+        "Level 1: Produce docs/plan/US-OC-049-compaction-runtime-strategy.md comparing two designs: (a) embedded runtime compaction, (b) pure summarizer helper, including tradeoffs in thinking support, transcript writes, runtime overhead, tool exposure, and failure isolation",
+        "Level 1: The decision document explicitly recommends one design for AgentHLE now and lists the concrete code changes required",
+        "Level 1: If the recommendation is to keep helper summarization, the doc defines the minimum model-aware transport/persistence guarantees required so compaction does not become a second-class runtime path",
+        "Level 1: If the recommendation is to embed compaction, the doc defines how to isolate transcript/state side effects so compaction does not pollute normal session history",
+        "Level 2: Validate the recommendation against at least one 50-step GPT-5.4 run or a resumed-session replay scenario, with findings summarized in the plan doc"
+      ],
+      "priority": 42,
+      "passes": false,
+      "notes": "Unlike memory flush, compaction may or may not benefit from full runtime unification. OpenClaw uses the embedded session stack here, but AgentHLE may reasonably choose a narrower pure-summarizer path if the runtime overhead and side effects are not worth the parity benefit. This story is an explicit architecture decision point, not an implementation free-for-all. Run it after US-OC-048 so the choice is informed by one real embedded-helper implementation rather than speculation."
     }
   ]
 }

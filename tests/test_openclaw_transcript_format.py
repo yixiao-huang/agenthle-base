@@ -77,6 +77,25 @@ class TestAssistantTurnGrouping:
             }
         ]
 
+    def test_reasoning_item_without_summary_keeps_signature(self):
+        output_items = [
+            {
+                "type": "reasoning",
+                "id": "rs_2",
+                "summary": [],
+            }
+        ]
+        assistant_content, tool_results = group_step_output(output_items)
+        assert tool_results == []
+        assert assistant_content == [
+            {
+                "type": "thinking",
+                "thinking": "",
+                "id": "rs_2",
+                "thinkingSignature": '{"id":"rs_2","type":"reasoning"}',
+            }
+        ]
+
 
 class TestToolResultGrouping:
     def test_two_function_call_outputs_batch_into_one_tool_entry(self):

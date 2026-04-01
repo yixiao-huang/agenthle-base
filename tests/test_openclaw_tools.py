@@ -9,12 +9,14 @@ Covers:
 
 import asyncio
 import json
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from cua_bench.agents.openclaw.tools import (
     ToolLoggingCallback,
     _extract_result_summary,
+    build_tools,
     get_tool_summaries,
 )
 
@@ -90,6 +92,54 @@ class TestGetToolSummaries:
         result = get_tool_summaries(tools)
         assert len(result) == 1
         assert "memory_get" in result
+
+
+class TestBuildTools:
+    def test_vision_thinking_defaults_to_none(self):
+        session = MagicMock()
+        session.interface = MagicMock()
+        session._computer = object()
+
+        with patch("agent.tools.AnalyzeImageTool") as mock_analyze_image_tool, patch(
+            "agent.tools.MilestoneTool"
+        ):
+            store = MagicMock()
+            build_tools(
+                session,
+                store,
+                summary_model="anthropic/claude-sonnet-4-6-20260101",
+            )
+
+        mock_analyze_image_tool.assert_called_once_with(
+            session.interface,
+            model="anthropic/claude-sonnet-4-6-20260101",
+            thinking_params=None,
+        )
+
+    def test_passes_vision_thinking_params_to_analyze_image(self):
+        session = MagicMock()
+        session.interface = MagicMock()
+        session._computer = object()
+
+        with patch("agent.tools.AnalyzeImageTool") as mock_analyze_image_tool, patch(
+            "agent.tools.MilestoneTool"
+        ) as mock_milestone_tool:
+            store = MagicMock()
+            build_tools(
+                session,
+                store,
+                summary_model="anthropic/claude-sonnet-4-6-20260101",
+                vision_thinking_params={
+                    "thinking": {"type": "enabled", "budget_tokens": 5000}
+                },
+            )
+
+        mock_milestone_tool.assert_called_once_with(session.interface)
+        mock_analyze_image_tool.assert_called_once_with(
+            session.interface,
+            model="anthropic/claude-sonnet-4-6-20260101",
+            thinking_params={"thinking": {"type": "enabled", "budget_tokens": 5000}},
+        )
 
 
 # ---------------------------------------------------------------------------

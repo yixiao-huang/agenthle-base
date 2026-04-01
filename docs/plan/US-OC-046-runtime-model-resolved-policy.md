@@ -150,3 +150,43 @@ This story intentionally stops short of `US-OC-047`'s richer model resolver. If 
 
 Implementation note after VM validation:
 - The first draft of this story applied canonical sanitize too aggressively to the live OpenAI Responses stream. That was corrected after VM evidence showed repeated screenshot loops. The implemented design keeps the model-aware policy central, but narrows canonical sanitize to replay/rebuild/transcript-derived paths and preserves already-native live Responses items.
+
+## Current Status
+
+This story is code-complete, but final closure is still blocked by one external Level 2 validation issue.
+
+Already landed in the current checkpoint:
+- `TranscriptPolicy` now carries `sanitize_mode`
+- `sanitize_items()` can resolve from `model=...`
+- the main loop has a model-aware runtime sanitize boundary
+- native live OpenAI Responses item streams are preserved instead of being blindly re-canonicalized
+- helper thinking params are now transport-aware
+- memory flush has an OpenAI Responses helper path instead of always using chat-completions style helpers
+- focused Level 1 tests cover policy resolution, helper thinking behavior, transcript formatting, solver wiring, and analyze-image thinking-param forwarding
+- OpenAI/GPT-5.4 Level 2 validation reached live turns, memory flush, and compaction successfully without the old helper `reasoning` transport failure
+- session transcripts now retain normalized `thinking` blocks with `thinkingSignature` on the OpenAI path
+
+## Remaining Work
+
+### 1. Clear the Anthropic Level 2 validation blocker
+
+The remaining blocker is no longer a known `046` runtime/parity issue. The required Anthropic VM run currently fails before meaningful agent execution due to an environment/dependency problem in LiteLLM/tiktoken:
+
+- `ValueError: Duplicate encoding name gpt2 in tiktoken plugin tiktoken_ext.openai_public 3`
+
+This occurs on the Anthropic path before the run can exercise the strict-provider transcript-policy behavior that `046` is intended to validate.
+
+### 2. Re-run the Anthropic VM gate after the environment fix
+
+Once the LiteLLM/tiktoken environment issue is resolved, re-run:
+
+- `bash run_magic_tower.sh 50 anthropic/claude-sonnet-4-20250514`
+
+The verification target is unchanged:
+- transcript send path uses the same runtime sanitize pipeline
+- no turn-ordering regression on a stricter provider
+- no helper transport mismatch caused by model-resolved policy
+
+### 3. Keep adjacent replay hardening in their own stories unless the re-run disproves that split
+
+`US-OC-043` to `US-OC-045` remain separate stories. If the Anthropic re-run shows that `046` still depends on tool-call ID sanitization, OpenAI dual-ID downgrade behavior, or the write-time tool-result guard, that ownership split should be revisited with concrete evidence rather than assumptions.

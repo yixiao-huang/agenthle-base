@@ -1059,3 +1059,20 @@
 - **Learnings for future iterations:**
   - Runtime sanitize should not blindly re-canonicalize already-native OpenAI Responses item streams; doing so can break computer-call continuity and trigger repeated screenshots.
   - For OpenAI helper calls, there are two viable paths: use Responses when the helper really needs OpenAI reasoning semantics, or suppress `reasoning` entirely on chat-completions-style helpers.
+---
+
+## 2026-04-01 - US-OC-046
+- Re-verified the focused runtime-policy slice after rebuilding editable CUA packages with `uv sync --reinstall`.
+- Verification:
+  - `UV_CACHE_DIR=/tmp/uv-cache uv run ruff check submodules/cua/libs/cua-bench/cua_bench/agents/openclaw tests/test_thinking.py tests/test_canonical_format.py tests/test_openclaw_memory_flush.py tests/test_openclaw_compaction.py tests/test_openclaw_transcript_format.py tests/test_openclaw_replay.py tests/test_solver_args.py tests/test_analyze_image_tool.py`
+  - `UV_CACHE_DIR=/tmp/uv-cache uv run pytest tests/test_thinking.py tests/test_canonical_format.py tests/test_openclaw_memory_flush.py tests/test_openclaw_compaction.py tests/test_openclaw_transcript_format.py tests/test_openclaw_replay.py tests/test_solver_args.py tests/test_analyze_image_tool.py`
+  - result: `308 passed`
+- Level 2 status:
+  - OpenAI/GPT-5.4 validation is green for the `046` runtime path: memory flush and compaction ran without the old helper `reasoning` transport failure, and session logs retained normalized `thinking` blocks with `thinkingSignature`.
+  - Anthropic validation is still blocked by an environment/dependency failure before meaningful agent turns: `ValueError: Duplicate encoding name gpt2 in tiktoken plugin tiktoken_ext.openai_public 3`.
+- Files changed:
+  - docs/plan/US-OC-046-runtime-model-resolved-policy.md
+  - progress.txt
+- **Learnings for future iterations:**
+  - `uv sync --reinstall` remains the right first step when editable `cua_bench` and `agent` imports disappear after submodule/package churn.
+  - A blocked Level 2 VM run should not be used to mark a story complete when the failure happens outside the story's codepath; record it explicitly and keep the story open or code-complete-pending-validation.

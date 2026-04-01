@@ -314,7 +314,7 @@ class TestCanonicalToResponsesApi:
         assert "computer action" in items[0]["content"][0]["text"]
         assert "computer result" in items[1]["content"][0]["text"]
 
-    def test_thinking_blocks_skipped(self):
+    def test_unsigned_thinking_blocks_skipped(self):
         msgs = [CanonicalMessage(
             role="assistant",
             content=[
@@ -327,6 +327,28 @@ class TestCanonicalToResponsesApi:
         assert len(items) == 1
         assert items[0]["type"] == "message"
         assert items[0]["content"][0]["text"] == "Here's my answer"
+
+    def test_openai_signed_thinking_block_roundtrips_to_reasoning_item(self):
+        msgs = [CanonicalMessage(
+            role="assistant",
+            content=[
+                ThinkingBlock(
+                    type="thinking",
+                    thinking="Let me think...",
+                    thinkingSignature='{"id":"rs_123","type":"reasoning"}',
+                ),
+                TextBlock(type="text", text="Here's my answer"),
+            ],
+        )]
+        items = canonical_to_responses_api(msgs)
+
+        assert items[0] == {
+            "type": "reasoning",
+            "id": "rs_123",
+            "summary": [{"type": "summary_text", "text": "Let me think..."}],
+        }
+        assert items[1]["type"] == "message"
+        assert items[1]["content"][0]["text"] == "Here's my answer"
 
     def test_tool_adjacency(self):
         """Tool call should be immediately followed by its output."""
