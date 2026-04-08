@@ -77,7 +77,7 @@ def _run_agent(logging_dir, mem_base, task_description="Navigate to floor 3 and 
         from cua_bench.agents.openclaw_agent import OpenClawAgent
 
         agent = OpenClawAgent(max_steps=5)
-        asyncio.get_event_loop().run_until_complete(
+        asyncio.run(
             agent.perform_task(
                 task_description=task_description,
                 session=session,
@@ -115,10 +115,12 @@ class TestSystemPromptIntegration:
         assert "### TASK_MEMORY.md" not in prompt
         # Memory Recall present (memory_search + memory_get are registered)
         assert "## Memory Recall" in prompt
-        # Memory tool names present (mock computer/milestone don't pass isinstance(BaseTool))
+        # Computer + memory tool names present in the rendered prompt summary
+        assert "**computer**" in prompt
         assert "**memory_search**" in prompt
         assert "**memory_get**" in prompt
         assert "**memory_write**" in prompt
+        assert "Observe the current desktop via screenshots" in prompt
 
     def test_system_prompt_with_task_memory(self, setup):
         """Second run — TASK_MEMORY.md exists with prior knowledge."""

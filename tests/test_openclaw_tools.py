@@ -1,8 +1,8 @@
-"""Tests for OpenClaw tool registry, summaries, and logging callback (US-OC-007).
+"""Tests for OpenClaw tool registry, summaries, and logging callback.
 
 Covers:
   - build_tools() returns 5 tools with correct types
-  - get_tool_summaries() filters out Computer, includes BaseTool instances
+  - get_tool_summaries() includes Computer and BaseTool instances
   - ToolLoggingCallback logs start/end with timing (function + computer calls)
   - Edge cases: truncation, missing call_id
 """
@@ -14,6 +14,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from cua_bench.agents.openclaw.tools import (
+    COMPUTER_TOOL_SUMMARY,
     ToolLoggingCallback,
     _extract_result_summary,
     build_tools,
@@ -40,9 +41,16 @@ class FakeBaseTool:
 
 
 class FakeComputer:
-    """Duck-typed computer object (not a BaseTool subclass)."""
+    """Computer-like object with the idealized explicit name."""
 
-    pass
+    name = "computer"
+    description = "ignored dynamic description"
+
+
+class RealishComputer:
+    """Mimics the real CUA Computer shape: no name attribute, class name only."""
+
+    description = "ignored dynamic description"
 
 
 # ---------------------------------------------------------------------------
@@ -51,12 +59,18 @@ class FakeComputer:
 
 
 class TestGetToolSummaries:
-    def test_filters_out_non_basetool(self):
-        """Computer objects should be excluded from summaries."""
+    def test_includes_computer_with_stable_summary(self):
+        """Computer should appear even though it is not a BaseTool subclass."""
         computer = FakeComputer()
         tools = [computer]
         result = get_tool_summaries(tools)
-        assert result == {}
+        assert result == {"computer": COMPUTER_TOOL_SUMMARY}
+
+    def test_includes_realish_computer_without_name_attr(self):
+        """The live CUA Computer object is detected by class name, not tool.name."""
+        computer = RealishComputer()
+        result = get_tool_summaries([computer])
+        assert result == {"computer": COMPUTER_TOOL_SUMMARY}
 
     def test_includes_basetool_instances(self):
         """All BaseTool subclasses should appear in summaries."""
@@ -83,14 +97,15 @@ class TestGetToolSummaries:
         assert get_tool_summaries([]) == {}
 
     def test_mixed_tools_correct_count(self):
-        """Mixed list of BaseTool and non-BaseTool should only include BaseTools."""
+        """Mixed list should include Computer plus BaseTool summaries only."""
         from cua_bench.agents.openclaw.memory import MemoryGetTool, MemoryStore
 
         store = MemoryStore(task_id="test", base_dir="/tmp/test_tools_mixed")
         computer = FakeComputer()
         tools = [computer, MemoryGetTool(store)]
         result = get_tool_summaries(tools)
-        assert len(result) == 1
+        assert len(result) == 2
+        assert "computer" in result
         assert "memory_get" in result
 
 

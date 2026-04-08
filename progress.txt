@@ -1060,19 +1060,23 @@
   - Runtime sanitize should not blindly re-canonicalize already-native OpenAI Responses item streams; doing so can break computer-call continuity and trigger repeated screenshots.
   - For OpenAI helper calls, there are two viable paths: use Responses when the helper really needs OpenAI reasoning semantics, or suppress `reasoning` entirely on chat-completions-style helpers.
 ---
+## 2026-04-08 - US-OC-046 completion hygiene
+- Marked `US-OC-046` complete in the PRD and updated its notes to reflect shipped runtime behavior instead of the original blocker framing.
+- Recorded Level 2 verification as completed for both required runtime paths:
+  - `bash run_magic_tower.sh 50 openai/gpt-5.4`
+  - `bash run_magic_tower.sh 50 anthropic/claude-sonnet-4-20250514`
+- Confirmed focused Level 1 verification remains green locally:
+  - `UV_CACHE_DIR=/tmp/uv-cache uv run pytest tests/test_thinking.py tests/test_canonical_format.py tests/test_openclaw_memory_flush.py tests/test_openclaw_compaction.py tests/test_openclaw_transcript_format.py tests/test_solver_args.py tests/test_analyze_image_tool.py`
+- Cleared `.current-story` after story completion.
 
-## 2026-04-01 - US-OC-046
-- Re-verified the focused runtime-policy slice after rebuilding editable CUA packages with `uv sync --reinstall`.
+## 2026-04-08 - US-OC-048
+- Added a stable prompt-summary entry for the primary `computer` tool in `get_tool_summaries()` even though it is not a `BaseTool` subclass.
+- Kept the fix narrow: only the `computer` tool receives special handling; other non-BaseTool objects are still excluded from prompt summaries.
+- Updated prompt integration coverage so the captured system prompt now explicitly includes `computer` plus a desktop-observation / mouse-keyboard description.
+- Updated focused tool-summary tests to assert mixed tool lists retain existing memory tool summaries while adding the Computer summary.
+- Fixed `tests/test_openclaw_agent_prompt.py` to use `asyncio.run(...)` instead of `asyncio.get_event_loop().run_until_complete(...)`, which was failing under Python 3.13 when no default loop existed.
 - Verification:
-  - `UV_CACHE_DIR=/tmp/uv-cache uv run ruff check submodules/cua/libs/cua-bench/cua_bench/agents/openclaw tests/test_thinking.py tests/test_canonical_format.py tests/test_openclaw_memory_flush.py tests/test_openclaw_compaction.py tests/test_openclaw_transcript_format.py tests/test_openclaw_replay.py tests/test_solver_args.py tests/test_analyze_image_tool.py`
-  - `UV_CACHE_DIR=/tmp/uv-cache uv run pytest tests/test_thinking.py tests/test_canonical_format.py tests/test_openclaw_memory_flush.py tests/test_openclaw_compaction.py tests/test_openclaw_transcript_format.py tests/test_openclaw_replay.py tests/test_solver_args.py tests/test_analyze_image_tool.py`
-  - result: `308 passed`
-- Level 2 status:
-  - OpenAI/GPT-5.4 validation is green for the `046` runtime path: memory flush and compaction ran without the old helper `reasoning` transport failure, and session logs retained normalized `thinking` blocks with `thinkingSignature`.
-  - Anthropic validation is still blocked by an environment/dependency failure before meaningful agent turns: `ValueError: Duplicate encoding name gpt2 in tiktoken plugin tiktoken_ext.openai_public 3`.
-- Files changed:
-  - docs/plan/US-OC-046-runtime-model-resolved-policy.md
-  - progress.txt
+  - `UV_CACHE_DIR=/tmp/uv-cache uv run pytest tests/test_openclaw_tools.py tests/test_prompt_builder.py tests/test_openclaw_agent_prompt.py`
 - **Learnings for future iterations:**
-  - `uv sync --reinstall` remains the right first step when editable `cua_bench` and `agent` imports disappear after submodule/package churn.
-  - A blocked Level 2 VM run should not be used to mark a story complete when the failure happens outside the story's codepath; record it explicitly and keep the story open or code-complete-pending-validation.
+  - Prompt parity can diverge from actual runtime capability when prompt summaries are derived from a narrower type filter than the real tool list.
+  - For this codebase, a targeted special case for the primary Computer tool is safer than broadening prompt summaries to every duck-typed object with `name`/`description`.
