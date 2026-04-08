@@ -768,8 +768,8 @@
     },
     {
       "id": "US-OC-032",
-      "title": "Cross-Model Message Format Compatibility: Investigation + Test Suite",
-      "description": "As the benchmark operator, I want to verify that the current message format (transcript replay, compaction summaries, memory flush) works correctly across model families (Anthropic, OpenAI, Gemini, Kimi K2.5) and in cross-model configurations (e.g., Anthropic for computer-use + OpenAI for summarization), and build a test suite to prevent format regressions, so that the harness is not silently locked to one provider.",
+      "title": "Cross-Model Replay and Message Format Compatibility: Investigation + Test Suite",
+      "description": "As the benchmark operator, I want to verify that transcript replay, compaction summaries, memory flush artifacts, and post-compaction message rebuilding work correctly across model families (Anthropic, OpenAI, Gemini, Kimi K2.5) and in cross-model configurations (e.g., Anthropic for computer-use + OpenAI for summarization), and build a test suite to prevent format regressions, so that the harness is not silently locked to one provider or replay path.",
       "context": {
         "existingFiles": [
           "submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/session.py (convert_to_responses_api_format, build_replay_messages, sanitize_history)",
@@ -782,9 +782,10 @@
       },
       "acceptanceCriteria": [
         "Level 1: Lint passes (uv run ruff check .)",
-        "Level 1: Investigation report docs/cross-model-compatibility.md covering: (a) Anthropic loop format expectations, (b) OpenAI loop format expectations, (c) Gemini loop format expectations (if CUA supports it), (d) Kimi/Moonshot format expectations, (e) format mismatches found, (f) cross-model combinations tested",
+        "Level 1: Investigation report docs/cross-model-compatibility.md covering: (a) Anthropic loop format expectations, (b) OpenAI loop format expectations, (c) Gemini loop format expectations (if CUA supports it), (d) Kimi/Moonshot format expectations, (e) replay-specific mismatches found, (f) cross-model combinations tested",
         "Level 1: Unit tests — replay messages round-trip correctly through each supported loop's format converter (mock the LLM call, test the message pipeline)",
         "Level 1: Unit tests — compaction summary output from model A replays correctly into model B's loop (test all pairwise combinations: Anthropic↔OpenAI, Anthropic↔Gemini, etc.)",
+        "Level 1: Unit tests — malformed or legacy transcript shapes (for example assistant content as string, stale usage after compaction, replayed computer/tool outputs) are repaired or normalized consistently before replay across supported providers",
         "Level 2: run_magic_tower.sh 15 with openai/computer-use-preview — no API format errors from replay messages",
         "Level 2: run_magic_tower.sh 15 with anthropic/claude-sonnet-4-20250514 --summary-model openai/gpt-4o — compaction completes without format errors",
         "Level 2: run_magic_tower.sh 15 with Gemini model (if computer-use supported) — document results even if it fails",
@@ -792,7 +793,7 @@
       ],
       "priority": 32,
       "passes": false,
-      "notes": "Models to cover: Anthropic (claude-sonnet-4-20250514, claude-opus-4-6), OpenAI (computer-use-preview, gpt-4o), Google Gemini (gemini-2.5-pro or similar with computer-use if available), Kimi K2.5. For models without computer-use support, test only the summarization/flush path (as --summary-model). Cross-model test matrix: main-model × summary-model for all viable combinations. If a model family is not supported by CUA's loop system, document the gap and what would be needed."
+      "notes": "Models to cover: Anthropic (claude-sonnet-4-20250514, claude-opus-4-6), OpenAI (computer-use-preview, gpt-4o, gpt-5.4), Google Gemini (gemini-2.5-pro or similar with computer-use if available), Kimi K2.5. For models without computer-use support, test only the summarization/flush path (as --summary-model). Cross-model test matrix: main-model × summary-model for all viable combinations. This story explicitly owns replay-path parity gaps found in the Pi Agent audit beyond transport-only formatting: malformed assistant payload repair, stale usage handling across compaction boundaries, provider-aware tool/computer call replay, and keeping replay/compaction rebuild behavior aligned with the main send path. If a model family is not supported by CUA's loop system, document the gap and what would be needed."
     },
     {
       "id": "US-OC-033",
@@ -1074,7 +1075,7 @@
         "existingFiles": [
           "submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/canonical.py (TranscriptPolicy to extend with sanitize_tool_call_ids, tool_call_id_mode flags)"
         ],
-        "depends": "US-OC-041 must be done first (provides TranscriptPolicy infrastructure); US-OC-032 (cross-model investigation identifies which providers need it). This story is logically independent of helper runtime unification (US-OC-048/US-OC-049) and can proceed in parallel if file ownership is coordinated.",
+        "depends": "US-OC-041 must be done first (provides TranscriptPolicy infrastructure); US-OC-032 (cross-model investigation identifies which providers need it)",
         "reference": "openclaw/src/agents/tool-call-id.ts (310 lines — full implementation with strict/strict9 modes, occurrence-aware ID resolver, collision handling)"
       },
       "acceptanceCriteria": [
@@ -1086,7 +1087,7 @@
       ],
       "priority": 37,
       "passes": false,
-      "notes": "Port of OpenClaw's sanitizeToolCallIdsForCloudCodeAssist(). Key complexity: sanitization can create ID collisions (e.g., truncating 'call_abc-123' and 'call_abc_456' both to 'callabc'), so the resolver must track used IDs and generate unique alternatives. Tool results must consume rewritten IDs in the same order they were generated for assistant blocks. Keep this story scoped to transcript/replay correctness; do not block it on embedded-agent adoption."
+      "notes": "Port of OpenClaw's sanitizeToolCallIdsForCloudCodeAssist(). Key complexity: sanitization can create ID collisions (e.g., truncating 'call_abc-123' and 'call_abc_456' both to 'callabc'), so the resolver must track used IDs and generate unique alternatives. Tool results must consume rewritten IDs in the same order they were generated for assistant blocks."
     },
     {
       "id": "US-OC-044",
@@ -1096,7 +1097,7 @@
         "existingFiles": [
           "submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/canonical.py (TranscriptPolicy + downgrade_openai_reasoning pass to extend)"
         ],
-        "depends": "US-OC-041 must be done first (provides TranscriptPolicy infrastructure and downgrade_openai_reasoning pass). This story is logically independent of helper runtime unification (US-OC-048/US-OC-049) and can proceed in parallel if file ownership is coordinated.",
+        "depends": "US-OC-041 must be done first (provides TranscriptPolicy infrastructure and downgrade_openai_reasoning pass)",
         "reference": "openclaw/src/agents/pi-embedded-helpers/openai.ts:67-200 (splitOpenAIFunctionCallPairing, downgradeOpenAIFunctionCallReasoningPairs, downgradeOpenAIReasoningBlocks)"
       },
       "acceptanceCriteria": [
@@ -1108,7 +1109,7 @@
       ],
       "priority": 38,
       "passes": false,
-      "notes": "The dual-ID format (call_XXX|fc_YYY) exists because OpenAI Responses API enforces bidirectional reasoning<->call coupling at the server level. The fc_* suffix is the Responses API item ID that pairs with a reasoning item. When reasoning is absent (cross-session replay), the suffix must be stripped so the API doesn't look for the paired reasoning. Tool results referencing the original dual-ID must also be rewritten to use the stripped call-only ID. Keep this story scoped to durable transcript/replay compatibility rather than helper transport architecture."
+      "notes": "The dual-ID format (call_XXX|fc_YYY) exists because OpenAI Responses API enforces bidirectional reasoning<->call coupling at the server level. The fc_* suffix is the Responses API item ID that pairs with a reasoning item. When reasoning is absent (cross-session replay), the suffix must be stripped so the API doesn't look for the paired reasoning. Tool results referencing the original dual-ID must also be rewritten to use the stripped call-only ID."
     },
     {
       "id": "US-OC-045",
@@ -1119,7 +1120,7 @@
           "submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/session.py (SessionManager.append_message to wrap)",
           "submodules/cua/libs/cua-bench/cua_bench/agents/openclaw_agent.py (wire guard into agent lifecycle)"
         ],
-        "depends": "US-OC-041 must be done first (provides TranscriptPolicy infrastructure). This story is logically independent of helper runtime unification (US-OC-048/US-OC-049) and can proceed in parallel if file ownership is coordinated.",
+        "depends": "US-OC-041 must be done first (provides TranscriptPolicy infrastructure)",
         "reference": "openclaw/src/agents/session-tool-result-guard.ts (290 lines — guard implementation); openclaw/src/agents/session-tool-result-state.ts (pending state tracker)"
       },
       "acceptanceCriteria": [
@@ -1131,7 +1132,7 @@
       ],
       "priority": 39,
       "passes": false,
-      "notes": "Write-time repair is preferred over sanitize-time (repair_orphaned_pairs) because: (1) agent will run in long-lived sessions, not just batch mode, (2) on-disk transcripts should always be valid and readable, (3) crash recovery replays clean history without needing a repair pass, (4) streaming-friendly — synthetic results appear immediately. Once guard is in place, repair_orphaned_pairs(synthesize=True) becomes a safety net. Consider setting synthesize=False in sanitize_items() when guard is active. Keep this story scoped to persistence correctness; embedded-agent adoption should consume the same guard rather than replace it."
+      "notes": "Write-time repair is preferred over sanitize-time (repair_orphaned_pairs) because: (1) agent will run in long-lived sessions, not just batch mode, (2) on-disk transcripts should always be valid and readable, (3) crash recovery replays clean history without needing a repair pass, (4) streaming-friendly — synthetic results appear immediately. Once guard is in place, repair_orphaned_pairs(synthesize=True) becomes a safety net. Consider setting synthesize=False in sanitize_items() when guard is active."
     },
     {
       "id": "US-OC-046",
@@ -1142,8 +1143,8 @@
           "submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/canonical.py (TranscriptPolicy, get_transcript_policy, sanitize_items)",
           "submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/agent_loop.py (main predict_step call path and compaction rebuild path)"
         ],
-        "depends": "US-OC-041 must be done first (introduces TranscriptPolicy). US-OC-043 through US-OC-045 may land before or after this story because they address transcript/replay correctness that remains necessary even if helpers later move into an embedded runtime. Helper runtime unification itself is intentionally out of scope here and belongs to US-OC-048/US-OC-049.",
-        "reference": "../openclaw/src/agents/transcript-policy.ts (sanitizeMode and broader policy resolution); ../openclaw/src/agents/pi-embedded-runner/google.ts (sanitizeSessionHistory runtime application of policy-driven passes); docs/plan/openclaw-embedded-helper-investigation.md (why helper flows split between embedded runtime and utility helper paths)"
+        "depends": "US-OC-041 must be done first (introduces TranscriptPolicy). US-OC-043 through US-OC-045 may land before or after this story, but any overlapping runtime policy work should be folded into this implementation rather than left ambiguous",
+        "reference": "../openclaw/src/agents/transcript-policy.ts (sanitizeMode and broader policy resolution); ../openclaw/src/agents/pi-embedded-runner/google.ts (sanitizeSessionHistory runtime application of policy-driven passes)"
       },
       "acceptanceCriteria": [
         "Level 1: Lint passes (uv run ruff check .)",
@@ -1159,85 +1160,88 @@
         "Level 2: bash run_magic_tower.sh 50 anthropic/claude-sonnet-4-20250514 — transcript send path uses the same sanitize pipeline and does not regress turn ordering"
       ],
       "priority": 39.1,
-      "passes": false,
-      "notes": "High-priority bridge story and the canonical owner of the current GPT-5.4/OpenAI runtime gap. This story closes the gap left by US-OC-041 being implemented mostly as a reduced helper layer, and it is the immediate blocker for reliable GPT-5.4/OpenAI thinking support because helper/runtime paths still are not consistently model-aware. Today get_transcript_policy(model) exists but production sanitize dispatch still defaults by target; sanitize_items is not wired on the normal per-turn send path; and helper summarization/memory-flush paths can still forward unsupported reasoning payloads into incompatible transports. The goal here is not to port every OpenClaw flag blindly, but to restore the two architectural invariants needed now: policy is resolved from the live model, and the runtime send path plus helper call sites use a centralized, model-aware sanitize/thinking pipeline. This story also forces an explicit product decision on reasoning retention in session logs, instead of leaving it as an accidental omission. It is not the story for adopting embedded-agent helper execution; that follow-up belongs to US-OC-048/US-OC-049. US-OC-020 should be treated as residual cleanup after this story, not as a competing implementation track."
+      "passes": true,
+      "notes": "Completed as the canonical owner of the runtime transcript/thinking parity work. TranscriptPolicy now carries OpenClaw-style sanitize intent (`sanitize_mode`) and resolves from the live model via `get_transcript_policy(model)`. The main OpenClaw run path applies model-aware sanitize handling on transcript-derived history while preserving already-native OpenAI Responses item streams, and compaction rebuild uses the same model-resolved sanitize pipeline. Thinking handling is split by transport/call site: the main runtime uses Responses-style `reasoning` where supported, helper paths use transport-aware mapping (`aresponses` for OpenAI memory flush, chat/helper-safe params for compaction and vision tooling). Session reasoning retention is now explicit: canonical/session logs keep normalized `thinking` blocks plus optional `thinkingSignature`, and replay/history surfaces sanitize per provider policy. US-OC-020 remains residual cleanup only."
     },
     {
       "id": "US-OC-047",
-      "title": "Model/Runtime Resolution Parity: Capability-Aware Registry Beyond Format Metadata",
-      "description": "As the agent harness, I want the lightweight ModelConfig registry extended into a capability-aware model and runtime resolution layer that captures provider API, transport defaults, context window, transcript policy hints, helper-run capabilities, and forward-compat defaults, so that model/provider behavior is centralized more like OpenClaw's resolveModel() plus runtime wrappers rather than split across litellm assumptions and ad hoc defaults.",
+      "title": "Model Resolution and Runtime Control Plane Parity: Capability-Aware Resolver Beyond Format Metadata",
+      "description": "As the agent harness, I want the lightweight ModelConfig registry extended into a capability-aware model resolution layer and runtime-control-plane input object that capture provider API, context window, transcript policy hints, helper transport behavior, transcript API labels, and forward-compat defaults, so that model/provider behavior is centralized more like OpenClaw's resolveModel() rather than split across litellm assumptions and ad hoc defaults.",
       "context": {
         "existingFiles": [
           "submodules/cua/libs/python/agent/agent/model_config.py (current flat ModelConfig registry)",
           "submodules/cua/libs/python/agent/agent/loops/openai.py (reads format metadata from ModelConfig)",
           "submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/context.py (context window fallback via litellm model info)"
         ],
-        "depends": "US-OC-040 must be done first (provides the initial registry). US-OC-046 must land first, and US-OC-048 plus the US-OC-049 decision should inform this story so the resolver reflects the actual adopted runtime shape rather than a speculative abstraction.",
+      "depends": "US-OC-040 must be done first (provides the initial registry); US-OC-046 is higher priority and should land first so transcript policy can plug into the richer model resolution path",
         "reference": "../openclaw/src/agents/pi-embedded-runner/model.ts (resolveModel); ../openclaw/src/agents/transcript-policy.ts (policy resolution inputs: modelApi, provider, modelId)"
       },
       "acceptanceCriteria": [
         "Level 1: Lint passes (uv run ruff check .)",
-        "Level 1: Replace or extend ModelConfig with a resolver output that includes at least provider, model_api, adapter_target, tool_schema_type, screenshot_output_type, supports_safety_checks, action_format, context_window, and helper/runtime capability flags when known",
-        "Level 1: A single resolver function accepts the litellm model string and returns the structured model/runtime metadata used by loops, helper execution, context sizing, transport defaults, and transcript policy resolution",
+        "Level 1: Replace or extend ModelConfig with a resolver output that includes at least provider, model_api, adapter_target, tool_schema_type, screenshot_output_type, supports_safety_checks, action_format, transcript_api_label, helper_transport_defaults, and context_window when known",
+        "Level 1: A single resolver function accepts the litellm model string and returns the structured model metadata used by loops, context sizing, transcript policy resolution, and transcript logging",
         "Level 1: Transcript policy resolution consumes structured model metadata rather than re-parsing model strings independently",
-        "Level 1: Runtime-specific choices such as transport defaults, reasoning support by call type, and helper execution constraints are derived from resolver data rather than scattered conditionals",
+        "Level 1: The main agent runtime constructs one per-run resolved model/runtime object and uses it instead of re-deriving provider behavior independently in prompt, context, transcript, and helper-call code paths",
+        "Level 1: Memory flush and compaction summarization call through a shared resolved runtime/helper adapter instead of choosing provider transport behavior locally inside memory_flush.py or context.py",
+        "Level 1: Helper transport selection, transcript api labeling, and context-window preference do not rely on ad hoc raw model-string parsing inside downstream helper modules once the runtime object exists",
+        "Level 1: The per-run resolved runtime object is the single source of truth for helper transport mode, transcript api label, context window preference, and transcript policy inputs across main-turn, memory-flush, and compaction call paths",
+        "Level 1: Unit tests pass — helper modules no longer need provider-specific conditionals to choose transport behavior once given resolved runtime metadata, and adding a hypothetical new provider/model entry changes loop/helper/sanitize behavior through data only",
         "Level 1: Unit tests pass — adding a hypothetical new provider/model entry changes loop/tool/sanitize behavior through data only, with zero conditional code edits in loops",
         "Level 2: bash run_magic_tower.sh 50 openai/computer-use-preview and bash run_magic_tower.sh 50 openai/gpt-5.4 both pass with the resolver supplying model-specific behavior",
-        "Level 2: CONTEXT_WINDOW_OVERRIDE unset — context window logic prefers resolved model metadata before falling back to raw litellm lookups"
-      ],
-      "priority": 43,
-      "passes": false,
-      "notes": "US-OC-040 intentionally kept the registry narrow, which was correct for initial cleanup, but it stopped short of OpenClaw's broader model-resolution role. After adopting or rejecting embedded-helper execution for memory flush/compaction, this story becomes the architectural consolidation step: one resolver object that centralizes capability decisions currently scattered across model_config.py, loop code, context-window fallback logic, and helper transport selection. Do this after US-OC-048/US-OC-049 so the registry matches the chosen runtime architecture."
-    },
-    {
-      "id": "US-OC-048",
-      "title": "Helper Runtime Unification: Route Memory Flush Through OpenClawComputerAgent",
-      "description": "As the agent harness, I want pre-compaction memory flush to run through the same embedded model/runtime stack as the main agent instead of an ad hoc helper completion path, so that thinking, provider routing, transcript policy, and tool-call behavior are unified for memory flush turns.",
-      "context": {
-        "existingFiles": [
-          "submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/memory_flush.py (current helper path with provider branching)",
-          "submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/agent_loop.py (OpenClawComputerAgent runtime behavior)",
-          "submodules/cua/libs/cua-bench/cua_bench/agents/openclaw_agent.py (memory flush orchestration)"
-        ],
-        "depends": "US-OC-046 must be stable first (runtime policy/thinking semantics). US-OC-043 through US-OC-045 can land before or during this work, but they are not blockers. Do not wait for US-OC-047; this story should inform the later resolver shape instead.",
-        "reference": "../openclaw/src/auto-reply/reply/agent-runner-memory.ts (memory flush via runEmbeddedPiAgent); ../openclaw/src/agents/pi-embedded-runner/run/attempt.ts (shared runtime wrappers and transcript policy application); docs/plan/openclaw-embedded-helper-investigation.md (investigation summary and rationale for memory flush unification)"
-      },
-      "acceptanceCriteria": [
-        "Level 1: Lint passes (uv run ruff check .)",
-        "Level 1: Memory flush no longer calls raw litellm helper completions directly for its main model turn; it reuses the embedded agent/runtime path or a constrained equivalent wrapper built on the same policy/model stack",
-        "Level 1: The implementation defines the helper-run profile explicitly: transcript write behavior, tool availability, event emission, and whether the flush run is persisted or ephemeral",
-        "Level 1: Thinking level, provider transport behavior, and transcript sanitize policy for memory flush are inherited from the same runtime machinery used by normal agent turns",
-        "Level 1: Unit tests pass — OpenAI/GPT-5.4 memory flush no longer needs a dedicated helper transport branch to avoid unsupported reasoning parameter errors",
-        "Level 1: Unit tests pass — memory flush tool side effects remain constrained to the intended memory-write behavior and do not pollute unrelated transcript/session state",
-        "Level 2: bash run_magic_tower.sh 50 openai/gpt-5.4 — a pre-compaction memory flush turn completes without helper transport mismatches and transcript replay remains valid",
-        "Level 2: bash run_magic_tower.sh 50 anthropic/claude-sonnet-4-20250514 — memory flush uses the unified runtime path without regressing turn ordering or memory writes"
+        "Level 2: CONTEXT_WINDOW_OVERRIDE unset — context window logic prefers resolved model metadata before falling back to raw litellm lookups",
+        "Level 2: A run that triggers memory flush and compaction confirms main turn, memory flush, and compaction summarization all consume the same resolved runtime metadata object or adapter rather than each re-resolving provider behavior independently"
       ],
       "priority": 41,
       "passes": false,
-      "notes": "OpenClaw solves memory flush by routing it through runEmbeddedPiAgent rather than by maintaining a separate helper completion transport. This story brings AgentHLE to that architecture, but only for memory flush first because it already behaves like a constrained agentic turn with tool side effects. This is the first embedded-agent architecture story and should land before the broader capability-registry cleanup in US-OC-047."
+      "notes": "US-OC-040 intentionally kept the registry narrow, which was correct for initial cleanup, but it stopped short of OpenClaw's broader model-resolution role. This story does not require porting OpenClaw's entire provider catalog or auth stack; it focuses on the missing architectural middle ground: one resolver object plus per-run runtime metadata that centralize capability decisions currently scattered across model_config.py, loop code, transcript logging, thinking transport mapping, and context-window fallback logic. The Pi Agent audit showed that we still lack a coherent runtime control plane for provider-aware transcript api labels, helper transport choices, and future retry/fallback hooks even when the underlying model string is known."
+    },
+    {
+      "id": "US-OC-048",
+      "title": "Prompt Tooling Parity: Expose Computer Tool in System Prompt",
+      "description": "As the agent harness, I want the system prompt's tooling section to explicitly include the primary Computer tool alongside BaseTool-derived tools, so that the model is instructed about its main desktop interaction capability instead of learning it only from the raw tool schema payload.",
+      "context": {
+        "existingFiles": [
+          "submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/tools.py (build_tools + get_tool_summaries currently filter to BaseTool instances)",
+          "submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/prompt.py (Tools section consumes tool_summaries)",
+          "submodules/cua/libs/cua-bench/cua_bench/agents/openclaw_agent.py (builds tool_summaries before PromptBuilder)"
+        ],
+        "depends": "None — targeted parity fix",
+        "reference": "../openclaw/src/agents/system-prompt.ts (tool availability section includes the full enabled tooling surface, not just one subclass family)"
+      },
+      "acceptanceCriteria": [
+        "Level 1: Lint passes (uv run ruff check .)",
+        "Level 1: Unit tests pass — tool summaries include a stable summary entry for the Computer tool even though it is not a BaseTool subclass",
+        "Level 1: PromptBuilder's Tools section lists the Computer tool with a description explaining screenshot observation plus mouse/keyboard interaction",
+        "Level 1: No existing BaseTool summaries regress or disappear when the Computer tool is added",
+        "Level 2: Integration test or prompt capture confirms the built system prompt names the Computer tool explicitly"
+      ],
+      "priority": 21.5,
+      "passes": true,
+      "notes": "Completed as a narrow prompt/tool-summary parity fix. `get_tool_summaries()` now emits a stable summary entry for the primary `computer` tool even though it is not a BaseTool subclass, while preserving existing BaseTool-derived summaries unchanged. Focused tests cover both the summary extraction path and end-to-end prompt capture in `OpenClawAgent.perform_task()`, so the built system prompt now explicitly names the Computer tool and describes screenshot observation plus mouse/keyboard interaction."
     },
     {
       "id": "US-OC-049",
-      "title": "Compaction Runtime Strategy: Embedded Turn vs Pure Summarizer",
-      "description": "As the agent harness, I want a deliberate architecture decision for compaction summarization, so that we either route compaction through the shared embedded runtime for capability parity or keep it as a pure summarizer helper with explicit constraints and no accidental feature drift.",
+      "title": "Transcript Observability Parity: Provider-Aware API Metadata",
+      "description": "As the agent harness, I want transcript message entries to record provider-accurate API metadata derived from the resolved runtime model instead of hardcoded labels, so that logs, replay audits, and future provider-specific transcript logic can trust on-disk observability data.",
       "context": {
         "existingFiles": [
-          "submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/context.py (current summarize_chunk / merge_summaries helper path)",
-          "submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/agent_loop.py (compaction rebuild wiring)"
+          "submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/agent_loop.py (assistant transcript logging currently hardcodes api='openai-responses')",
+          "submodules/cua/libs/cua-bench/cua_bench/agents/openclaw/session.py (append_message persists optional api metadata)",
+          "submodules/cua/libs/cua-bench/cua_bench/agents/openclaw_agent.py (runtime model selection entry point)"
         ],
-        "depends": "US-OC-046 must be stable first. US-OC-048 should land first or at minimum produce implementation findings, because memory flush is the first embedded-helper candidate and should inform the compaction decision.",
-        "reference": "../openclaw/src/agents/pi-embedded-runner/compact.ts (compaction through embedded session stack); ../openclaw/src/agents/pi-embedded-runner/extensions.ts (runtime baggage that comes with embedded compaction); docs/plan/openclaw-embedded-helper-investigation.md (investigation summary and the OpenClaw split between embedded compaction and utility vision helpers)"
+        "depends": "US-OC-047 should land first so this story can consume the shared resolved runtime object's transcript_api_label instead of introducing another local provider-label resolver",
+        "reference": "../openclaw/src/agents/pi-embedded-runner/run.ts (provider/model resolution precedes attempt logging and runtime metadata propagation)"
       },
       "acceptanceCriteria": [
-        "Level 1: Produce docs/plan/US-OC-049-compaction-runtime-strategy.md comparing two designs: (a) embedded runtime compaction, (b) pure summarizer helper, including tradeoffs in thinking support, transcript writes, runtime overhead, tool exposure, and failure isolation",
-        "Level 1: The decision document explicitly recommends one design for AgentHLE now and lists the concrete code changes required",
-        "Level 1: If the recommendation is to keep helper summarization, the doc defines the minimum model-aware transport/persistence guarantees required so compaction does not become a second-class runtime path",
-        "Level 1: If the recommendation is to embed compaction, the doc defines how to isolate transcript/state side effects so compaction does not pollute normal session history",
-        "Level 2: Validate the recommendation against at least one 50-step GPT-5.4 run or a resumed-session replay scenario, with findings summarized in the plan doc"
+        "Level 1: Lint passes (uv run ruff check .)",
+        "Level 1: Unit tests pass — transcript assistant entries record provider-accurate api labels for at least Anthropic and OpenAI runs",
+        "Level 1: The hardcoded `openai-responses` literal is removed from the assistant transcript logging path in favor of a provider-aware value",
+        "Level 1: If model resolution metadata is unavailable, the fallback api label is explicit and documented rather than silently mislabeling the transcript",
+        "Level 2: A short Anthropic run and a short OpenAI run produce different `message.api` values in transcript.jsonl consistent with the active runtime"
       ],
-      "priority": 42,
+      "priority": 22.5,
       "passes": false,
-      "notes": "Unlike memory flush, compaction may or may not benefit from full runtime unification. OpenClaw uses the embedded session stack here, but AgentHLE may reasonably choose a narrower pure-summarizer path if the runtime overhead and side effects are not worth the parity benefit. This story is an explicit architecture decision point, not an implementation free-for-all. Run it after US-OC-048 so the choice is informed by one real embedded-helper implementation rather than speculation."
+      "notes": "Motivated by Pi Agent audit finding: the current loop writes `api: \"openai-responses\"` on assistant transcript entries even when the run uses Anthropic. This is primarily an observability/correctness fix, but it also lays groundwork for future provider-aware transcript tooling and debugging."
     }
   ]
 }
