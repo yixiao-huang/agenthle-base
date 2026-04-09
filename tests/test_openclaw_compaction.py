@@ -16,6 +16,7 @@ import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from agent.model_config import HelperTransportDefaults, ModelConfig, register_model_config
 
 from cua_bench.agents.openclaw.context import (
     BASE_CHUNK_RATIO,
@@ -462,6 +463,51 @@ class TestSummarizeChunksIterative:
                 summarize_chunks_iterative(chunks, "test-model")
             )
         assert result == "Combined summary"
+
+    def test_custom_resolved_runtime_can_switch_compaction_transport(self):
+        from agent.model_config import _MODEL_CONFIGS
+
+        original = list(_MODEL_CONFIGS)
+        mock_resp = MagicMock()
+        mock_resp.model_dump.return_value = {
+            "output": [
+                {
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [{"type": "output_text", "text": "Chunk summary"}],
+                }
+            ]
+        }
+        register_model_config(
+            r"acme-summarizer",
+            ModelConfig(
+                tool_schema_type="computer_use_preview",
+                screenshot_output_type="input_image",
+                supports_safety_checks=True,
+                action_format="single",
+                adapter_target="anthropic",
+                provider="acme",
+                model_api="chat",
+                transcript_api_label="acme-chat",
+                helper_transport_defaults=HelperTransportDefaults(compaction="responses"),
+            ),
+        )
+        try:
+            with patch("litellm.aresponses", new_callable=AsyncMock, return_value=mock_resp) as mock_aresponses, patch(
+                "litellm.acompletion", new_callable=AsyncMock
+            ) as mock_acomp:
+                result = asyncio.run(
+                    summarize_chunks_iterative(
+                        [_make_messages(3)],
+                        "acme/acme-summarizer",
+                    )
+                )
+            assert result == "Chunk summary"
+            assert mock_aresponses.await_count == 1
+            assert mock_acomp.await_count == 0
+        finally:
+            _MODEL_CONFIGS.clear()
+            _MODEL_CONFIGS.extend(original)
 
 
 # ---------------------------------------------------------------------------

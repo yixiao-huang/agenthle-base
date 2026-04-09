@@ -289,7 +289,7 @@ class TestIsContextOverflowError:
 
 class TestContextOverflowCallback:
     def _run(self, coro):
-        return asyncio.get_event_loop().run_until_complete(coro)
+        return asyncio.run(coro)
 
     def test_init_defaults(self):
         cb = ContextOverflowCallback(context_window=200_000)

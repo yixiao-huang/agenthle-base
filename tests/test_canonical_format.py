@@ -14,6 +14,8 @@ Covers:
 
 import json
 
+from agent.model_config import resolve_model
+
 from cua_bench.agents.openclaw.canonical import (
     COMPACTION_PREAMBLE,
     CanonicalMessage,
@@ -723,6 +725,11 @@ class TestGetTranscriptPolicy:
     def test_openai_o_series(self):
         policy = get_transcript_policy("o3-mini")
         assert policy.downgrade_openai_reasoning is True
+
+    def test_resolved_model_input(self):
+        policy = get_transcript_policy(resolve_model("openai/gpt-5.4"))
+        assert policy.downgrade_openai_reasoning is True
+        assert policy.validate_anthropic_turns is False
 
     def test_gemini(self):
         policy = get_transcript_policy("gemini/gemini-2.5-pro")

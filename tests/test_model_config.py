@@ -11,10 +11,13 @@ Verifies:
 import pytest
 
 from agent.model_config import (
+    HelperTransportDefaults,
     ModelConfig,
+    ResolvedModel,
     _MODEL_CONFIGS,
     get_model_config,
     register_model_config,
+    resolve_model,
 )
 
 
@@ -113,6 +116,50 @@ class TestRegisterModelConfig:
         register_model_config(r"gpt-5\.4", override)
         config = get_model_config("openai/gpt-5.4")
         assert config.tool_schema_type == "computer_override"
+
+
+class TestResolveModel:
+    def setup_method(self):
+        self._original = list(_MODEL_CONFIGS)
+
+    def teardown_method(self):
+        _MODEL_CONFIGS.clear()
+        _MODEL_CONFIGS.extend(self._original)
+
+    def test_openai_runtime_metadata(self):
+        resolved = resolve_model("openai/gpt-5.4")
+        assert isinstance(resolved, ResolvedModel)
+        assert resolved.provider == "openai"
+        assert resolved.model_api == "responses"
+        assert resolved.transcript_api_label == "openai-responses"
+        assert resolved.helper_transport_defaults.memory_flush == "responses"
+        assert resolved.helper_transport_defaults.compaction == "chat"
+
+    def test_custom_provider_can_change_runtime_behavior_through_data_only(self):
+        custom = ModelConfig(
+            tool_schema_type="computer_use_preview",
+            screenshot_output_type="input_image",
+            supports_safety_checks=True,
+            action_format="single",
+            adapter_target="anthropic",
+            provider="acme",
+            model_api="chat",
+            transcript_api_label="acme-chat",
+            helper_transport_defaults=HelperTransportDefaults(
+                memory_flush="responses",
+                compaction="responses",
+                vision="chat",
+            ),
+            context_window=321_000,
+        )
+        register_model_config(r"acme-ultra", custom)
+
+        resolved = resolve_model("acme/acme-ultra")
+        assert resolved.provider == "acme"
+        assert resolved.transcript_api_label == "acme-chat"
+        assert resolved.helper_transport_defaults.memory_flush == "responses"
+        assert resolved.helper_transport_defaults.compaction == "responses"
+        assert resolved.context_window == 321_000
 
 
 # ---------------------------------------------------------------------------

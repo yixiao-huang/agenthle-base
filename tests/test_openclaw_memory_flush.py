@@ -3,6 +3,7 @@
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from agent.model_config import HelperTransportDefaults, ModelConfig, register_model_config
 from cua_bench.agents.openclaw.memory_flush import run_memory_flush
 
 
@@ -56,6 +57,17 @@ class _MemoryStoreStub:
 
 
 class TestRunMemoryFlush:
+    def setup_method(self):
+        from agent.model_config import _MODEL_CONFIGS
+
+        self._original = list(_MODEL_CONFIGS)
+
+    def teardown_method(self):
+        from agent.model_config import _MODEL_CONFIGS
+
+        _MODEL_CONFIGS.clear()
+        _MODEL_CONFIGS.extend(self._original)
+
     def test_passes_thinking_params_to_litellm(self):
         session_mgr = _SessionManagerStub()
         memory_store = _MemoryStoreStub()
@@ -116,3 +128,41 @@ class TestRunMemoryFlush:
         }
         assert memory_store.last_session_content == "remember staircase"
         assert session_mgr.flush_recorded is True
+
+    def test_transport_choice_can_be_driven_by_resolved_model_data(self):
+        session_mgr = _SessionManagerStub()
+        memory_store = _MemoryStoreStub()
+        mock_resp = _mock_responses_flush_response(content="<silent>")
+        register_model_config(
+            r"acme-flush",
+            ModelConfig(
+                tool_schema_type="computer_use_preview",
+                screenshot_output_type="input_image",
+                supports_safety_checks=True,
+                action_format="single",
+                adapter_target="anthropic",
+                provider="acme",
+                model_api="chat",
+                transcript_api_label="acme-chat",
+                helper_transport_defaults=HelperTransportDefaults(
+                    memory_flush="responses",
+                ),
+            ),
+        )
+
+        with patch(
+            "litellm.aresponses", new_callable=AsyncMock, return_value=mock_resp
+        ) as mock_aresponses, patch("litellm.acompletion", new_callable=AsyncMock) as mock_acomp:
+            asyncio.run(
+                run_memory_flush(
+                    summary_model="acme/acme-flush",
+                    session_mgr=session_mgr,
+                    memory_store=memory_store,
+                    flush_prompt="Flush now",
+                    flush_system_prompt="system",
+                    silent_token="<silent>",
+                )
+            )
+
+        assert mock_aresponses.await_count == 1
+        assert mock_acomp.await_count == 0
